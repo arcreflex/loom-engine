@@ -1,0 +1,40 @@
+{
+  "name": "loom-workspace",
+  "version": "1.0.0",
+  "description": "Monorepo for loom libraries",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "pnpm -r start",
+    "dev": "pnpm -r dev",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write \"packages/**/*.ts\"",
+    "test": "pnpm -r test",
+    "prepare": "husky"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.29.1",
+    "@typescript-eslint/parser": "^8.29.1",
+    "eslint": "^9.24.0",
+    "eslint-config-prettier": "^10.1.1",
+    "eslint-plugin-prettier": "^5.2.6",
+    "husky": "^9.1.7",
+    "lint-staged": "^15.5.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3"
+  },
+  "prettier": {
+    "semi": true,
+    "trailingComma": "none",
+    "singleQuote": true,
+    "printWidth": 80,
+    "tabWidth": 2,
+    "arrowParens": "avoid"
+  },
+  "lint-staged": {
+    "*.{js,ts,jsx,tsx}": ["prettier --write"]
+  }
+}

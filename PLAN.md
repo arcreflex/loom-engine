@@ -1,196 +1,195 @@
-#### Plan for Building `loom-engine` TypeScript Library
+**Project: `loom-cli` Implementation Plan**
 
-**Goal:** Create a TypeScript library (`loom-engine`) for managing interactions with language models based on the "loom of time" concept. It should support branching conversations, different LLM providers, persistent storage, node splitting, and tree cloning. The project should be set up as a package within a pnpm monorepo, using standard TypeScript, ESLint, and Prettier configurations.
+**Goal:** Create a new package `loom-cli` within the `loom-engine` monorepo that provides an interactive command-line interface (REPL) for chatting with language models, leveraging the `@loom/engine` package for conversation tree management and persistence.
 
-**Core Concepts:**
-*   **Loom:** A collection (forest) of interaction trees.
-*   **Root:** The starting point of a tree, defined by a specific provider, model, and parameters.
-*   **Node:** Represents a point in the interaction history, containing one or more messages and links to parent/children.
-*   **Path:** The sequence of nodes from the root to a specific node defines the context.
-*   **Branching:** Creating multiple child nodes from a single parent.
-*   **Prefix Matching:** When appending messages, reuse existing child nodes that share the same initial message(s).
-*   **Storage:** Persist loom data to the filesystem (directory per root, JSON file per node).
+**Phase 1: Setup and Initialization**
 
-**Tech Stack:**
-*   TypeScript
-*   Node.js
-*   pnpm (for monorepo management)
-*   ESLint (default configuration)
-*   Prettier (default configuration)
-*   Husky + lint-staged (for pre-commit hooks)
-*   uuid (for generating unique IDs)
-*   SDKs: `openai`, `@anthropic-ai/sdk`, `@google/generative-ai`
+1.  **Create Package Structure:**
+    *   In the `loom-engine/packages/` directory, create a new folder `loom-cli`.
+    *   Inside `loom-cli`, create:
+        *   `package.json`
+        *   `tsconfig.json`
+        *   `src/` directory
+        *   `README.md` (basic placeholder)
 
----
+2.  **Configure `package.json`:**
+    *   Set `"name": "@loom/cli"`, `"version": "0.1.0"`.
+    *   Add `"type": "module"`.
+    *   Define `"main": "dist/index.js"` (or `cli.js`).
+    *   Add a `"bin"` entry: `"bin": { "loom": "dist/cli.js" }`.
+    *   Add dependencies:
+        *   `"@loom/engine": "workspace:*"`
+        *   `yargs`: For CLI argument parsing.
+        *   `inquirer`: For interactive prompts (sibling selection).
+        *   `chalk`: For colored console output.
+        *   `ora`: (Optional) For spinners during generation.
+    *   Add devDependencies:
+        *   `typescript`
+        *   `@types/node`
+        *   `@types/yargs`
+        *   `@types/inquirer`
+        *   (Ensure these align with the root versions if possible)
 
-**Phase 1: Project Setup & Core Types**
+3.  **Configure `tsconfig.json`:**
+    *   Extend the root `tsconfig.json`: `{ "extends": "../../tsconfig.json", ... }`
+    *   Set `compilerOptions`:
+        *   `"outDir": "dist"`
+        *   `"rootDir": "src"`
+    *   Include source files: `"include": ["src/**/*"]`.
 
-1.  **Monorepo Setup:**
-    *   Initialize a new project directory.
-    *   Initialize pnpm: `pnpm init`
-    *   Create a `pnpm-workspace.yaml` file defining the packages path (e.g., `packages/*`).
-    *   Create the package directory: `mkdir packages/loom-engine`
-    *   Navigate into the package: `cd packages/loom-engine`
-    *   Initialize the package: `pnpm init` (fill in details like name: `@your-scope/loom-engine`, entry point: `dist/index.js`, types: `dist/index.d.ts`).
-    *   Install base dependencies: `pnpm add -D typescript @types/node @types/uuid`
-    *   Install UUID library: `pnpm add uuid`
-    *   Setup TypeScript: Create `tsconfig.json` (target ES2020 or later, module NodeNext, declaration true, outDir ./dist, rootDir ./src, strict mode recommended).
-    *   Create `src` directory: `mkdir src`
+4.  **Install Dependencies:**
+    *   Run `pnpm install` from the *root* of the `loom-engine` project to install dependencies for the new package and link the workspace dependency.
 
-2.  **Linting & Formatting Setup:**
-    *   Go to the *root* of the monorepo.
-    *   Install dev dependencies: `pnpm add -D -w eslint prettier eslint-config-prettier eslint-plugin-prettier husky lint-staged`
-    *   Configure ESLint: Create `.eslintrc.js` (use recommended settings, integrate Prettier).
-    *   Configure Prettier: Create `.prettierrc.js` (use default settings or define your preferences). Add `.prettierignore`.
-    *   Setup Husky: `pnpm exec husky init` (this might need `npx husky init` if pnpm exec doesn't work directly).
-    *   Setup lint-staged: Configure in `package.json` or a `.lintstagedrc.js` file to run `eslint --fix` and `prettier --write` on staged files.
-    *   Add npm scripts to the *root* `package.json` for linting/formatting the workspace: `lint`, `format`.
-    *   Add npm scripts to the `loom-engine/package.json`: `build` (`tsc`), `dev` (`tsc -w`), `lint`, `format`.
+5.  **Create Entry Point (`src/cli.ts`):**
+    *   Add the shebang: `#!/usr/bin/env node`.
+    *   Import necessary modules: `LoomEngine` from `@loom/engine`, `yargs`, `path`, `fs/promises`, `os`, `chalk`, and the yet-to-be-created `startRepl` function.
+    *   Implement `resolveDataDir(dataDir)` utility function (expands `~` using `os.homedir()`).
+    *   Implement `parseModelString(modelString)` utility function (splits "provider/model", returns `{ provider, model }` or throws error).
+    *   Implement `loadCurrentNodeId(dataDir)` and `saveCurrentNodeId(dataDir, nodeId)` using `fs.promises.readFile/writeFile` (handle file not found for loading). Store the node ID in `<dataDir>/current-node-id`.
 
-3.  **Define Core Types (`packages/loom-engine/src/types/`):**
-    *   **`common.ts`:**
-        *   `export type NodeId = string;`
-        *   `export type RootId = string;`
-    *   **`message.ts`:**
-        *   `export type Role = 'system' | 'user' | 'assistant' | 'tool'; // Align with common provider roles`
-        *   `export interface Message { role: Role; content: string; // Potentially add tool_call_id, tool_calls later if needed }`
-    *   **`config.ts`:**
-        *   `export type ProviderType = 'openai' | 'anthropic' | 'gemini';`
-        *   `export interface RootConfig { providerType: ProviderType; model: string; // e.g., 'gpt-4', 'claude-3-opus-20240229' parameters: Record<string, any>; // e.g., { temperature: 0.7, max_tokens: 100 } systemPrompt?: string; // Optional initial system prompt }`
-        *   `export interface RootInfo extends RootConfig { rootId: RootId; createdAt: string; // ISO 8601 timestamp }`
-    *   **`node.ts`:**
-        *   `import { NodeId, RootId } from './common';`
-        *   `import { Message } from './message';`
-        *   `export interface NodeMetadata { timestamp: string; // ISO 8601 creation timestamp original_root_id: RootId; // The root ID when the node was first created provider_request_params?: Record<string, any>; // Params used if node resulted from LLM call provider_response_info?: { finish_reason?: string | null; usage?: { input_tokens?: number; output_tokens?: number; }; }; tags?: string[]; custom_data?: Record<string, any>; }`
-        *   `export interface NodeData { uuid: NodeId; root_id: RootId; // The *current* tree this node belongs to parent_uuid: NodeId | null; child_uuids: NodeId[]; messages: Message[]; // One or more messages metadata: NodeMetadata; }`
+6.  **Implement Argument Parsing & Initialization Logic in `src/cli.ts`:**
+    *   Use `yargs(hideBin(process.argv))` to define options:
+        *   `--data-dir` (string, default: `~/.loom`)
+        *   `--model` (string, description: "Model ID (e.g., anthropic/claude-3-opus-20240229)")
+        *   `--system` (string, description: "System prompt for new conversations")
+        *   `--n` (number, default: 5, description: "Default number of completions")
+        *   `--temp` (number, default: 0.7, description: "Default temperature")
+        *   `--max-tokens` (number, default: 1024, description: "Default max tokens")
+        *   Use `.help()` and `.alias('h', 'help')`.
+        *   Use `.parseAsync()`.
+    *   Inside an `async` main function:
+        *   Resolve the final `dataDir`.
+        *   Ensure `dataDir` exists (`await fs.promises.mkdir(dataDir, { recursive: true })`).
+        *   Instantiate `const engine = new LoomEngine(dataDir);`.
+        *   Load the last `currentNodeId` using `loadCurrentNodeId`.
+        *   **Determine Starting Node Logic:**
+            *   Get `cliOptions` from parsed args.
+            *   If `cliOptions.model` or `cliOptions.system` is provided:
+                *   Parse `cliOptions.model` using `parseModelString`. Create `targetRootConfig` (providerType, model, systemPrompt from args).
+                *   Try to load the current node (`persistedNodeId`) and its root config (`engine.getMessages`).
+                *   If `targetRootConfig` differs significantly (JSON.stringify comparison?) from the loaded node's root config, OR if no `persistedNodeId` exists:
+                    *   `const root = await engine.getForest().getOrCreateRoot(targetRootConfig);`
+                    *   Set `startingNodeId = root.id;`
+                *   Else (configs match or only system prompt differs slightly - maybe just warn?), use `persistedNodeId`.
+            *   Else (no model/system args):
+                *   If `persistedNodeId` exists, use it as `startingNodeId`.
+                *   Else, print an error (use `chalk.red`) instructing the user to provide `--model` and `--system` for the first run, and `process.exit(1)`.
+        *   Save the determined `startingNodeId` using `saveCurrentNodeId`.
+        *   Call `await startRepl(engine, startingNodeId, cliOptions);` (pass parsed options for defaults like n, temp, etc.).
+        *   Wrap the main logic in a `try...catch` block for fatal errors.
 
----
+**Phase 2: REPL Implementation**
 
-**Phase 2: Storage Layer**
+1.  **Create REPL Module (`src/repl.ts`):**
+    *   Import `readline`, `chalk`, and the yet-to-be-created `handleCommand` and `displayContext`.
+    *   Export `async function startRepl(engine, initialNodeId, options)`.
+    *   Inside `startRepl`:
+        *   Initialize `let currentNodeId = initialNodeId;`.
+        *   Create `readline.createInterface`.
+        *   Define the main recursive `async function loop()`.
+        *   Inside `loop`:
+            *   Call `await displayContext(engine, currentNodeId);` to show recent history.
+            *   Use `rl.question(chalk.blue('> '), async (input) => { ... });` to get user input.
+            *   Inside the question callback:
+                *   Trim `input`.
+                *   If `input` starts with `/`:
+                    *   `currentNodeId = await handleCommand(input, engine, currentNodeId, options);`
+                *   Else (user message):
+                    *   If `input` is empty, just call `loop()` again.
+                    *   `const userNode = await engine.getForest().append(...)` for the user message.
+                    *   `currentNodeId = userNode.id;`
+                    *   // Immediately trigger default generation
+                    *   console.log(chalk.yellow('Generating response...')); // Or use ora
+                    *   `currentNodeId = await handleCommand('/', engine, currentNodeId, options);` // Simulate '/' command
+                *   Call `await saveCurrentNodeId(options.dataDir, currentNodeId);` // Save after every potential change
+                *   Call `loop();` to continue the REPL.
+        *   Call `loop()` initially to start the REPL.
+        *   Set up listener for `rl.on('close', () => { process.exit(0); });` (e.g., for Ctrl+D). Handle `SIGINT` (Ctrl+C) gracefully.
 
-1.  **Define Storage Interface (`packages/loom-engine/src/store/ILoomStore.ts`):**
-    *   `import { NodeData, NodeId, RootId, RootInfo } from '../types';`
-    *   `export interface NodeQueryCriteria { parentId?: NodeId; rootId?: RootId; }`
-    *   `export interface ILoomStore { initialize(basePath: string): Promise<void>; saveNode(nodeData: NodeData): Promise<void>; loadNode(nodeId: NodeId): Promise<NodeData | null>; deleteNode(nodeId: NodeId): Promise<void>; // Consider if deletion is needed, or just detachment findNodes(criteria: NodeQueryCriteria): Promise<NodeData[]>; saveRootInfo(rootInfo: RootInfo): Promise<void>; loadRootInfo(rootId: RootId): Promise<RootInfo | null>; listRootInfos(): Promise<RootInfo[]>; }`
+**Phase 3: Command Handling**
 
-2.  **Implement Filesystem Storage (`packages/loom-engine/src/store/FileSystemLoomStore.ts`):**
-    *   Implement the `ILoomStore` interface.
-    *   Use Node.js `fs/promises` for async file operations.
-    *   Use the `uuid` library (e.g., `v4()`) to generate `NodeId`s if not provided.
-    *   **Structure:**
-        *   `basePath`: The root directory provided during initialization.
-        *   `basePath/roots.json`: A JSON file storing an array of `RootInfo` objects.
-        *   `basePath/<rootId>/`: Directory for each tree.
-        *   `basePath/<rootId>/nodes/`: Directory containing node files.
-        *   `basePath/<rootId>/nodes/<nodeId>.json`: JSON file storing `NodeData` for a single node.
-    *   **Methods:**
-        *   `initialize`: Ensure `basePath` exists. Load `roots.json` if it exists.
-        *   `saveNode`: Write/overwrite `<nodeId>.json` in the correct `rootId` directory. Ensure node directory exists.
-        *   `loadNode`: Read and parse `<nodeId>.json`. Handle file not found (return `null`). Handle JSON parse errors.
-        *   `deleteNode`: Delete the node JSON file. (Consider implications: need to update parent's `child_uuids`? This might be better handled in the Engine layer).
-        *   `findNodes`: This is tricky with pure files.
-            *   If `rootId` is provided: List files in `basePath/<rootId>/nodes/`, load them, and filter by `parentId` if needed.
-            *   If only `parentId` is provided: This is inefficient; avoid if possible, or require `rootId`.
-        *   `saveRootInfo`: Read `roots.json`, update/add the entry, write back. Use locking or careful read-modify-write if concurrency is a concern (unlikely for typical library use).
-        *   `loadRootInfo`: Read `roots.json`, find by `rootId`.
-        *   `listRootInfos`: Read and return the contents of `roots.json`.
-    *   **Error Handling:** Implement robust error handling for file system operations and JSON parsing.
+1.  **Create Command Handler Module (`src/commands.ts`):**
+    *   Import `LoomEngine`, types, `inquirer`, `chalk`, `ora`, `displayContext`, and bookmark/state helpers.
+    *   Export `async function handleCommand(input, engine, currentNodeId, options)` which *returns the new `currentNodeId`*.
+    *   Parse the command and arguments from `input` (e.g., `const [command, ...args] = input.slice(1).split(' ');`).
+    *   Use a `switch (command)` or `if/else if` structure:
+        *   **`case '': case 'N' (numeric):`** (`/` or `/N`)
+            *   Parse `N` (default to `options.n`).
+            *   Start spinner (`ora`).
+            *   `try...catch` block for `engine.generate`.
+            *   Fetch context: `const { root, messages } = await engine.getMessages(currentNodeId);`.
+            *   Call `const assistantNodes = await engine.generate(...)` using `root`, `messages`, `N`, `options.temp`, `options.maxTokens`.
+            *   Stop spinner.
+            *   If `assistantNodes.length > 0`:
+                *   Display generated messages (maybe numbered).
+                *   **Simple Approach:** Select `const chosenNode = assistantNodes[0];`.
+                *   Display the chosen response content clearly.
+                *   Return `chosenNode.id`.
+            *   Else (no responses):
+                *   Display message "No responses generated."
+                *   Return `currentNodeId` (no change).
+            *   In `catch`: Stop spinner, display error (`chalk.red`), return `currentNodeId`.
+        *   **`case 'siblings':`**
+            *   Get current node and parent. Handle errors (no parent).
+            *   Get children from parent. Filter out `currentNodeId`.
+            *   Format choices for `inquirer` (e.g., `[{ name: \`[${index}] ${sibling.message.content.substring(0, 50)}...\`, value: sibling.id }, ...]`).
+            *   Use `inquirer.prompt([{ type: 'list', name: 'selectedId', message: 'Choose sibling:', choices }])`.
+            *   If a selection is made (`answers.selectedId`), return `answers.selectedId`.
+            *   Else (cancelled or error), return `currentNodeId`.
+        *   **`case 'parent':`**
+            *   Get current node.
+            *   If `node && node.parent_id`, display message "Moving to parent." and return `node.parent_id`.
+            *   Else, display error "Already at root or node not found." and return `currentNodeId`.
+        *   **`case 'save':`**
+            *   Implement `loadBookmarks(dataDir)` and `saveBookmarks(dataDir, bookmarks)` using `fs/promises` and JSON.
+            *   Get `title` from `args.join(' ')`. Check if title is provided.
+            *   Load bookmarks. Add `bookmarks[title] = currentNodeId;`. Save bookmarks.
+            *   Display confirmation. Return `currentNodeId`.
+        *   **`case 'context':`** (Optional)
+            *   Call `await displayContext(engine, currentNodeId, options.contextLines || 15);` // Add a context line option?
+            *   Return `currentNodeId`.
+        *   **`case 'exit':`**
+            *   Call `process.exit(0);`.
+        *   **`default:`**
+            *   Display error "Unknown command:" + command. Return `currentNodeId`.
 
----
+**Phase 4: Display and Polish**
 
-**Phase 3: Provider Abstraction Layer**
+1.  **Create Display Module (`src/display.ts`):**
+    *   Import `chalk`.
+    *   Export `async function displayContext(engine, nodeId, historyCount = 10)`.
+    *   Fetch messages using `engine.getMessages(nodeId)`. Handle errors.
+    *   Slice the last `historyCount` messages.
+    *   Iterate and print messages using `chalk` for roles:
+        *   `system`: `chalk.magenta`
+        *   `user`: `chalk.green`
+        *   `assistant`: `chalk.cyan`
+        *   `tool`: `chalk.yellow`
+    *   Clearly delineate the history output (e.g., lines before/after).
 
-1.  **Define Provider Types (`packages/loom-engine/src/providers/types.ts`):**
-    *   `import { Message, Role } from '../types';`
-    *   `export interface ProviderRequest { messages: Message[]; // Full context history modelConfig: Record<string, any>; // Contains model name, temp, max_tokens etc. stream?: boolean; // Optional: Add later if streaming is needed }`
-    *   `export interface ProviderResponse { message: Message; // The generated message (role typically 'assistant') usage?: { input_tokens?: number; output_tokens?: number; }; finish_reason?: string | null; rawResponse?: any; // Optional: Include the raw provider response for debugging/extensions }`
-    *   `export interface IProvider { generate(request: ProviderRequest): Promise<ProviderResponse>; }`
+2.  **Refine Output:**
+    *   Use `chalk` consistently for user prompts, errors, confirmations, and generated output.
+    *   Ensure clear visual separation between turns in the REPL.
 
-2.  **Implement Provider Adapters (`packages/loom-engine/src/providers/`):**
-    *   Install SDKs: `pnpm add openai @anthropic-ai/sdk @google/generative-ai`
-    *   Create adapter classes, one for each provider (`OpenAIProvider.ts`, `AnthropicProvider.ts`, `GeminiProvider.ts`).
-    *   Each class should implement `IProvider`.
-    *   **Constructor:** Accept necessary configuration (API key, potentially base URL for OpenAI). API keys should ideally be handled via environment variables or passed securely, not hardcoded.
-    *   **`generate` Method:**
-        *   Map the abstract `ProviderRequest` (especially `messages`) to the specific format required by the provider's SDK. Pay attention to role mapping (e.g., Gemini might have different role names). Handle system prompts correctly.
-        *   Call the appropriate SDK function (e.g., `openai.chat.completions.create`, `anthropic.messages.create`, `gemini.getGenerativeModel(...).generateContent`).
-        *   Map the provider's response back to the abstract `ProviderResponse` structure. Extract content, role, usage data, and finish reason.
-        *   Include error handling for API calls.
+3.  **Error Handling:**
+    *   Add specific `try...catch` blocks around file I/O and engine calls within commands.
+    *   Provide user-friendly error messages.
 
----
+4.  **README (`packages/loom-cli/README.md`):**
+    *   Document installation (`pnpm add -g @loom/cli` after publishing, or `pnpm link --global` for development).
+    *   Explain all CLI options (`--data-dir`, `--model`, etc.).
+    *   Document available `/` commands.
+    *   Explain the state file (`current-node-id`) and bookmarks (`bookmarks.json`).
+    *   Mention environment variables for API keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`).
 
-**Phase 4: Loom Engine Core**
+**Phase 5: Testing (Manual)**
 
-1.  **Implement Loom Engine Class (`packages/loom-engine/src/LoomEngine.ts`):**
-    *   `import { ILoomStore, FileSystemLoomStore } from './store';`
-    *   `import { IProvider } from './providers/types';`
-    *   `import { NodeData, NodeId, RootId, RootConfig, Message, RootInfo } from './types';`
-    *   `import { v4 as uuidv4 } from 'uuid';`
-    *   **Constructor:**
-        *   Accept `rootDirectory` string or an `ILoomStore` instance (dependency injection is preferred).
-        *   Accept a map or factory function to get `IProvider` instances based on `ProviderType` and config (including API keys).
-        *   Initialize the store (`this.store.initialize(...)`).
-    *   **Core Methods:**
-        *   `createRoot(config: RootConfig): Promise<NodeData>`: Create `RootInfo`, save it. Create the initial root `NodeData` (no parent, empty messages or system prompt only, generate UUID, set `original_root_id`= `rootId`). Save the root node. Return the root node data.
-        *   `getRootInfo(rootId: RootId): Promise<RootInfo | null>`: Load from store.
-        *   `listRoots(): Promise<RootInfo[]>`: Load from store.
-        *   `getNode(nodeId: NodeId): Promise<NodeData | null>`: Load from store.
-        *   `getMessages(nodeId: NodeId): Promise<Message[]>`:
-            *   Start at `nodeId`. Load the node.
-            *   Traverse up via `parent_uuid` until the root (`parent_uuid === null`) is reached, collecting nodes along the way.
-            *   Reverse the collected nodes.
-            *   Concatenate the `messages` arrays from the nodes in the correct order (root to `nodeId`). Return the combined list. Handle errors (node not found during traversal).
-        *   `getChildren(nodeId: NodeId): Promise<NodeData[]>`: Load the node, then use `store.findNodes({ parentId: nodeId, rootId: nodeData.root_id })`.
-        *   `append(parentId: NodeId, messages: Message[]): Promise<NodeData>`:
-            *   **Prefix Matching:**
-                *   Load the parent node (`parentNode`).
-                *   Get its children using `getChildren(parentId)`.
-                *   Iterate through the input `messages` one by one. At each step, check if any child node *starts* with the current message being processed.
-                *   If a match is found, "descend" into that child node and continue matching the *rest* of the input `messages` against *its* children.
-                *   If no matching child is found at any step, or if a child matches only *part* of its message list, create a new node for the remaining unmatched messages. This new node's parent will be the last successfully matched node (or the original `parentId`).
-            *   **Node Creation:** Create `NodeData` for the new segment (generate UUID, link `parent_uuid`, set `messages`, copy `root_id`, set `original_root_id`, create metadata).
-            *   Save the new node using `store.saveNode`.
-            *   Update the parent node's `child_uuids` list and save the parent node.
-            *   Return the *final* node created or matched in the sequence.
-        *   `generateNext(nodeId: NodeId, userPrompt: string | Message): Promise<NodeData>`:
-            *   Get the message history using `getMessages(nodeId)`.
-            *   Append the `userPrompt` (convert string to `{role: 'user', content: userPrompt}`) to the history.
-            *   Load the node `nodeId` to get its `root_id`. Load the `RootInfo` for that `root_id`.
-            *   Get the appropriate `IProvider` instance based on `RootInfo.providerType`.
-            *   Prepare the `ProviderRequest` using the message history and `RootInfo.parameters`.
-            *   Call `provider.generate(request)`.
-            *   Use `append(nodeId, [ /* user message */, providerResponse.message ])` to add *both* the user message and the assistant response as a new node sequence. Store response metadata (`usage`, `finish_reason`) in the new assistant node's metadata.
-            *   Return the newly created assistant node.
-        *   `splitNode(nodeId: NodeId, messageIndex: number): Promise<NodeData>`: (Implement the logic described in our previous discussion: create new node N', modify original node N, update children's parent pointers, save all changes). Return the modified node N.
-        *   `cloneTree(sourceRootId: RootId, newRootConfig: RootConfig): Promise<NodeData>`: (Implement the logic described previously: create new root, traverse old tree, create corresponding new nodes with new UUIDs/root_id but preserving `original_root_id`, update parent/child links, save new nodes). Return the new root node.
+1.  Build the CLI: `pnpm --filter @loom/cli build`.
+2.  Link for global use: `pnpm link --global` (from the `loom-engine` root).
+3.  Run `loom --help`.
+4.  Start a new session: `loom --model anthropic/claude-3-haiku-20240307 --system "You are concise."`
+5.  Enter messages, use `/`, `/5`, `/siblings`, `/parent`, `/save`.
+6.  Exit (Ctrl+C or Ctrl+D) and restart `loom` without args to test persistence.
+7.  Test error conditions (unknown command, invalid model string, starting without existing state/args).
 
----
-
-**Phase 5: Testing & Documentation**
-
-1.  **Testing:**
-    *   Set up a testing framework (Jest or Vitest recommended): `pnpm add -D jest @types/jest ts-jest` or `pnpm add -D vitest @vitest/coverage-v8`. Configure it to work with TypeScript.
-    *   **Unit Tests:**
-        *   Test `FileSystemLoomStore` (mock `fs/promises`).
-        *   Test Provider adapters (mock the actual SDK calls).
-        *   Test `LoomEngine` logic (using a mock `ILoomStore` and mock `IProvider`). Test `getMessages`, `append` (with prefix matching cases), `splitNode`, `cloneTree`, `generateNext`.
-    *   **Integration Tests:**
-        *   Test `FileSystemLoomStore` against the actual filesystem (in a temporary directory).
-        *   Test `LoomEngine` using `FileSystemLoomStore` (but potentially still mocking providers to avoid actual API costs/latency during tests).
-
-2.  **Documentation:**
-    *   Write TSDoc comments for all public classes, methods, interfaces, and types.
-    *   Create a comprehensive `README.md` in `packages/loom-engine/` explaining the library's purpose, concepts, installation, and usage with examples.
-    *   Consider generating API documentation from TSDoc comments (e.g., using TypeDoc).
-
----
-
-**Instructions for Claude Code:**
-
-*   Implement the plan step-by-step, focusing on one phase at a time.
-*   Generate TypeScript code adhering to the defined interfaces and file structure.
-*   Use async/await for all asynchronous operations (storage, provider calls).
-*   Include basic error handling (e.g., try/catch blocks for I/O and API calls).
-*   Generate TSDoc comments for public APIs.
-*   Ensure ESLint and Prettier configurations are applied correctly.
-*   Start with Phase 1 (Setup & Types) before moving to implementation details.
+This plan breaks the implementation into manageable steps, focusing on core functionality first and then adding specific commands and polish.
