@@ -8,12 +8,27 @@
     "default": "./src/index.ts"
   },
   "bin": {
-    "loom": "src/cli.ts"
+    "loom": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "bin"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "start": "npx tsx src/cli.ts",
     "dev": "node --watch src/cli.ts",
-    "test": "node --test src/**/*.test.ts"
+    "test": "node --test src/**/*.test.ts",
+    "build": "rm -rf dist && node esbuild.config.js && chmod +x dist/cli.js",
+    "prepublishOnly": "pnpm build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ankhdt/loom-engine.git",
+    "directory": "packages/cli"
   },
   "keywords": [
     "cli",
@@ -32,6 +47,7 @@
     "ink-text-input": "^6.0.0",
     "inquirer": "^9.2.15",
     "react": "^18.0.0",
+    "react-devtools-core": "^4.28.5",
     "toml": "^3.0.0",
     "yargs": "^17.7.2"
   },
@@ -39,6 +55,7 @@
     "@types/inquirer": "^9.0.7",
     "@types/node": "^22.14.0",
     "@types/yargs": "^17.0.32",
+    "esbuild": "^0.25.2",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3"
   }

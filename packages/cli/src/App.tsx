@@ -6,7 +6,7 @@ import {
   type NodeId,
   type NodeData,
   type Message
-} from '../../engine/src/index.ts';
+} from '@ankhdt/loom-engine';
 import { handleCommand, UNREAD_TAG } from './commands.ts';
 import { render } from 'ink';
 import { formatError, formatMessage } from './util.ts';

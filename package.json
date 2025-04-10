@@ -10,7 +10,8 @@
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"packages/**/*.ts\"",
     "test": "pnpm -r test",
-    "prepare": "husky"
+    "prepare": "husky",
+    "build": "pnpm -r build"
   },
   "keywords": [],
   "author": "",

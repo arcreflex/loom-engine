@@ -1,7 +1,5 @@
-#!/usr/bin/env npx tsx
-
-import { LoomEngine } from '../../engine/src/index.ts';
-import type { NodeId, ProviderType } from '../../engine/src/index.ts';
+import { LoomEngine } from '@ankhdt/loom-engine';
+import type { NodeId, ProviderType } from '@ankhdt/loom-engine';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';

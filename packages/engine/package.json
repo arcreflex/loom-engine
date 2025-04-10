@@ -5,14 +5,13 @@
   "type": "module",
   "exports": {
     "types": "./src/index.ts",
-    "default": "./src/index.ts"
+    "default": "./dist/index.js"
   },
   "scripts": {
-    "start": "node src/index.ts",
-    "dev": "node --watch src/index.ts",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
-    "test": "node --test src/**/*.test.ts"
+    "test": "node --test src/**/*.test.ts",
+    "build": "rm -rf dist && node esbuild.config.js"
   },
   "keywords": [
     "llm",
@@ -23,19 +22,13 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.17.1",
     "uuid": "^11.1.0"
   },
   "devDependencies": {
+    "esbuild": "^0.25.2",
     "@types/node": "^22.14.0",
     "@types/uuid": "^10.0.0",
     "typescript": "^5.8.3"
-  },
-  "peerDependencies": {
-    "@anthropic-ai/sdk": "^0.17.1"
-  },
-  "peerDependenciesMeta": {
-    "@anthropic-ai/sdk": {
-      "optional": true
-    }
   }
 }

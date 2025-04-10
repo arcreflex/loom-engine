@@ -2,8 +2,8 @@ import chalk from 'chalk';
 import inquirer from 'inquirer';
 import path from 'path';
 import fs from 'fs/promises';
-import { LoomEngine } from '../../engine/src/index.ts';
-import type { NodeId, NodeData } from '../../engine/src/index.ts';
+import { LoomEngine } from '@ankhdt/loom-engine';
+import type { NodeId } from '@ankhdt/loom-engine';
 
 export const UNREAD_TAG = 'cli/unread';
 
