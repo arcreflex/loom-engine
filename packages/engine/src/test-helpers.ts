@@ -62,7 +62,9 @@ export function createMockStore() {
 
     listRootInfos: mock.fn(async () => {
       return Array.from(roots.values()).map(root => ({ ...root }));
-    })
+    }),
+
+    log: console.log.bind(console)
   };
 
   mockStore satisfies ILoomStore;

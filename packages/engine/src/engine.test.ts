@@ -238,7 +238,11 @@ describe('LoomEngine', () => {
     });
 
     it('should coalesce messages before sending them to the provider', async () => {
-      const rootConfig: RootConfig = { providerType: 'openai', model: 'gpt-4' };
+      const rootConfig: RootConfig = {
+        providerType: 'openai',
+        model: 'gpt-4',
+        systemPrompt: 'system message'
+      };
       const existingMessages: Message[] = [
         { role: 'user', content: 'Write a poem' },
         { role: 'assistant', content: 'The first line is' },
@@ -278,6 +282,7 @@ describe('LoomEngine', () => {
         mockProviderInstance.generate.mock.calls[0].arguments,
         [
           {
+            systemMessage: 'system message',
             messages: [
               {
                 role: 'user',
@@ -360,18 +365,7 @@ describe('LoomEngine', () => {
       );
 
       // Ensure user node was still appended
-      assert.strictEqual(
-        mockStoreWrapper.nodes.size,
-        1,
-        'User node should still be created'
-      );
-      const userNode = findNodeByContent('Write a poem');
-      assert.ok(userNode, 'User node exists');
-      assert.strictEqual(
-        userNode?.child_ids.length,
-        0,
-        'User node has no children (assistant failed)'
-      );
+      assert.strictEqual(mockStoreWrapper.nodes.size, 0, 'User is not created');
       assert.strictEqual(
         mockProviderInstance.generate.mock.callCount(),
         1,

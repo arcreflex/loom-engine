@@ -2,6 +2,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import type { NodeData, NodeId, RootId, RootData, Node } from '../types.ts';
 import type { ILoomStore, NodeQueryCriteria } from './types.ts';
+import { initializeLog, log } from '../log.ts';
 
 /**
  * Implements ILoomStore using the filesystem for persistence.
@@ -25,6 +26,7 @@ export class FileSystemStore implements ILoomStore {
 
     // Ensure base directory exists
     await fs.mkdir(basePath, { recursive: true });
+    initializeLog(basePath);
 
     // Create roots.json if it doesn't exist
     try {
@@ -198,5 +200,9 @@ export class FileSystemStore implements ILoomStore {
       // If file doesn't exist or is invalid, return empty array
       return [];
     }
+  }
+
+  log(msg: unknown) {
+    log(this.basePath, msg);
   }
 }

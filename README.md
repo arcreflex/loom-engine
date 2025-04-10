@@ -33,15 +33,8 @@ const root = await forest.getOrCreateRoot({
 });
 
 // Create a node with a message
-const systemNode = await forest.append(
-  rootNode.id,
-  [{ role: 'system', content: 'You are a helpful assistant.' }],
-  { source_info: { type: 'user' } }
-);
-
-// Append a user message
 const userNode = await forest.append(
-  systemNode.id,
+  root.id,
   [{ role: 'user', content: 'Tell me about the loom of time concept.' }],
   { source_info: { type: 'user' } }
 );

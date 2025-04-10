@@ -3,6 +3,7 @@ import { strict as assert } from 'node:assert';
 import { Forest } from './forest.ts';
 import type { ILoomStore, NodeQueryCriteria } from './store/types.ts';
 import type {
+  Node,
   NodeData,
   NodeId,
   RootId,
@@ -16,7 +17,7 @@ import { createMockStore, mockNodeId, mockRootId } from './test-helpers.ts';
 
 // Create a test message
 const createMessage = (
-  role: 'system' | 'user' | 'assistant',
+  role: 'user' | 'assistant',
   content: string
 ): Message => ({
   role,
@@ -181,18 +182,10 @@ describe('Forest', () => {
 
       const root = mockStoreWrapper.createTestRoot('root1', config);
 
-      // Create a chain of nodes: root_node -> node1 -> node2 -> node3
-      const rootNode = mockStoreWrapper.createTestNode(
-        'root_node',
-        'root1',
-        null,
-        createMessage('system', 'You are a helpful assistant')
-      );
-
       const node1 = mockStoreWrapper.createTestNode(
         'node1',
         'root1',
-        'root_node',
+        'root1',
         createMessage('user', 'Hello')
       );
 
@@ -211,12 +204,12 @@ describe('Forest', () => {
       );
 
       // Update child ids
-      rootNode.child_ids.push(node1.id);
+      root.child_ids.push(node1.id);
       node1.child_ids.push(node2.id);
       node2.child_ids.push(node3.id);
 
       // Save nodes with updated child ids
-      await mockStoreWrapper.mockStore.saveNode(rootNode);
+      await mockStoreWrapper.mockStore.saveRootInfo(root);
       await mockStoreWrapper.mockStore.saveNode(node1);
       await mockStoreWrapper.mockStore.saveNode(node2);
 
@@ -225,11 +218,11 @@ describe('Forest', () => {
 
       // Verify
       assert.deepEqual(result.root, root);
-      assert.equal(result.messages.length, 4);
-      assert.deepEqual(result.messages[0], rootNode.message);
-      assert.deepEqual(result.messages[1], node1.message);
-      assert.deepEqual(result.messages[2], node2.message);
-      assert.deepEqual(result.messages[3], node3.message);
+      assert.deepEqual(result.messages, [
+        node1.message,
+        node2.message,
+        node3.message
+      ]);
     });
 
     it('should throw error if node is not found', async () => {
@@ -443,6 +436,8 @@ describe('Forest', () => {
       // Only include the existing message
       const messagesToAppend = [existingMessage];
 
+      const nodeCount = mockStoreWrapper.nodes.size;
+
       // Execute
       const result = await forest.append(parent.id, messagesToAppend, {
         source_info: {
@@ -451,6 +446,11 @@ describe('Forest', () => {
       });
 
       // Verify
+      assert.strictEqual(
+        mockStoreWrapper.nodes.size,
+        nodeCount,
+        'no new nodes created'
+      );
       assert.deepEqual(result, existingChild); // Should be the existing node
     });
   });
@@ -463,7 +463,7 @@ describe('Forest', () => {
         'parent',
         'root1',
         null,
-        createMessage('system', 'Initial prompt')
+        createMessage('user', 'Initial prompt')
       );
       const node = mockStoreWrapper.createTestNode(
         'node1',
@@ -1000,16 +1000,9 @@ describe('Forest', () => {
 
       const root = mockStoreWrapper.createTestRoot('deep_root', config);
 
-      const rootNode = mockStoreWrapper.createTestNode(
-        'root_node',
-        'deep_root',
-        null,
-        createMessage('system', 'System message')
-      );
-
-      let currentNodeId = rootNode.id;
+      let currentNodeId: NodeId = root.id;
       let parentNodeId = currentNodeId;
-      const allNodes = [rootNode];
+      const allNodes: Node[] = [root];
 
       // Create 10 levels of nesting
       for (let i = 1; i <= 10; i++) {
@@ -1035,13 +1028,11 @@ describe('Forest', () => {
       const result = await forest.getMessages(parentNodeId);
 
       // Verify
-      assert.equal(result.messages.length, 11); // 1 system message + 10 user messages
       assert.deepEqual(result.root, root);
 
       // Check that all messages are in correct order
-      assert.equal(result.messages[0].role, 'system');
-      for (let i = 1; i <= 10; i++) {
-        assert.equal(result.messages[i].content, `Message at level ${i}`);
+      for (let i = 0; i < result.messages.length; i++) {
+        assert.equal(result.messages[i].content, `Message at level ${i + 1}`);
       }
     });
 

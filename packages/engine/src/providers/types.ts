@@ -4,6 +4,7 @@ import type { Message } from '../types.ts';
  * Request to a language model provider.
  */
 export interface ProviderRequest {
+  systemMessage: string | undefined;
   /** The full context history of messages. */
   messages: Message[];
 
@@ -14,9 +15,6 @@ export interface ProviderRequest {
     temperature: number;
     [key: string]: any; // Allow any other parameters
   };
-
-  /** Whether to stream the response. */
-  stream?: boolean;
 }
 
 /**

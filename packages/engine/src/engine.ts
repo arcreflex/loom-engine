@@ -33,7 +33,7 @@ export class LoomEngine {
 
   async generate(
     config: RootConfig,
-    message: Message[],
+    contextMessages: Message[],
     options: {
       n: number;
       max_tokens: number;
@@ -43,10 +43,7 @@ export class LoomEngine {
     const root = await this.forest.getOrCreateRoot(config);
     const provider = this.getProvider(root.config.providerType);
 
-    const end = await this.forest.append(root.id, message, {
-      source_info: { type: 'user' }
-    });
-    const { messages } = await this.forest.getMessages(end.id);
+    const coalesced = coalesceMessages(contextMessages, '');
 
     const { max_tokens, temperature } = options;
     const parameters = {
@@ -54,17 +51,17 @@ export class LoomEngine {
       temperature
     };
 
-    const coalesced = coalesceMessages(messages, '');
     return Promise.all(
       Array.from({ length: options.n }).map(async () => {
         const response = await provider.generate({
+          systemMessage: root.config.systemPrompt,
           messages: coalesced,
           model: root.config.model,
           parameters
         });
         const responseNode = await this.forest.append(
-          end.id,
-          [response.message],
+          root.id,
+          [...contextMessages, response.message],
           {
             source_info: {
               type: 'model',
@@ -93,8 +90,8 @@ export class LoomEngine {
 
   private getProvider(provider: ProviderType) {
     switch (provider) {
-      // case 'openai':
-      //   return new OpenAIProvider();
+      case 'openai':
+        return new OpenAIProvider();
       case 'anthropic':
         return new AnthropicProvider();
       // case 'google':

@@ -41,13 +41,8 @@ export class AnthropicProvider implements IProvider {
       });
 
       // Map parameters to Anthropic's expected format
-      let systemMessage: string | undefined;
       const anthropicMessages: Anthropic.MessageParam[] = [];
       for (const msg of request.messages) {
-        if (msg.role === 'system') {
-          systemMessage = msg.content;
-          continue;
-        }
         anthropicMessages.push({
           role: msg.role,
           content: msg.content
@@ -64,7 +59,7 @@ export class AnthropicProvider implements IProvider {
       } = request.parameters;
 
       // Create message with Anthropic API
-      const response = await anthropic.messages.create({
+      const req = {
         model: request.model,
         messages: anthropicMessages,
         temperature,
@@ -72,8 +67,16 @@ export class AnthropicProvider implements IProvider {
         top_p,
         top_k,
         stop_sequences,
-        stream: false
-      });
+        stream: false,
+        system: request.systemMessage
+      } as const;
+      const response = await anthropic.messages.create(req);
+
+      if (!response.content[0]) {
+        throw new Error(
+          `Missing content[0] in response: ${JSON.stringify(response)}`
+        );
+      }
 
       // Map response to our expected format
       return {

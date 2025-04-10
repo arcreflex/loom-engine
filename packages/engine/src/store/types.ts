@@ -65,4 +65,6 @@ export interface ILoomStore {
    * @returns An array of root information
    */
   listRootInfos: () => Promise<RootData[]>;
+
+  log(msg: unknown): void;
 }

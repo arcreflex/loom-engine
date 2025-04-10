@@ -12,36 +12,46 @@ import type {
 import type { IProvider, ProviderRequest } from './providers/types.ts';
 import path from 'path';
 import type { ILoomStore } from './store/types.ts';
+import { log } from './log.ts';
+import { SerialQueue } from './queue.ts';
 
 export class Forest {
+  private queue = new SerialQueue();
+
   private store: ILoomStore;
   constructor(store: ILoomStore) {
     this.store = store;
   }
 
+  private async enqueue<T>(fn: () => Promise<T>): Promise<T> {
+    return this.queue.enqueue(fn);
+  }
+
   async getOrCreateRoot(config: RootConfig): Promise<RootData> {
-    const roots = await this.listRoots();
-    const existingRoot = roots.find(
-      root => JSON.stringify(root.config) === JSON.stringify(config)
-    );
-    if (existingRoot) {
-      return existingRoot;
-    }
+    return this.enqueue(async () => {
+      const roots = await this.listRoots();
+      const existingRoot = roots.find(
+        root => JSON.stringify(root.config) === JSON.stringify(config)
+      );
+      if (existingRoot) {
+        return existingRoot;
+      }
 
-    const rootId = uuidv4() as RootId;
-    const timestamp = new Date().toISOString();
+      const rootId = uuidv4() as RootId;
+      const timestamp = new Date().toISOString();
 
-    // Create root info
-    const rootInfo: RootData = {
-      id: rootId,
-      createdAt: timestamp,
-      config,
-      child_ids: []
-    };
+      // Create root info
+      const rootInfo: RootData = {
+        id: rootId,
+        createdAt: timestamp,
+        config,
+        child_ids: []
+      };
 
-    // Save root info
-    await this.store.saveRootInfo(rootInfo);
-    return rootInfo;
+      // Save root info
+      await this.store.saveRootInfo(rootInfo);
+      return rootInfo;
+    });
   }
 
   async getRoot(rootId: RootId): Promise<RootData | null> {
@@ -67,8 +77,21 @@ export class Forest {
   async getMessages(
     nodeId: NodeId
   ): Promise<{ root: RootData; messages: Message[] }> {
+    const { root, path } = await this.getPath({ from: undefined, to: nodeId });
+    return { root, messages: path.map(n => n.message) };
+  }
+
+  async getPath({
+    from,
+    to
+  }: {
+    /** Starting node (inclusive), or undefined for the root. */
+    from: NodeId | undefined;
+    /** Ending node (inclusive) */
+    to: NodeId;
+  }): Promise<{ root: RootData; path: NodeData[] }> {
     const nodes: NodeData[] = [];
-    let currentNodeId: NodeId | undefined = nodeId;
+    let currentNodeId: NodeId | undefined = to;
     let root: RootData | null = null;
 
     // Traverse up from nodeId to root, collecting nodes
@@ -87,17 +110,21 @@ export class Forest {
       if (node.parent_id) {
         nodes.unshift(node); // Add to beginning of array
       }
+      if (currentNodeId === from) break;
       currentNodeId = node.parent_id;
     }
 
-    const messages = nodes.map(node => node.message);
+    if (from && currentNodeId !== from) {
+      throw new Error(`Path does not include starting node: ${from}`);
+    }
+
     if (!root) {
-      throw new Error(`Root info not found: ${nodeId}`);
+      throw new Error(`Root info not found: ${to}`);
     }
 
     return {
       root: root,
-      messages
+      path: nodes
     };
   }
 
@@ -127,79 +154,86 @@ export class Forest {
     /** The metadata to attach if we create a node */
     metadata: Omit<NodeMetadata, 'timestamp' | 'original_root_id'>
   ): Promise<Node> {
-    const parentNode = await this.store.loadNode(parentId);
-    if (!parentNode) {
-      throw new Error(`Parent node not found: ${parentId}`);
-    }
-
-    if (!messages.length) {
-      return parentNode;
-    }
-
-    // Start with the parent node and first message index
-    let currentParentId: NodeId = parentId;
-    let messageIndex = 0;
-
-    // Implement prefix matching
-    while (true) {
-      // Get children of current parent
-      const children = await this.getChildren(currentParentId);
-
-      // Look for a child that matches the current message
-      const currentMessage = messages[messageIndex];
-      const matchingChild = children.find(
-        child =>
-          child.message.role === currentMessage.role &&
-          child.message.content === currentMessage.content
+    return this.enqueue(async (): Promise<Node> => {
+      const smallRandomHash = Math.random().toString(36).substring(2, 7);
+      this.store.log(
+        `${smallRandomHash} Appending to ${parentId}:\n${messages.map(m => '\t' + m.role + ':' + m.content).join('\n')}`
       );
 
-      if (matchingChild) {
-        // Found a match, move to the next message and continue with this child as the new parent
-        currentParentId = matchingChild.id;
-        messageIndex++;
-        if (messageIndex >= messages.length) {
-          // All messages matched, return the current child node
-          return matchingChild;
-        }
-      } else {
-        // No match found, create new nodes for remaining messages
-        break;
+      const parentNode = await this.store.loadNode(parentId);
+      if (!parentNode) {
+        throw new Error(`Parent node not found: ${parentId}`);
       }
-    }
 
-    // Create new nodes for the remaining messages
-    const timestamp = new Date().toISOString();
-    const remainingMessages = messages.slice(messageIndex);
-    let head = await this.store.loadNode(currentParentId);
-    if (!head) {
-      throw new Error(`Current parent node not found: ${currentParentId}`);
-    }
-    const root_id = head.parent_id === undefined ? head.id : head.root_id;
+      if (!messages.length) {
+        return parentNode;
+      }
 
-    for (const message of remainingMessages) {
-      const newNode: NodeData = {
-        id: uuidv4() as NodeId,
-        root_id,
-        parent_id: head.id,
-        child_ids: [],
-        message,
-        metadata: {
-          timestamp,
-          original_root_id: root_id,
-          ...metadata
+      // Start with the parent node and first message index
+      let currentParentId: NodeId = parentId;
+      let messageIndex = 0;
+
+      // Implement prefix matching
+      while (true) {
+        // Get children of current parent
+        const children = await this.getChildren(currentParentId);
+
+        // Look for a child that matches the current message
+        const currentMessage = messages[messageIndex];
+        const matchingChild = children.find(
+          child =>
+            child.message.role === currentMessage.role &&
+            child.message.content === currentMessage.content
+        );
+
+        if (matchingChild) {
+          // Found a match, move to the next message and continue with this child as the new parent
+          currentParentId = matchingChild.id;
+          messageIndex++;
+          if (messageIndex >= messages.length) {
+            // All messages matched, return the current child node
+            return matchingChild;
+          }
+        } else {
+          // No match found, create new nodes for remaining messages
+          break;
         }
-      };
+      }
 
-      // Update parent's child_ids
-      head.child_ids.push(newNode.id);
-      await this.store.saveNode(head);
+      // Create new nodes for the remaining messages
+      const timestamp = new Date().toISOString();
+      const remainingMessages = messages.slice(messageIndex);
+      let head = await this.store.loadNode(currentParentId);
+      if (!head) {
+        throw new Error(`Current parent node not found: ${currentParentId}`);
+      }
+      const root_id = head.parent_id === undefined ? head.id : head.root_id;
 
-      // Save the new node
-      await this.store.saveNode(newNode);
-      head = newNode;
-    }
+      for (const message of remainingMessages) {
+        const newNode: NodeData = {
+          id: uuidv4() as NodeId,
+          root_id,
+          parent_id: head.id,
+          child_ids: [],
+          message,
+          metadata: {
+            timestamp,
+            original_root_id: root_id,
+            ...metadata
+          }
+        };
 
-    return head;
+        // Update parent's child_ids
+        head.child_ids.push(newNode.id);
+        await this.store.saveNode(head);
+
+        // Save the new node
+        await this.store.saveNode(newNode);
+        head = newNode;
+      }
+
+      return head;
+    });
   }
 
   /**
@@ -210,70 +244,72 @@ export class Forest {
    * @returns The original node (now containing only messages before the split)
    */
   async splitNode(nodeId: NodeId, position: number): Promise<NodeData> {
-    // Get the node to split
-    const node = await this.store.loadNode(nodeId);
-    if (!node) {
-      throw new Error(`Node not found: ${nodeId}`);
-    }
-    if (!node.parent_id) {
-      throw new Error(`Cannot split root node: ${nodeId}`);
-    }
+    return this.enqueue(async () => {
+      // Get the node to split
+      const node = await this.store.loadNode(nodeId);
+      if (!node) {
+        throw new Error(`Node not found: ${nodeId}`);
+      }
+      if (!node.parent_id) {
+        throw new Error(`Cannot split root node: ${nodeId}`);
+      }
 
-    // Validate the message index
-    if (position <= 0 || position >= node.message.content.length) {
-      throw new Error(
-        `Invalid message index for split: ${position}. Must be between 1 and ${node.message.content.length - 1}`
-      );
-    }
+      // Validate the message index
+      if (position <= 0 || position >= node.message.content.length) {
+        throw new Error(
+          `Invalid message index for split: ${position}. Must be between 1 and ${node.message.content.length - 1}`
+        );
+      }
 
-    const left = node.message.content.slice(0, position);
-    const right = node.message.content.slice(position);
+      const left = node.message.content.slice(0, position);
+      const right = node.message.content.slice(position);
 
-    // Create a new node to hold the messages after the split point
-    const timestamp = new Date().toISOString();
-    const newNode: NodeData = {
-      id: uuidv4() as NodeId,
-      root_id: node.root_id,
-      parent_id: node.parent_id, // Same parent as the original node
-      child_ids: [...node.child_ids], // Take all the children from the original node
-      message: {
+      // Create a new node to hold the messages after the split point
+      const timestamp = new Date().toISOString();
+      const newNode: NodeData = {
+        id: uuidv4() as NodeId,
+        root_id: node.root_id,
+        parent_id: node.parent_id, // Same parent as the original node
+        child_ids: [...node.child_ids], // Take all the children from the original node
+        message: {
+          role: node.message.role,
+          content: right
+        },
+        metadata: {
+          timestamp,
+          original_root_id: node.metadata.original_root_id,
+          tags: node.metadata.tags ? [...node.metadata.tags] : undefined,
+          custom_data: node.metadata.custom_data
+            ? { ...node.metadata.custom_data }
+            : undefined,
+          source_info: { ...node.metadata.source_info }
+        }
+      };
+
+      node.message = {
         role: node.message.role,
-        content: right
-      },
-      metadata: {
-        timestamp,
-        original_root_id: node.metadata.original_root_id,
-        tags: node.metadata.tags ? [...node.metadata.tags] : undefined,
-        custom_data: node.metadata.custom_data
-          ? { ...node.metadata.custom_data }
-          : undefined,
-        source_info: { ...node.metadata.source_info }
+        content: left
+      };
+      node.child_ids = [newNode.id]; // Original node now has only new node as child
+      node.metadata.source_info = { type: 'split' };
+
+      // Update all children of the original node to point to the new node as their parent
+      for (const childId of newNode.child_ids) {
+        const child = await this.store.loadNode(childId);
+        if (child) {
+          child.parent_id = newNode.id;
+          await this.store.saveNode(child);
+        }
       }
-    };
 
-    node.message = {
-      role: node.message.role,
-      content: left
-    };
-    node.child_ids = [newNode.id]; // Original node now has only new node as child
-    node.metadata.source_info = { type: 'split' };
+      // Save the new node
+      await this.store.saveNode(newNode);
 
-    // Update all children of the original node to point to the new node as their parent
-    for (const childId of newNode.child_ids) {
-      const child = await this.store.loadNode(childId);
-      if (child) {
-        child.parent_id = newNode.id;
-        await this.store.saveNode(child);
-      }
-    }
+      // Save the modified original node
+      await this.store.saveNode(node);
 
-    // Save the new node
-    await this.store.saveNode(newNode);
-
-    // Save the modified original node
-    await this.store.saveNode(node);
-
-    return node;
+      return node;
+    });
   }
 
   /**
@@ -284,9 +320,15 @@ export class Forest {
    * @param reparentToGrandparent - If true, reparent any children to this node's parent
    * @returns The parent node if it exists, or null
    */
-  async deleteNode(
+  async deleteNode(nodeId: NodeId, reparentToGrandparent = false) {
+    return this.enqueue(() =>
+      this.deleteNodeUnsafe(nodeId, reparentToGrandparent)
+    );
+  }
+
+  private async deleteNodeUnsafe(
     nodeId: NodeId,
-    reparentToGrandparent = false
+    reparentToGrandparent: boolean
   ): Promise<Node | null> {
     // Get the node to delete
     const node = await this.store.loadNode(nodeId);
@@ -341,31 +383,33 @@ export class Forest {
    * @returns The parent node with updated child_ids, or null if the node doesn't exist
    */
   async deleteSiblings(nodeId: NodeId): Promise<Node | null> {
-    // Get the node
-    const node = await this.store.loadNode(nodeId);
-    if (!node || !node.parent_id) {
-      return null; // Node doesn't exist or has no parent
-    }
+    return this.enqueue(async () => {
+      // Get the node
+      const node = await this.store.loadNode(nodeId);
+      if (!node || !node.parent_id) {
+        return null; // Node doesn't exist or has no parent
+      }
 
-    // Get the parent
-    const parentNode = await this.store.loadNode(node.parent_id);
-    if (!parentNode) {
-      return null; // Parent doesn't exist
-    }
+      // Get the parent
+      const parentNode = await this.store.loadNode(node.parent_id);
+      if (!parentNode) {
+        return null; // Parent doesn't exist
+      }
 
-    // Find all siblings (all children of the parent except this node)
-    const siblings = parentNode.child_ids.filter(id => id !== nodeId);
+      // Find all siblings (all children of the parent except this node)
+      const siblings = parentNode.child_ids.filter(id => id !== nodeId);
 
-    // Delete each sibling
-    for (const siblingId of siblings) {
-      await this.deleteNode(siblingId);
-    }
+      // Delete each sibling
+      for (const siblingId of siblings) {
+        await this.deleteNodeUnsafe(siblingId, false);
+      }
 
-    // Update parent's child_ids to contain only this node
-    parentNode.child_ids = [nodeId];
-    await this.store.saveNode(parentNode);
+      // Update parent's child_ids to contain only this node
+      parentNode.child_ids = [nodeId];
+      await this.store.saveNode(parentNode);
 
-    return parentNode;
+      return parentNode;
+    });
   }
 
   /**
@@ -375,34 +419,41 @@ export class Forest {
    * @returns The node with updated child_ids, or null if the node doesn't exist
    */
   async deleteChildren(nodeId: NodeId): Promise<Node | null> {
-    // Get the node
-    const node = await this.store.loadNode(nodeId);
-    if (!node) {
-      return null; // Node doesn't exist
-    }
+    return this.enqueue(async () => {
+      // Get the node
+      const node = await this.store.loadNode(nodeId);
+      if (!node) {
+        return null; // Node doesn't exist
+      }
 
-    // Delete each child
-    for (const childId of node.child_ids) {
-      await this.deleteNode(childId);
-    }
+      // Delete each child
+      for (const childId of node.child_ids) {
+        await this.deleteNodeUnsafe(childId, false);
+      }
 
-    // Update the node's child_ids to be empty
-    node.child_ids = [];
-    await this.store.saveNode(node);
+      // Update the node's child_ids to be empty
+      node.child_ids = [];
+      await this.store.saveNode(node);
 
-    return node;
+      return node;
+    });
   }
-}
 
-function prefixMatch(a: string, b: string) {
-  const minLength = Math.min(a.length, b.length);
-  let matchLength = 0;
-  for (let i = 0; i < minLength; i++) {
-    if (a[i] === b[i]) {
-      matchLength++;
-    } else {
-      break;
-    }
+  async updateNodeMetadata(
+    nodeId: NodeId,
+    metadata: NodeData['metadata']
+  ): Promise<void> {
+    return this.enqueue(async () => {
+      const existingNode = await this.store.loadNode(nodeId);
+      if (!existingNode?.parent_id) {
+        throw new Error(`Node not found: ${nodeId}`);
+      }
+
+      // Update the node in the store
+      await this.store.saveNode({
+        ...existingNode,
+        metadata
+      });
+    });
   }
-  return matchLength;
 }

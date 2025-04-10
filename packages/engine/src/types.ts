@@ -13,7 +13,7 @@ export type RootId = NodeId & { readonly __rootIdBrand: unique symbol };
 /**
  * Represents the role of a message in a conversation.
  */
-export type Role = 'system' | 'user' | 'assistant';
+export type Role = 'user' | 'assistant';
 
 export type ProviderType = 'openai' | 'anthropic' | 'google';
 

@@ -11,7 +11,6 @@ describe('coalesceMessages', () => {
 
   it('should return the original message array when there are no adjacent messages with the same role', () => {
     const messages: Message[] = [
-      { role: 'system', content: 'You are a helpful assistant.' },
       { role: 'user', content: 'Hello!' },
       { role: 'assistant', content: 'How can I help you?' },
       { role: 'user', content: 'Tell me about message coalescing.' }
@@ -19,9 +18,7 @@ describe('coalesceMessages', () => {
 
     const result = coalesceMessages(messages);
 
-    assert.equal(result.length, 4);
     assert.deepEqual(result, [
-      { role: 'system', content: 'You are a helpful assistant.' },
       { role: 'user', content: 'Hello!' },
       { role: 'assistant', content: 'How can I help you?' },
       { role: 'user', content: 'Tell me about message coalescing.' }
@@ -30,7 +27,6 @@ describe('coalesceMessages', () => {
 
   it('should coalesce adjacent messages with the same role', () => {
     const messages: Message[] = [
-      { role: 'system', content: 'You are a helpful assistant.' },
       { role: 'user', content: 'Hello!' },
       { role: 'user', content: 'How are you?' },
       { role: 'assistant', content: 'I am doing well.' },
@@ -40,9 +36,7 @@ describe('coalesceMessages', () => {
 
     const result = coalesceMessages(messages);
 
-    assert.equal(result.length, 4);
     assert.deepEqual(result, [
-      { role: 'system', content: 'You are a helpful assistant.' },
       { role: 'user', content: 'Hello!How are you?' },
       {
         role: 'assistant',
@@ -54,7 +48,6 @@ describe('coalesceMessages', () => {
 
   it('should coalesce multiple adjacent messages with the same role', () => {
     const messages: Message[] = [
-      { role: 'system', content: 'You are a helpful assistant.' },
       { role: 'user', content: 'Part 1' },
       { role: 'user', content: 'Part 2' },
       { role: 'user', content: 'Part 3' },
@@ -63,9 +56,7 @@ describe('coalesceMessages', () => {
 
     const result = coalesceMessages(messages);
 
-    assert.equal(result.length, 3);
     assert.deepEqual(result, [
-      { role: 'system', content: 'You are a helpful assistant.' },
       { role: 'user', content: 'Part 1Part 2Part 3' },
       { role: 'assistant', content: 'Response' }
     ]);
@@ -79,7 +70,6 @@ describe('coalesceMessages', () => {
 
     const result = coalesceMessages(messages, ' --- ');
 
-    assert.equal(result.length, 1);
     assert.deepEqual(result, [
       { role: 'user', content: 'First message --- Second message' }
     ]);
@@ -87,8 +77,6 @@ describe('coalesceMessages', () => {
 
   it('should handle all message role types', () => {
     const messages: Message[] = [
-      { role: 'system', content: 'System instruction' },
-      { role: 'system', content: 'Additional instruction' },
       { role: 'user', content: 'User request' },
       { role: 'assistant', content: 'Assistant response' },
       { role: 'user', content: 'Follow-up' }
@@ -96,9 +84,7 @@ describe('coalesceMessages', () => {
 
     const result = coalesceMessages(messages);
 
-    assert.equal(result.length, 5);
     assert.deepEqual(result, [
-      { role: 'system', content: 'System instructionAdditional instruction' },
       { role: 'user', content: 'User request' },
       { role: 'assistant', content: 'Assistant response' },
       { role: 'user', content: 'Follow-up' }
