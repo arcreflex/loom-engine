@@ -35,7 +35,7 @@ function parseModelString(modelString: string): {
   }
 
   switch (parts[0]) {
-    // case 'openai':
+    case 'openai':
     case 'anthropic':
       // case 'google':
       return {
@@ -135,7 +135,7 @@ async function main() {
         ? await engine.getForest().getRoot(persistedNode.root_id)
         : persistedNode;
 
-    if (!startingNodeId) {
+    if (!startingNodeId || argv.model || argv.system) {
       try {
         let providerType = defaultRoot?.config.providerType;
         let model = defaultRoot?.config.model;

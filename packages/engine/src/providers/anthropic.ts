@@ -5,7 +5,7 @@ import Anthropic from '@anthropic-ai/sdk';
  * Requires the Anthropic SDK: npm install @anthropic-ai/sdk
  */
 export class AnthropicProvider implements IProvider {
-  private apiKey: string;
+  private apiKey: string | undefined;
   private baseURL?: string;
 
   /**
@@ -16,14 +16,7 @@ export class AnthropicProvider implements IProvider {
    */
   constructor(apiKey?: string, baseURL?: string) {
     // Use provided API key or fall back to environment variable
-    this.apiKey = apiKey || process.env.ANTHROPIC_API_KEY || '';
-
-    if (!this.apiKey) {
-      throw new Error(
-        'Anthropic API key is required. Provide it explicitly or set ANTHROPIC_API_KEY environment variable.'
-      );
-    }
-
+    this.apiKey = apiKey || process.env.ANTHROPIC_API_KEY;
     this.baseURL = baseURL;
   }
 
@@ -34,6 +27,12 @@ export class AnthropicProvider implements IProvider {
    * @returns A Promise resolving to the provider's response
    */
   async generate(request: ProviderRequest): Promise<ProviderResponse> {
+    if (!this.apiKey) {
+      throw new Error(
+        'Anthropic API key is required. Provide it explicitly or set ANTHROPIC_API_KEY environment variable.'
+      );
+    }
+
     try {
       const anthropic = new Anthropic({
         apiKey: this.apiKey,
