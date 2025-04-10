@@ -1,4 +1,4 @@
-import type { Message } from '@loom/engine';
+import type { Message } from '@ankhdt/loom-engine';
 import chalk from 'chalk';
 
 export function formatError(err: unknown, debug: boolean) {

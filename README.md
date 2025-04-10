@@ -1,100 +1,106 @@
 # Loom Engine
 
-A TypeScript library for managing interactions with language models based on the "loom of time" concept.
+This is a TypeScript toolkit for managing interactions with LLMs based on a branching, tree-like history inspired by the "loom of time" concept. (If you're unfamiliar, here's [one entrance](https://www.lesswrong.com/posts/bxt7uCiHam4QXrQAA/cyborgism#Appendix__Testimony_of_a_Cyborg) to the rabbit hole.)
+
+## Core Concept & Motivation
+
+A key facet of this implementation--and the main reason I wanted to make it, actually--is the use of prefix matching: when adding new messages, the engine reuses existing paths in the tree if the sequence of messages matches, only creating new nodes where the conversation diverges. The idea is that I can then store *all* my LLM interactions -- from simple chats to long branching explorations to anything in between -- all in one place. The multiverse should be navigable!
+
+## Packages:
+* `@ankhdt/loom-engine`: The core library for managing the conversation trees.
+* `@ankhdt/loom-cli`: A command-line interface for interacting with the engine.
 
 ## Installation
 
-```bash
-npm install @loom/engine
-```
-
-If you plan to use the Anthropic provider:
+**Core Engine Library:**
 
 ```bash
-npm install @loom/engine @anthropic-ai/sdk
+pnpm install @ankhdt/loom-engine
+# or npm install @ankhdt/loom-engine
+# or yarn add @ankhdt/loom-engine
 ```
 
-## Usage
+**Command-Line Interface:**
 
-### Basic Example
+```bash
+pnpm add -g @ankhdt/loom-cli
+# or npm install -g @ankhdt/loom-cli
+# or yarn global add @ankhdt/loom-cli
+```
+
+## Basic Usage
+
+### Engine (`@ankhdt/loom-engine`)
 
 ```typescript
-import { Forest } from '@loom/engine';
-import { FileSystemLoomStore } from '@loom/engine/store';
+import { LoomEngine } from '@ankhdt/loom-engine';
+import { FileSystemStore } from '@ankhdt/loom-engine/store'; // Note: Store path might change
 
-// Initialize the forest with a store
-const store = new FileSystemLoomStore('./data');
-const forest = new Forest(store);
+// Initialize with a storage path
+const engine = new LoomEngine('./my-loom-data');
 
-// Create or get a root
-const root = await forest.getOrCreateRoot({
-  model: 'claude-3-opus-20240229',
-  providerType: 'anthropic'
+// Define the root configuration for a conversation tree
+const rootConfig = {
+  providerType: 'anthropic' as const, // or 'openai', etc.
+  model: 'claude-3-haiku-20240307',
+  systemPrompt: 'You are a helpful assistant.',
+};
+
+// User message(s)
+const userMessages = [{ role: 'user' as const, content: 'Explain the loom concept.' }];
+
+// Generate responses (returns an array of new assistant nodes)
+const responseNodes = await engine.generate(rootConfig, userMessages, {
+  n: 1, // Number of responses
+  max_tokens: 500,
+  temperature: 0.7,
 });
 
-// Create a node with a message
-const userNode = await forest.append(
-  root.id,
-  [{ role: 'user', content: 'Tell me about the loom of time concept.' }],
-  { source_info: { type: 'user' } }
-);
+if (responseNodes.length > 0) {
+  const responseNode = responseNodes[0];
+  console.log('Response:', responseNode.message.content);
 
-// Get the full conversation history
-const { messages } = await forest.getMessages(userNode.id);
+  // Get the full history leading to this node
+  const { messages } = await engine.getMessages(responseNode.id);
+  console.log('Full History:', messages);
+}
 ```
 
-### Using the Anthropic Provider
+### CLI (`@ankhdt/loom-cli`)
 
-```typescript
-import { AnthropicProvider } from '@loom/engine/providers';
-import { coalesceMessages } from '@loom/engine';
+The CLI provides a terminal-based interface to navigate and extend conversation trees managed by the engine.
 
-// Initialize with API key from environment variable (ANTHROPIC_API_KEY)
-const anthropic = new AnthropicProvider();
-
-// Or provide API key directly
-// const anthropic = new AnthropicProvider('your-api-key');
-
-// Retrieve messages from the forest
-const { messages } = await forest.getMessages(nodeId);
-
-// Coalesce messages to reduce token usage
-const coalescedMessages = coalesceMessages(messages);
-
-// Generate a response
-const response = await anthropic.generate({
-  messages: coalescedMessages,
-  model: 'claude-3-opus-20240229',
-  parameters: {
-    max_tokens: 1000,
-    temperature: 0.7
-  }
-});
-
-// Append the response to the conversation
-const newNode = await forest.append(
-  nodeId,
-  [response.message],
-  { 
-    source_info: {
-      type: 'model',
-      parameters: { max_tokens: 1000, temperature: 0.7 },
-      finish_reason: response.finish_reason,
-      usage: response.usage
-    }
-  }
-);
+```bash
+# Start a new session (or continue the last one)
+loom --model anthropic/claude-3-haiku-20240307 --system "You are a poet."
 ```
 
-## Features
+Inside the CLI, you can type messages to send to the LLM, use `/` commands to generate responses or navigate the tree (`/`, `/2`, `/siblings`, `/up`, `/save <bookmark>`, `/exit`).
 
-- Tree-based conversation management
-- Multiple conversation branches
-- Node splitting and deletion
-- Message coalescing
-- Support for multiple LLM providers
-- Filesystem storage
+## Development
+
+This is a monorepo managed using pnpm workspaces.
+
+```bash
+# Install dependencies
+pnpm install
+
+# Build all packages
+pnpm build
+
+# Run tests for all packages
+pnpm test
+
+# Lint all packages
+pnpm lint
+```
 
 ## License
 
 MIT
+
+## Credits
+
+* [@repligate](https://x.com/repligate) for the original "loom of time" idea.
+* [@parafactural](https://x.com/parafactural) for the Obsidian loom plugin ([github.com/cosmicoptima/loom](https://github.com/cosmicoptima/loom)).
+* Sonnet 3.7 and Gemini Pro 2.5 for much of the code

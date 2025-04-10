@@ -1,5 +1,5 @@
 {
-  "name": "@loom/engine",
+  "name": "@ankhdt/loom-engine",
   "version": "0.1.0",
   "description": "TypeScript library for managing interactions with language models based on the loom of time concept",
   "type": "module",

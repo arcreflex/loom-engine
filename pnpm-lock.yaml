@@ -38,7 +38,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@loom/engine':
+      '@ankhdt/loom-engine':
         specifier: workspace:*
         version: link:../engine
       '@types/react':
