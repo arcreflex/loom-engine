@@ -1,6 +1,6 @@
 {
   "name": "@ankhdt/loom-engine",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "TypeScript library for managing interactions with language models based on the loom of time concept",
   "type": "module",
   "exports": {
