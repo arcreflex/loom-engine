@@ -14,7 +14,12 @@ export function initializeLog(dataDir: string) {
 }
 
 export function log(dataDir: string, msg: unknown) {
-  const str = typeof msg === 'string' ? msg : JSON.stringify(msg);
+  const str =
+    typeof msg === 'string'
+      ? msg
+      : msg instanceof Error
+        ? msg.stack
+        : JSON.stringify(msg);
   const logMessage = `[${new Date().toISOString()}] ${str}\n`;
   fs.appendFileSync(logPath(dataDir), logMessage);
 }

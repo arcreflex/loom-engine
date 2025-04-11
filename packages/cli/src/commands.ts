@@ -1,81 +1,57 @@
 import chalk from 'chalk';
-import path from 'path';
-import fs from 'fs/promises';
 import { LoomEngine } from '@ankhdt/loom-engine';
-import type { NodeId } from '@ankhdt/loom-engine';
-import assert from 'assert';
+import type { GenerateOptions, NodeId } from '@ankhdt/loom-engine';
 
-export type Command =
-  | 'user'
-  | 'generate'
-  | '1'
-  | '2'
-  | '3'
-  | '4'
-  | '5'
-  | '6'
-  | '7'
-  | '8'
-  | '9'
-  | 'up'
-  | 'left'
-  | 'right'
-  | 'save'
-  | 'exit';
+type CommandMap = {
+  user: { content: string; generateOptions: GenerateOptions };
+  generate: GenerateOptions;
+  up: undefined;
+  left: undefined;
+  right: undefined;
+  save: string;
+  exit: undefined;
+};
+
+export type Command = keyof CommandMap;
+export type CommandWithArgs = {
+  [K in Command]: [K, CommandMap[K]];
+}[Command];
 
 export const UNREAD_TAG = 'cli/unread';
 
-interface CommandOptions {
-  dataDir: string;
-  n: number;
-  temperature: number;
-  maxTokens: number;
-  debug: boolean;
-}
+export function parseCommand(
+  input: string,
+  baseGenerateOptions: GenerateOptions
+): CommandWithArgs | undefined {
+  input = input.trim();
+  if (!input.startsWith('/')) {
+    return undefined;
+  }
 
-export function isCommand(input: string): input is Command {
-  switch (input) {
-    case 'user':
-    case 'generate':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9':
+  const [command, ...rest] = input.slice(1).trim().split(' ');
+  switch (command) {
+    case 'save': {
+      return ['save', rest.join(' ')];
+    }
+    case '': {
+      return ['generate', baseGenerateOptions];
+    }
     case 'up':
     case 'left':
     case 'right':
-    case 'save':
-    case 'exit':
-      input satisfies Command;
-      return true;
-    default:
-      return false;
+    case 'exit': {
+      return [command, undefined];
+    }
+    default: {
+      const n = parseInt(command, 10);
+      if (!isNaN(n)) {
+        return ['generate', { ...baseGenerateOptions, n }];
+      }
+      throw new Error(`Unknown command: ${command}`);
+    }
   }
-}
 
-// Bookmark management functions
-async function loadBookmarks(dataDir: string): Promise<Record<string, string>> {
-  try {
-    const filePath = path.join(dataDir, 'bookmarks.json');
-    const content = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(content);
-  } catch (_error) {
-    // File doesn't exist or other error
-    return {};
-  }
-}
-
-async function saveBookmarks(
-  dataDir: string,
-  bookmarks: Record<string, string>
-): Promise<void> {
-  const filePath = path.join(dataDir, 'bookmarks.json');
-  await fs.writeFile(filePath, JSON.stringify(bookmarks, null, 2), 'utf-8');
+  return undefined;
 }
 
 /**
@@ -83,59 +59,23 @@ async function saveBookmarks(
  * Returns the new current node ID
  */
 export async function handleCommand(
-  command: Command,
-  args: string[],
+  [command, args]: CommandWithArgs,
   engine: LoomEngine,
-  currentNodeId: NodeId,
-  options: CommandOptions
+  currentNodeId: NodeId
 ): Promise<NodeId> {
   // Handle commands
   switch (command) {
     case 'user': {
-      assert(args.length === 1, '/user requires a single argument');
+      const { content, generateOptions } = args;
       const userNode = await engine
         .getForest()
-        .append(currentNodeId, [{ role: 'user', content: args[0] }], {
+        .append(currentNodeId, [{ role: 'user', content }], {
           source_info: { type: 'user' }
         });
-      return handleCommand('generate', [], engine, userNode.id, options);
+      return handleCommand(['generate', generateOptions], engine, userNode.id);
     }
-    // Generate response(s)
-    case 'generate':
-    case '1':
-    case '2':
-    case '3':
-    case '4':
-    case '5':
-    case '6':
-    case '7':
-    case '8':
-    case '9': {
-      // Parse N (number of completions to generate)
-      const n = command === 'generate' ? options.n : parseInt(command, 10);
-
-      // Get current context
-      const { root, messages } = await engine.getMessages(currentNodeId);
-
-      // Generate responses
-      const assistantNodes = await engine.generate(root, messages, {
-        n,
-        temperature: options.temperature,
-        max_tokens: options.maxTokens
-      });
-
-      if (assistantNodes.length === 1) {
-        const chosenNode = assistantNodes[0];
-        return chosenNode.id;
-      } else {
-        for (const node of assistantNodes) {
-          await engine.getForest().updateNodeMetadata(node.id, {
-            ...node.metadata,
-            tags: [...new Set([...(node.metadata.tags || []), UNREAD_TAG])]
-          });
-        }
-        return currentNodeId;
-      }
+    case 'generate': {
+      return generate(engine, currentNodeId, args);
     }
 
     case 'left':
@@ -180,16 +120,12 @@ export async function handleCommand(
 
     // Save current node as a bookmark
     case 'save': {
-      const title = args.join(' ').trim();
+      const title = args;
       if (!title) {
-        return currentNodeId;
+        throw new Error(`Please provide a title for the bookmark.`);
       }
 
-      // Load bookmarks, add the new one, and save
-      const bookmarks = await loadBookmarks(options.dataDir);
-      bookmarks[title] = currentNodeId as string;
-      await saveBookmarks(options.dataDir, bookmarks);
-      return currentNodeId;
+      throw new Error(`TODO: save bookmarks in config.toml`);
     }
 
     // Exit the CLI
@@ -199,11 +135,39 @@ export async function handleCommand(
       throw new Error('Process exited');
     }
 
-    // Unknown command
     default: {
       command satisfies never;
       console.log(chalk.yellow(`Unknown command: ${command}`));
       return currentNodeId;
     }
+  }
+}
+
+async function generate(
+  engine: LoomEngine,
+  currentNodeId: NodeId,
+  options: {
+    n: number;
+    max_tokens: number;
+    temperature: number;
+  }
+) {
+  // Get current context
+  const { root, messages } = await engine.getMessages(currentNodeId);
+
+  // Generate responses
+  const assistantNodes = await engine.generate(root, messages, options);
+
+  if (assistantNodes.length === 1) {
+    const chosenNode = assistantNodes[0];
+    return chosenNode.id;
+  } else {
+    for (const node of assistantNodes) {
+      await engine.getForest().updateNodeMetadata(node.id, {
+        ...node.metadata,
+        tags: [...new Set([...(node.metadata.tags || []), UNREAD_TAG])]
+      });
+    }
+    return currentNodeId;
   }
 }

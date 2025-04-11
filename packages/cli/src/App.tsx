@@ -10,9 +10,9 @@ import {
 } from '@ankhdt/loom-engine';
 import {
   handleCommand,
-  isCommand,
+  parseCommand,
   UNREAD_TAG,
-  type Command
+  type CommandWithArgs
 } from './commands.ts';
 import { render } from 'ink';
 import { formatError } from './util.ts';
@@ -28,7 +28,7 @@ interface LoomAppProps {
     dataDir: string;
     n: number;
     temperature: number;
-    maxTokens: number;
+    max_tokens: number;
     debug: boolean;
   };
   onExit: () => void; // Function to call for graceful exit
@@ -57,10 +57,20 @@ export function LoomApp({
   const [history, setHistory] = useState<DisplayMessage[]>([]);
   const [children, setChildren] = useState<NodeData[]>([]);
   const [inputValue, setInputValue] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<
+    | { status: 'loading' }
+    | { status: 'idle' }
+    | { status: 'error'; error: string }
+  >({ status: 'idle' });
   const [siblings, setSiblings] = useState<NodeId[]>([]);
   const [root, setRoot] = useState<RootData | null>(null);
+  const [refresh, setRefresh] = useState(0);
+
+  const stopLoading = () => {
+    setStatus(status =>
+      status.status === 'loading' ? { status: 'idle' } : status
+    );
+  };
 
   // State for focus management
   const [focusedElement, setFocusedElement] = useState<'input' | 'children'>(
@@ -72,8 +82,7 @@ export function LoomApp({
   useEffect(() => {
     const fetchData = async () => {
       engine.log(`Current node: ${currentNodeId}`);
-      setIsLoading(true);
-      setError(null);
+      setStatus({ status: 'loading' });
       try {
         // Set current node ID
         await fs.writeFile(
@@ -119,60 +128,77 @@ export function LoomApp({
 
         setSelectedChildIndex(0); // Reset selection when node changes
       } catch (err) {
-        setError(formatError(err, options.debug));
+        engine.log(err);
+        setStatus({
+          status: 'error',
+          error: formatError(err, options.debug)
+        });
       } finally {
-        setIsLoading(false);
+        stopLoading();
       }
     };
     fetchData();
-  }, [engine, currentNodeId, options.debug, options.dataDir]);
+  }, [engine, currentNodeId, options.debug, options.dataDir, refresh]);
 
   // --- Input Handling ---
-  const handleCommandAndUpdate = async (command: Command, args: string[]) => {
-    setIsLoading(true);
-    setError(null);
+  const handleCommandAndUpdate = async (commandWithArgs: CommandWithArgs) => {
+    setStatus({ status: 'loading' });
     let nextNodeId = currentNodeId;
 
     try {
-      if (command === 'exit') {
+      if (commandWithArgs[0] === 'exit') {
         onExit(); // Call the passed exit handler
         return;
       } else {
         nextNodeId = await handleCommand(
-          command,
-          args,
+          commandWithArgs,
           engine,
-          currentNodeId,
-          options
+          currentNodeId
         );
       }
 
-      setIsLoading(false);
       if (nextNodeId !== currentNodeId) {
         setCurrentNodeId(nextNodeId);
       }
+
+      if (commandWithArgs[0] === 'generate') {
+        setRefresh(prev => prev + 1);
+      }
     } catch (err) {
-      setError(formatError(err, options.debug));
-      setIsLoading(false);
+      engine.log(err);
+      setStatus({
+        status: 'error',
+        error: formatError(err, options.debug)
+      });
+    } finally {
+      stopLoading();
     }
   };
 
   const handleInput = async (value: string) => {
-    if (isLoading) return;
+    if (status.status === 'loading') return;
+    if (!value.trim()) return;
     setInputValue('');
-    setIsLoading(true);
-
-    const trimmedInput = value.trim();
-    if (!trimmedInput) return; // Ignore empty submissions
-    if (isLoading) return; // Ignore input while loading
-    if (trimmedInput.startsWith('/')) {
-      const [command, ...args] = trimmedInput.slice(1).trim().split(' ');
-      if (isCommand(command)) {
-        await handleCommandAndUpdate(command, args);
-        return;
+    setStatus({ status: 'loading' });
+    try {
+      const parsedCommand = parseCommand(value, options);
+      if (parsedCommand) {
+        await handleCommandAndUpdate(parsedCommand);
+      } else {
+        await handleCommandAndUpdate([
+          'user',
+          {
+            content: value,
+            generateOptions: options
+          }
+        ]);
       }
+    } catch (e) {
+      engine.log(e);
+      setStatus({ status: 'error', error: formatError(e, options.debug) });
+    } finally {
+      stopLoading();
     }
-    await handleCommandAndUpdate('user', [value]);
   };
 
   // --- Keyboard Input Hook (Focus, Navigation) ---
@@ -188,15 +214,15 @@ export function LoomApp({
   // Input field
   useInput(
     async (input, key) => {
-      if (isLoading) return;
+      if (status.status === 'loading') return;
       if (key.return) {
         await handleInput(inputValue);
       } else if (key.upArrow && key.meta) {
-        await handleCommandAndUpdate('up', []);
+        await handleCommandAndUpdate(['up', undefined]);
       } else if (key.leftArrow && key.meta) {
-        await handleCommandAndUpdate('left', []);
+        await handleCommandAndUpdate(['left', undefined]);
       } else if (key.rightArrow && key.meta) {
-        await handleCommandAndUpdate('right', []);
+        await handleCommandAndUpdate(['right', undefined]);
       } else if (key.downArrow && children.length > 0) {
         setFocusedElement('children');
         setSelectedChildIndex(0);
@@ -281,13 +307,19 @@ export function LoomApp({
       {/* Status Line */}
       <Box
         borderStyle="round"
-        borderColor={isLoading ? 'yellow' : error ? 'red' : 'gray'}
+        borderColor={
+          status.status === 'loading'
+            ? 'yellow'
+            : status.status === 'error'
+              ? 'red'
+              : 'gray'
+        }
         paddingX={1}
       >
-        {isLoading ? (
+        {status.status === 'loading' ? (
           <Text color={'yellow'}>...</Text>
-        ) : error ? (
-          <Text color="red">{error}</Text>
+        ) : status.status === 'error' ? (
+          <Text color="red">{status.error}</Text>
         ) : (
           <>
             <Text color="gray">

@@ -208,7 +208,7 @@ async function main() {
         dataDir,
         n: argv.n ?? config.defaults.n,
         temperature: argv.temp ?? config.defaults.temperature,
-        maxTokens: argv['max-tokens'] ?? config.defaults.maxTokens,
+        max_tokens: argv['max-tokens'] ?? config.defaults.maxTokens,
         debug: argv.debug
       },
       onExit: async () => {

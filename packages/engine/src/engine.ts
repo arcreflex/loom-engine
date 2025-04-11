@@ -12,6 +12,12 @@ import type {
 } from './types.ts';
 import { AnthropicProvider } from './providers/anthropic.ts';
 
+export interface GenerateOptions {
+  n: number;
+  max_tokens: number;
+  temperature: number;
+}
+
 export class LoomEngine {
   private forest: Forest;
   private store: ILoomStore;
@@ -39,11 +45,7 @@ export class LoomEngine {
   async generate(
     config: RootConfig,
     contextMessages: Message[],
-    options: {
-      n: number;
-      max_tokens: number;
-      temperature: number;
-    }
+    options: GenerateOptions
   ): Promise<NodeData[]> {
     const root = await this.forest.getOrCreateRoot(config);
     const provider = this.getProvider(root.config.providerType);
