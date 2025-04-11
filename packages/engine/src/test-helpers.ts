@@ -23,6 +23,13 @@ export function createMockStore() {
   const mockStore = {
     initialize: mock.fn(async () => {}),
 
+    generateNodeId: (root: RootId) => {
+      return `node-${root}-${Math.random().toString(36).substring(2, 15)}` as NodeId;
+    },
+    generateRootId: () => {
+      return `root-${Math.random().toString(36).substring(2, 15)}` as RootId;
+    },
+
     saveNode: mock.fn(async (nodeData: Node) => {
       if (nodeData.parent_id === undefined) {
         return mockStore.saveRootInfo(nodeData);

@@ -1,8 +1,34 @@
 import fs from 'fs/promises';
+import { existsSync } from 'fs';
 import path from 'path';
 import type { NodeData, NodeId, RootId, RootData, Node } from '../types.ts';
 import type { ILoomStore, NodeQueryCriteria } from './types.ts';
 import { initializeLog, log } from '../log.ts';
+
+class IdCache<T extends string> {
+  known = new Set<T>();
+  private lastId = 0;
+  private prefix: string;
+  private physicallyExists: (id: T) => boolean;
+
+  constructor(prefix: string, physicallyExists: (id: T) => boolean) {
+    this.prefix = prefix;
+    this.physicallyExists = physicallyExists;
+  }
+
+  next() {
+    while (true) {
+      const candidate = `${this.prefix}-${++this.lastId}` as T;
+      if (this.known.has(candidate)) {
+        continue;
+      }
+      this.known.add(candidate);
+      if (!this.physicallyExists(candidate)) {
+        return candidate;
+      }
+    }
+  }
+}
 
 /**
  * Implements ILoomStore using the filesystem for persistence.
@@ -16,24 +42,52 @@ export class FileSystemStore implements ILoomStore {
   private basePath: string = '';
   private rootsFilePath: string = '';
 
-  /**
-   * Initializes the store with a base directory path.
-   * @param basePath - The directory where loom data will be stored
-   */
-  async initialize(basePath: string): Promise<void> {
-    this.basePath = basePath;
-    this.rootsFilePath = path.join(basePath, 'roots.json');
+  private idCaches: {
+    root: IdCache<RootId>;
+    node: Map<RootId, IdCache<NodeId>>;
+  };
 
+  private constructor(basePath: string) {
+    this.basePath = basePath;
+    this.idCaches = {
+      root: new IdCache<RootId>('root', (id: RootId) =>
+        existsSync(this.rootDirPath(id))
+      ),
+      node: new Map<RootId, IdCache<NodeId>>()
+    };
+    this.rootsFilePath = path.join(basePath, 'roots.json');
+  }
+
+  static async create(basePath: string): Promise<FileSystemStore> {
     // Ensure base directory exists
     await fs.mkdir(basePath, { recursive: true });
     initializeLog(basePath);
-
+    const store = new FileSystemStore(basePath);
     // Create roots.json if it doesn't exist
     try {
-      await fs.access(this.rootsFilePath);
+      await fs.access(store.rootsFilePath);
     } catch {
-      await fs.writeFile(this.rootsFilePath, JSON.stringify([]));
+      await fs.writeFile(store.rootsFilePath, JSON.stringify([]));
     }
+
+    return store;
+  }
+
+  generateNodeId(root: RootId): NodeId {
+    let cache = this.idCaches.node.get(root);
+    if (!cache) {
+      cache = new IdCache<NodeId>('node', id =>
+        existsSync(this.nodeFilePath(root, id))
+      );
+      this.idCaches.node.set(root, cache);
+    }
+    const next = cache.next();
+    this.log(`Generated node ID: ${next}`);
+    return next;
+  }
+
+  generateRootId(): RootId {
+    return this.idCaches.root.next();
   }
 
   /**
@@ -46,15 +100,26 @@ export class FileSystemStore implements ILoomStore {
       return;
     }
 
-    const rootDir = path.join(this.basePath, nodeData.root_id);
-    const nodesDir = path.join(rootDir, 'nodes');
-    const nodePath = path.join(nodesDir, `${nodeData.id}.json`);
+    const nodesDir = this.nodesDirPath(nodeData.root_id);
+    const nodePath = this.nodeFilePath(nodeData.root_id, nodeData.id);
 
     // Ensure directories exist
     await fs.mkdir(nodesDir, { recursive: true });
 
     // Write node data
     await fs.writeFile(nodePath, JSON.stringify(nodeData, null, 2));
+  }
+
+  private rootDirPath(rootId: RootId) {
+    return path.join(this.basePath, rootId);
+  }
+
+  private nodesDirPath(rootId: RootId) {
+    return path.join(this.basePath, rootId, 'nodes');
+  }
+
+  private nodeFilePath(rootId: RootId, nodeId: NodeId) {
+    return path.join(this.nodesDirPath(rootId), `${nodeId}.json`);
   }
 
   /**
@@ -71,12 +136,7 @@ export class FileSystemStore implements ILoomStore {
         return root;
       }
 
-      const nodePath = path.join(
-        this.basePath,
-        root.id,
-        'nodes',
-        `${nodeId}.json`
-      );
+      const nodePath = this.nodeFilePath(root.id, nodeId);
 
       try {
         const data = await fs.readFile(nodePath, 'utf-8');
@@ -105,12 +165,7 @@ export class FileSystemStore implements ILoomStore {
       throw new Error('Cannot delete root node');
     }
 
-    const nodePath = path.join(
-      this.basePath,
-      node.root_id,
-      'nodes',
-      `${nodeId}.json`
-    );
+    const nodePath = this.nodeFilePath(node.root_id, nodeId);
     await fs.unlink(nodePath);
   }
 
@@ -126,7 +181,7 @@ export class FileSystemStore implements ILoomStore {
       throw new Error('rootId is required for findNodes');
     }
 
-    const nodesDir = path.join(this.basePath, rootId, 'nodes');
+    const nodesDir = this.nodesDirPath(rootId);
 
     try {
       // Get all node files
@@ -162,7 +217,7 @@ export class FileSystemStore implements ILoomStore {
    */
   async saveRootInfo(rootInfo: RootData): Promise<void> {
     // Create root directory
-    const rootDir = path.join(this.basePath, rootInfo.id);
+    const rootDir = this.rootDirPath(rootInfo.id);
     await fs.mkdir(rootDir, { recursive: true });
 
     // Update roots.json

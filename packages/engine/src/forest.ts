@@ -1,4 +1,3 @@
-import { v4 as uuidv4 } from 'uuid';
 import type {
   Node,
   NodeData,
@@ -34,7 +33,7 @@ export class Forest {
         return existingRoot;
       }
 
-      const rootId = uuidv4() as RootId;
+      const rootId = this.store.generateRootId();
       const timestamp = new Date().toISOString();
 
       // Create root info
@@ -91,12 +90,18 @@ export class Forest {
     let currentNodeId: NodeId | undefined = to;
     let root: RootData | null = null;
 
+    const seen = new Set<NodeId>();
+
     // Traverse up from nodeId to root, collecting nodes
     while (currentNodeId) {
       const node = await this.store.loadNode(currentNodeId);
       if (!node) {
         throw new Error(`Node not found: ${currentNodeId}`);
       }
+      if (seen.has(node.id)) {
+        throw new Error(`Circular reference detected: ${node.id}`);
+      }
+      seen.add(node.id);
       if (!root) {
         root =
           node.parent_id === undefined
@@ -152,11 +157,6 @@ export class Forest {
     metadata: Omit<NodeMetadata, 'timestamp' | 'original_root_id'>
   ): Promise<Node> {
     return this.enqueue(async (): Promise<Node> => {
-      const smallRandomHash = Math.random().toString(36).substring(2, 7);
-      this.store.log(
-        `${smallRandomHash} Appending to ${parentId}:\n${messages.map(m => '\t' + m.role + ':' + m.content).join('\n')}`
-      );
-
       const parentNode = await this.store.loadNode(parentId);
       if (!parentNode) {
         throw new Error(`Parent node not found: ${parentId}`);
@@ -208,7 +208,7 @@ export class Forest {
 
       for (const message of remainingMessages) {
         const newNode: NodeData = {
-          id: uuidv4() as NodeId,
+          id: this.store.generateNodeId(root_id),
           root_id,
           parent_id: head.id,
           child_ids: [],
@@ -264,7 +264,7 @@ export class Forest {
       // Create a new node to hold the messages after the split point
       const timestamp = new Date().toISOString();
       const newNode: NodeData = {
-        id: uuidv4() as NodeId,
+        id: this.store.generateNodeId(node.root_id),
         root_id: node.root_id,
         parent_id: node.parent_id, // Same parent as the original node
         child_ids: [...node.child_ids], // Take all the children from the original node

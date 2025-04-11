@@ -5,7 +5,8 @@ import {
   LoomEngine,
   type NodeId,
   type NodeData,
-  type Message
+  type Message,
+  type RootData
 } from '@ankhdt/loom-engine';
 import {
   handleCommand,
@@ -37,26 +38,6 @@ interface DisplayMessage extends Message {
   nodeId: NodeId; // Keep track of the source node for potential future use
 }
 
-async function getFormattedHistory(
-  engine: LoomEngine,
-  currentNodeId: NodeId,
-  _debug: boolean
-): Promise<{ system?: string; messages: DisplayMessage[] }> {
-  const { root, path } = await engine
-    .getForest()
-    .getPath({ from: undefined, to: currentNodeId });
-
-  const displayMessages: DisplayMessage[] = path.map(node => ({
-    ...node.message,
-    nodeId: node.id
-  }));
-
-  return {
-    system: root.config.systemPrompt,
-    messages: displayMessages
-  };
-}
-
 // --- Main Component ---
 
 export async function start(props: LoomAppProps) {
@@ -73,13 +54,12 @@ export function LoomApp({
   useApp();
   const [currentNodeId, setCurrentNodeId] = useState<NodeId>(initialNodeId);
   const [history, setHistory] = useState<DisplayMessage[]>([]);
-  const [systemPrompt, setSystemPrompt] = useState<string | undefined>(
-    undefined
-  );
   const [children, setChildren] = useState<NodeData[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [siblings, setSiblings] = useState<NodeId[]>([]);
+  const [root, setRoot] = useState<RootData | null>(null);
 
   // State for focus management
   const [focusedElement, setFocusedElement] = useState<'input' | 'children'>(
@@ -90,6 +70,7 @@ export function LoomApp({
   // --- Data Fetching Effect ---
   useEffect(() => {
     const fetchData = async () => {
+      engine.log(`Current node: ${currentNodeId}`);
       setIsLoading(true);
       setError(null);
       try {
@@ -101,13 +82,19 @@ export function LoomApp({
         );
 
         // Fetch history
-        const { system, messages } = await getFormattedHistory(
-          engine,
-          currentNodeId,
-          options.debug
+        const nodeHistory = await engine
+          .getForest()
+          .getPath({ from: undefined, to: currentNodeId });
+
+        const displayMessages: DisplayMessage[] = nodeHistory.path.map(
+          node => ({
+            ...node.message,
+            nodeId: node.id
+          })
         );
-        setSystemPrompt(system);
-        setHistory(messages);
+
+        setRoot(nodeHistory.root);
+        setHistory(displayMessages);
 
         // Fetch children
         const fetchedChildren = await engine
@@ -115,8 +102,13 @@ export function LoomApp({
           .getChildren(currentNodeId);
         setChildren(fetchedChildren);
 
-        // Clear the unread tag
         const node = await engine.getForest().getNode(currentNodeId);
+        const parentNode = node?.parent_id
+          ? await engine.getForest().getNode(node.parent_id)
+          : null;
+        setSiblings(parentNode?.child_ids || [currentNodeId]);
+
+        // Clear the unread tag
         if (node?.parent_id) {
           await engine.getForest().updateNodeMetadata(node.id, {
             ...node.metadata,
@@ -165,7 +157,10 @@ export function LoomApp({
   };
 
   const handleInput = async (value: string) => {
+    if (isLoading) return;
     setInputValue('');
+    setIsLoading(true);
+
     const trimmedInput = value.trim();
     if (!trimmedInput) return; // Ignore empty submissions
     if (isLoading) return; // Ignore input while loading
@@ -182,17 +177,18 @@ export function LoomApp({
   // --- Keyboard Input Hook (Focus, Navigation) ---
   useInput(
     async (input, key) => {
-      if (isLoading) return;
       // Handle Ctrl+C for exit (useApp's exit is preferred)
       if (key.ctrl && input === 'c') {
         onExit();
         return;
       }
 
+      if (isLoading) return;
+
       switch (focusedElement) {
         case 'input': {
           if (key.return) {
-            handleInput(inputValue);
+            await handleInput(inputValue);
           } else if (key.upArrow && key.meta) {
             await handleCommandAndUpdate('up', []);
           } else if (key.leftArrow && key.meta) {
@@ -267,7 +263,9 @@ export function LoomApp({
     <Box flexDirection="column" width="100%" height="100%">
       {/* 1. History View */}
       <Box flexDirection="column" height={historyHeight} overflowY="hidden">
-        {systemPrompt && <Text color="magenta">[System] {systemPrompt}</Text>}
+        {root?.config.systemPrompt && (
+          <Text color="magenta">[System] {root?.config.systemPrompt}</Text>
+        )}
         {history.slice(-historyHeight).map((msg, index) => (
           <Text key={`${msg.nodeId}-${index}`}>{formatMessage(msg)}</Text>
         ))}
@@ -286,13 +284,19 @@ export function LoomApp({
         borderColor={isLoading ? 'yellow' : error ? 'red' : 'gray'}
         paddingX={1}
       >
-        <Text color={isLoading ? 'yellow' : error ? 'red' : 'dim'}>
-          {isLoading
-            ? 'Generating...'
-            : error
-              ? `Error: ${error}`
-              : `Current Node: ${currentNodeId}`}
-        </Text>
+        {isLoading ? (
+          <Text color={'yellow'}>...</Text>
+        ) : error ? (
+          <Text color="red">{error}</Text>
+        ) : (
+          <>
+            <Text color="gray">
+              [{root?.id}:{root?.config.model}] node {currentNodeId}
+              {siblings.length > 1 &&
+                `(${siblings.indexOf(currentNodeId) + 1}/${siblings.length})`}
+            </Text>
+          </>
+        )}
       </Box>
 
       {/* 2. Input Field */}
@@ -301,7 +305,6 @@ export function LoomApp({
         <TextInput
           value={inputValue}
           onChange={setInputValue}
-          onSubmit={handleInput}
           focus={focusedElement === 'input'}
         />
       </Box>

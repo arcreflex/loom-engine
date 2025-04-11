@@ -15,15 +15,21 @@ import { AnthropicProvider } from './providers/anthropic.ts';
 export class LoomEngine {
   private forest: Forest;
   private store: ILoomStore;
-  constructor(storeOrPath: ILoomStore | string) {
-    if (typeof storeOrPath === 'string') {
-      this.store = new FileSystemStore();
-      this.store.initialize(storeOrPath);
-    } else {
-      this.store = storeOrPath;
-    }
 
+  private constructor(store: ILoomStore) {
+    this.store = store;
     this.forest = new Forest(this.store);
+  }
+
+  static async create(storeOrPath: ILoomStore | string) {
+    let store;
+    if (typeof storeOrPath === 'string') {
+      store = await FileSystemStore.create(storeOrPath);
+    } else {
+      store = storeOrPath;
+    }
+    const engine = new LoomEngine(store);
+    return engine;
   }
 
   getForest(): Forest {
@@ -90,9 +96,9 @@ export class LoomEngine {
   private getProvider(provider: ProviderType) {
     switch (provider) {
       case 'openai':
-        return new OpenAIProvider();
+        return new OpenAIProvider(this);
       case 'anthropic':
-        return new AnthropicProvider();
+        return new AnthropicProvider(this);
       // case 'google':
       //   return new GoogleProvider();
       default:

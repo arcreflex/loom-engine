@@ -1,3 +1,4 @@
+import type { Logger } from '../log.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
 import Anthropic from '@anthropic-ai/sdk';
 /**
@@ -7,6 +8,7 @@ import Anthropic from '@anthropic-ai/sdk';
 export class AnthropicProvider implements IProvider {
   private apiKey: string | undefined;
   private baseURL?: string;
+  private logger: Logger;
 
   /**
    * Creates a new Anthropic provider.
@@ -14,10 +16,11 @@ export class AnthropicProvider implements IProvider {
    * @param apiKey - The Anthropic API key. If not provided, will try to use process.env.ANTHROPIC_API_KEY
    * @param baseURL - Optional custom API base URL
    */
-  constructor(apiKey?: string, baseURL?: string) {
+  constructor(logger: Logger, apiKey?: string, baseURL?: string) {
     // Use provided API key or fall back to environment variable
     this.apiKey = apiKey || process.env.ANTHROPIC_API_KEY;
     this.baseURL = baseURL;
+    this.logger = logger;
   }
 
   /**
@@ -57,6 +60,17 @@ export class AnthropicProvider implements IProvider {
         stop_sequences
       } = request.parameters;
 
+      if (top_p !== undefined && typeof top_p !== 'number') {
+        throw new Error('top_p must be a number');
+      }
+      if (top_k !== undefined && typeof top_k !== 'number') {
+        throw new Error('top_k must be a number');
+      }
+
+      if (stop_sequences !== undefined && !Array.isArray(stop_sequences)) {
+        throw new Error('stop must be an array');
+      }
+
       // Create message with Anthropic API
       const req = {
         model: request.model,
@@ -69,6 +83,9 @@ export class AnthropicProvider implements IProvider {
         stream: false,
         system: request.systemMessage
       } as const;
+
+      this.logger.log(JSON.stringify(req, null, 2));
+
       const response = await anthropic.messages.create(req);
 
       if (!response.content[0]) {

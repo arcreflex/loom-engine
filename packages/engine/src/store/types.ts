@@ -15,11 +15,8 @@ export interface NodeQueryCriteria {
  * Interface for a storage system that persists loom data.
  */
 export interface ILoomStore {
-  /**
-   * Initializes the store with a base directory path.
-   * @param basePath - The directory where loom data will be stored
-   */
-  initialize: (basePath: string) => Promise<void>;
+  generateNodeId: (root: RootId) => NodeId;
+  generateRootId: () => RootId;
 
   /**
    * Saves a node to the store.

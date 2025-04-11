@@ -23,13 +23,11 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.17.1",
-    "openai": "^4.33.1",
-    "uuid": "^11.1.0"
+    "openai": "^4.33.1"
   },
   "devDependencies": {
-    "esbuild": "^0.25.2",
     "@types/node": "^22.14.0",
-    "@types/uuid": "^10.0.0",
+    "esbuild": "^0.25.2",
     "typescript": "^5.8.3"
   }
 }

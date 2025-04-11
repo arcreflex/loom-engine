@@ -124,7 +124,7 @@ async function main() {
     setEnvFromConfig(config);
 
     // Create engine instance
-    const engine = new LoomEngine(dataDir);
+    const engine = await LoomEngine.create(dataDir);
 
     // Load the last node ID if one exists
     const persistedNode = await loadCurrentNode(engine, dataDir);
@@ -165,6 +165,8 @@ async function main() {
           model,
           systemPrompt: argv.system || config.defaults.systemPrompt
         };
+
+        console.log(targetRootConfig);
 
         const targetRoot = await engine
           .getForest()

@@ -1,3 +1,4 @@
+import type { Logger } from '../log.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
 import OpenAI from 'openai';
 
@@ -7,6 +8,7 @@ import OpenAI from 'openai';
 export class OpenAIProvider implements IProvider {
   private apiKey: string | undefined;
   private baseURL?: string;
+  private logger: Logger;
 
   /**
    * Creates a new OpenAI provider.
@@ -14,10 +16,11 @@ export class OpenAIProvider implements IProvider {
    * @param apiKey - The OpenAI API key. If not provided, will try to use process.env.OPENAI_API_KEY
    * @param baseURL - Optional custom API base URL
    */
-  constructor(apiKey?: string, baseURL?: string) {
+  constructor(logger: Logger, apiKey?: string, baseURL?: string) {
     // Use provided API key or fall back to environment variable
     this.apiKey = apiKey || process.env.OPENAI_API_KEY;
     this.baseURL = baseURL;
+    this.logger = logger;
   }
 
   /**
@@ -67,8 +70,27 @@ export class OpenAIProvider implements IProvider {
         stop
       } = request.parameters;
 
+      if (top_p !== undefined && typeof top_p !== 'number') {
+        throw new Error('top_p must be a number');
+      }
+      if (
+        frequency_penalty !== undefined &&
+        typeof frequency_penalty !== 'number'
+      ) {
+        throw new Error('frequency_penalty must be a number');
+      }
+      if (
+        presence_penalty !== undefined &&
+        typeof presence_penalty !== 'number'
+      ) {
+        throw new Error('presence_penalty must be a number');
+      }
+      if (stop !== undefined && !Array.isArray(stop)) {
+        throw new Error('stop must be an array');
+      }
+
       // Create completion with OpenAI API
-      const response = await openai.chat.completions.create({
+      const req = {
         model: request.model,
         messages: messages,
         temperature,
@@ -78,7 +100,10 @@ export class OpenAIProvider implements IProvider {
         presence_penalty,
         stop,
         stream: false
-      });
+      } as const;
+
+      this.logger.log(JSON.stringify(req, null, 2));
+      const response = await openai.chat.completions.create(req);
 
       // Ensure we have a response content
       if (!response.choices[0]?.message?.content) {

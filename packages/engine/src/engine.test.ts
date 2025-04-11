@@ -13,14 +13,14 @@ describe('LoomEngine', () => {
   let createTestRoot: ReturnType<typeof createMockStore>['createTestRoot'];
   let mockProviderInstance: ReturnType<typeof mockProviders>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockProviderInstance = mockProviders();
     mockStoreWrapper = createMockStore();
     createTestNode = mockStoreWrapper.createTestNode;
     createTestRoot = mockStoreWrapper.createTestRoot;
 
     // Create engine with the stateful mock store instance
-    engine = new LoomEngine(mockStoreWrapper.mockStore);
+    engine = await LoomEngine.create(mockStoreWrapper.mockStore);
   });
 
   afterEach(() => {

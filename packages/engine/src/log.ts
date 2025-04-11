@@ -1,6 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 
+export interface Logger {
+  log: (msg: unknown) => void;
+}
+
 export function logPath(dataDir: string) {
   return path.join(dataDir, 'loom.log');
 }
