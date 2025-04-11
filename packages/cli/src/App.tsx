@@ -7,7 +7,12 @@ import {
   type NodeData,
   type Message
 } from '@ankhdt/loom-engine';
-import { handleCommand, UNREAD_TAG } from './commands.ts';
+import {
+  handleCommand,
+  isCommand,
+  UNREAD_TAG,
+  type Command
+} from './commands.ts';
 import { render } from 'ink';
 import { formatError, formatMessage } from './util.ts';
 import fs from 'fs/promises';
@@ -130,42 +135,23 @@ export function LoomApp({
   }, [engine, currentNodeId, options.debug, options.dataDir]);
 
   // --- Input Handling ---
-  const handleSubmit = async (value: string) => {
-    const trimmedInput = value.trim();
-    if (!trimmedInput) return; // Ignore empty submissions
-    if (isLoading) return; // Ignore input while loading
-
-    setInputValue(''); // Clear input immediately
+  const handleCommandAndUpdate = async (command: Command, args: string[]) => {
     setIsLoading(true);
     setError(null);
     let nextNodeId = currentNodeId;
 
     try {
-      if (trimmedInput.startsWith('/')) {
-        const [command, ..._args] = trimmedInput.slice(1).trim().split(' ');
-
-        if (command === 'exit') {
-          onExit(); // Call the passed exit handler
-          return;
-        } else {
-          nextNodeId = await handleCommand(
-            trimmedInput,
-            engine,
-            currentNodeId,
-            options
-          );
-        }
+      if (command === 'exit') {
+        onExit(); // Call the passed exit handler
+        return;
       } else {
-        // --- Handle User Message ---
-        const userNode = await engine
-          .getForest()
-          .append(currentNodeId, [{ role: 'user', content: trimmedInput }], {
-            source_info: { type: 'user' }
-          });
-
-        nextNodeId = userNode.id;
-
-        nextNodeId = await handleCommand('/', engine, nextNodeId, options);
+        nextNodeId = await handleCommand(
+          command,
+          args,
+          engine,
+          currentNodeId,
+          options
+        );
       }
 
       setIsLoading(false);
@@ -178,60 +164,71 @@ export function LoomApp({
     }
   };
 
+  const handleInput = async (value: string) => {
+    setInputValue('');
+    const trimmedInput = value.trim();
+    if (!trimmedInput) return; // Ignore empty submissions
+    if (isLoading) return; // Ignore input while loading
+    if (trimmedInput.startsWith('/')) {
+      const [command, ...args] = trimmedInput.slice(1).trim().split(' ');
+      if (isCommand(command)) {
+        await handleCommandAndUpdate(command, args);
+        return;
+      }
+    }
+    await handleCommandAndUpdate('user', [value]);
+  };
+
   // --- Keyboard Input Hook (Focus, Navigation) ---
   useInput(
-    (input, key) => {
-      if (isLoading) return; // Ignore input while loading
-
-      if (key.return) {
-        if (focusedElement === 'input') {
-          handleSubmit(inputValue);
-        } else if (focusedElement === 'children' && children.length > 0) {
-          // Navigate to selected child
-          const selectedChild = children[selectedChildIndex];
-          if (selectedChild) {
-            setCurrentNodeId(selectedChild.id);
-            setFocusedElement('input'); // Return focus to input after navigation
-          }
-        }
-        return; // Prevent default handling
-      }
-
-      if (key.upArrow) {
-        if (focusedElement === 'input') {
-          // Potentially scroll history up later?
-        } else if (focusedElement === 'children') {
-          if (selectedChildIndex > 0) {
-            setSelectedChildIndex(prev => prev - 1);
-          } else {
-            // Move focus back to input when pressing Up from the first child
-            setFocusedElement('input');
-          }
-        }
-        return; // Prevent default handling
-      }
-
-      if (key.downArrow) {
-        if (focusedElement === 'input' && children.length > 0) {
-          // Move focus to children list
-          setFocusedElement('children');
-          setSelectedChildIndex(0); // Start at the top
-        } else if (focusedElement === 'children') {
-          if (selectedChildIndex < children.length - 1) {
-            setSelectedChildIndex(prev => prev + 1);
-          }
-          // Optional: Wrap around? setSelectedChildIndex(0);
-        }
-        return; // Prevent default handling
-      }
-
+    async (input, key) => {
+      if (isLoading) return;
       // Handle Ctrl+C for exit (useApp's exit is preferred)
       if (key.ctrl && input === 'c') {
         onExit();
         return;
       }
 
-      // Let TextInput handle other keys when it has focus
+      switch (focusedElement) {
+        case 'input': {
+          if (key.return) {
+            handleInput(inputValue);
+          } else if (key.upArrow && key.meta) {
+            await handleCommandAndUpdate('up', []);
+          } else if (key.leftArrow && key.meta) {
+            await handleCommandAndUpdate('left', []);
+          } else if (key.rightArrow && key.meta) {
+            await handleCommandAndUpdate('right', []);
+          } else if (key.downArrow && children.length > 0) {
+            setFocusedElement('children');
+            setSelectedChildIndex(0);
+          }
+          return;
+        }
+        case 'children': {
+          if (children.length === 0) return;
+          if (key.return) {
+            // Navigate to selected child
+            const selectedChild = children[selectedChildIndex];
+            if (selectedChild) {
+              setCurrentNodeId(selectedChild.id);
+              setFocusedElement('input'); // Return focus to input after navigation
+            }
+          } else if (key.upArrow) {
+            if (selectedChildIndex > 0) {
+              setSelectedChildIndex(prev => prev - 1);
+            } else {
+              // Move focus back to input when pressing Up from the first child
+              setFocusedElement('input');
+            }
+          } else if (
+            key.downArrow &&
+            selectedChildIndex < children.length - 1
+          ) {
+            setSelectedChildIndex(prev => prev + 1);
+          }
+        }
+      }
     },
     { isActive: true } // Ensure the hook is always active
   );
@@ -304,7 +301,7 @@ export function LoomApp({
         <TextInput
           value={inputValue}
           onChange={setInputValue}
-          onSubmit={handleSubmit}
+          onSubmit={handleInput}
           focus={focusedElement === 'input'}
         />
       </Box>

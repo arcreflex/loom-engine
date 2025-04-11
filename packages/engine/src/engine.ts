@@ -14,16 +14,16 @@ import { AnthropicProvider } from './providers/anthropic.ts';
 
 export class LoomEngine {
   private forest: Forest;
+  private store: ILoomStore;
   constructor(storeOrPath: ILoomStore | string) {
-    let store;
     if (typeof storeOrPath === 'string') {
-      store = new FileSystemStore();
-      store.initialize(storeOrPath);
+      this.store = new FileSystemStore();
+      this.store.initialize(storeOrPath);
     } else {
-      store = storeOrPath;
+      this.store = storeOrPath;
     }
 
-    this.forest = new Forest(store);
+    this.forest = new Forest(this.store);
   }
 
   getForest(): Forest {
@@ -98,5 +98,9 @@ export class LoomEngine {
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }
+  }
+
+  log(x: unknown) {
+    this.store.log(x);
   }
 }

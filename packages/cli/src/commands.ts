@@ -1,9 +1,27 @@
 import chalk from 'chalk';
-import inquirer from 'inquirer';
 import path from 'path';
 import fs from 'fs/promises';
 import { LoomEngine } from '@ankhdt/loom-engine';
 import type { NodeId } from '@ankhdt/loom-engine';
+import assert from 'assert';
+
+export type Command =
+  | 'user'
+  | 'generate'
+  | '1'
+  | '2'
+  | '3'
+  | '4'
+  | '5'
+  | '6'
+  | '7'
+  | '8'
+  | '9'
+  | 'up'
+  | 'left'
+  | 'right'
+  | 'save'
+  | 'exit';
 
 export const UNREAD_TAG = 'cli/unread';
 
@@ -13,6 +31,31 @@ interface CommandOptions {
   temperature: number;
   maxTokens: number;
   debug: boolean;
+}
+
+export function isCommand(input: string): input is Command {
+  switch (input) {
+    case 'user':
+    case 'generate':
+    case '1':
+    case '2':
+    case '3':
+    case '4':
+    case '5':
+    case '6':
+    case '7':
+    case '8':
+    case '9':
+    case 'up':
+    case 'left':
+    case 'right':
+    case 'save':
+    case 'exit':
+      input satisfies Command;
+      return true;
+    default:
+      return false;
+  }
 }
 
 // Bookmark management functions
@@ -40,18 +83,25 @@ async function saveBookmarks(
  * Returns the new current node ID
  */
 export async function handleCommand(
-  input: string,
+  command: Command,
+  args: string[],
   engine: LoomEngine,
   currentNodeId: NodeId,
   options: CommandOptions
 ): Promise<NodeId> {
-  // Parse the command (removing the leading slash)
-  const [command, ...args] = input.slice(1).trim().split(' ');
-
   // Handle commands
   switch (command) {
+    case 'user': {
+      assert(args.length === 1, '/user requires a single argument');
+      const userNode = await engine
+        .getForest()
+        .append(currentNodeId, [{ role: 'user', content: args[0] }], {
+          source_info: { type: 'user' }
+        });
+      return handleCommand('generate', [], engine, userNode.id, options);
+    }
     // Generate response(s)
-    case '':
+    case 'generate':
     case '1':
     case '2':
     case '3':
@@ -62,7 +112,7 @@ export async function handleCommand(
     case '8':
     case '9': {
       // Parse N (number of completions to generate)
-      const n = command === '' ? options.n : parseInt(command, 10);
+      const n = command === 'generate' ? options.n : parseInt(command, 10);
 
       // Get current context
       const { root, messages } = await engine.getMessages(currentNodeId);
@@ -88,8 +138,8 @@ export async function handleCommand(
       }
     }
 
-    // List and select sibling nodes
-    case 'siblings': {
+    case 'left':
+    case 'right': {
       // Get current node
       const node = await engine.getForest().getNode(currentNodeId);
       if (!node || !node.parent_id) {
@@ -105,41 +155,17 @@ export async function handleCommand(
       // Get all siblings (children of the parent)
       const siblings = await engine.getForest().getChildren(parent.id);
 
-      // Filter out the current node
-      const otherSiblings = siblings.filter(
-        sibling => sibling.id !== currentNodeId
-      );
-
-      if (otherSiblings.length === 0) {
+      const currentIndex = siblings.findIndex(s => s.id === currentNodeId);
+      const desiredIndex =
+        command === 'left' ? currentIndex - 1 : currentIndex + 1;
+      if (desiredIndex < 0 || desiredIndex >= siblings.length) {
         return currentNodeId;
       }
-
-      // Format choices for inquirer
-      const choices = otherSiblings.map((sibling, index) => {
-        const previewContent =
-          sibling.message.content.substring(0, 50) +
-          (sibling.message.content.length > 50 ? '...' : '');
-        return {
-          name: `[${index + 1}] ${previewContent}`,
-          value: sibling.id
-        };
-      });
-
-      // Prompt user to select a sibling
-      const answers = await inquirer.prompt([
-        {
-          type: 'list',
-          name: 'selectedId',
-          message: 'Choose sibling:',
-          choices
-        }
-      ]);
-
-      if (answers.selectedId) {
-        return answers.selectedId as NodeId;
-      } else {
+      const newNode = siblings[desiredIndex];
+      if (!newNode) {
         return currentNodeId;
       }
+      return newNode.id;
     }
 
     // Move to parent node
@@ -175,6 +201,7 @@ export async function handleCommand(
 
     // Unknown command
     default: {
+      command satisfies never;
       console.log(chalk.yellow(`Unknown command: ${command}`));
       return currentNodeId;
     }
