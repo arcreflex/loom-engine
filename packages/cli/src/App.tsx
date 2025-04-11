@@ -15,7 +15,7 @@ import {
   type Command
 } from './commands.ts';
 import { render } from 'ink';
-import { formatError, formatMessage } from './util.ts';
+import { formatError } from './util.ts';
 import fs from 'fs/promises';
 import path from 'path';
 
@@ -36,6 +36,7 @@ interface LoomAppProps {
 
 interface DisplayMessage extends Message {
   nodeId: NodeId; // Keep track of the source node for potential future use
+  isChildPreview?: boolean;
 }
 
 // --- Main Component ---
@@ -205,7 +206,7 @@ export function LoomApp({
           if (children.length === 0) return;
           if (key.return) {
             // Navigate to selected child
-            const selectedChild = children[selectedChildIndex];
+            const selectedChild = sortedChildren[selectedChildIndex];
             if (selectedChild) {
               setCurrentNodeId(selectedChild.id);
               setFocusedElement('input'); // Return focus to input after navigation
@@ -259,6 +260,16 @@ export function LoomApp({
     inputHeight + statusHeight + childrenMargin + childrenHeight;
   const historyHeight = Math.max(1, process.stdout.rows - fixedElementsHeight); // Ensure at least 1 row
 
+  const context = [...history];
+  if (focusedElement === 'children' && sortedChildren[selectedChildIndex]) {
+    const previewMessage = sortedChildren[selectedChildIndex].message;
+    context.push({
+      ...previewMessage,
+      nodeId: sortedChildren[selectedChildIndex].id,
+      isChildPreview: true
+    });
+  }
+
   return (
     <Box flexDirection="column" width="100%" height="100%">
       {/* 1. History View */}
@@ -266,16 +277,28 @@ export function LoomApp({
         {root?.config.systemPrompt && (
           <Text color="magenta">[System] {root?.config.systemPrompt}</Text>
         )}
-        {history.slice(-historyHeight).map((msg, index) => (
-          <Text key={`${msg.nodeId}-${index}`}>{formatMessage(msg)}</Text>
-        ))}
-        {history.length > historyHeight && (
+        {context.slice(-historyHeight).map((msg, index) => {
+          const key = `${msg.nodeId}-${index}`;
+          const color = msg.isChildPreview
+            ? 'gray'
+            : msg.role === 'user'
+              ? 'green'
+              : 'cyan';
+          const text =
+            msg.role == 'user' ? `[USER] ${msg.content}` : `${msg.content}`;
+          return (
+            <Text key={key} color={color}>
+              {text}
+            </Text>
+          );
+        })}
+        {context.length > historyHeight && (
           <Text dimColor>
-            ... ({history.length - historyHeight} older messages hidden)
+            ... ({context.length - historyHeight} older messages hidden)
           </Text>
         )}
         {/* spacer if history is short to push input down */}
-        {history.length <= historyHeight && <Box flexGrow={1} />}
+        {context.length <= historyHeight && <Box flexGrow={1} />}
       </Box>
 
       {/* Status Line */}
@@ -326,11 +349,13 @@ export function LoomApp({
             .map((child, index) => {
               const isSelected =
                 focusedElement === 'children' && index === selectedChildIndex;
-              const preview =
-                child.message.content.substring(0, 80).replace(/\n/g, ' ') +
-                (child.message.content.length > 80 ? '...' : '');
               const isUnread =
                 child.parent_id && child.metadata.tags?.includes(UNREAD_TAG);
+
+              const rawPreview = `${isUnread ? '* ' : ''}[${child.id}] (${child.message.role}) ${child.message.content.replace(/\n/g, ' ')}`;
+              const preview =
+                rawPreview.substring(0, 80) +
+                (rawPreview.length > 80 ? '...' : '');
               return (
                 <Text
                   key={child.id}
@@ -338,7 +363,7 @@ export function LoomApp({
                   bold={isUnread}
                   inverse={isSelected}
                 >
-                  {`${isUnread ? '* ' : ''}[${index + 1}] (${child.message.role}) ${preview}`}
+                  {preview}
                 </Text>
               );
             })}
