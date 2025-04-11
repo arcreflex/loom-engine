@@ -7,7 +7,7 @@
   "scripts": {
     "start": "cd packages/cli && npx tsx src/cli.ts",
     "dev": "pnpm -r dev",
-    "lint": "eslint . --ext .ts",
+    "lint": "eslint .",
     "format": "prettier --write \"packages/**/*.ts\"",
     "test": "pnpm -r test",
     "prepare": "husky",
@@ -17,15 +17,18 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
+    "@eslint/js": "^9.24.0",
     "@typescript-eslint/eslint-plugin": "^8.29.1",
     "@typescript-eslint/parser": "^8.29.1",
     "eslint": "^9.24.0",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
+    "globals": "^16.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.0",
     "prettier": "^3.5.3",
-    "typescript": "^5.8.3"
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.29.1"
   },
   "prettier": {
     "semi": true,
@@ -36,6 +39,9 @@
     "arrowParens": "avoid"
   },
   "lint-staged": {
-    "*.{js,ts,jsx,tsx}": ["prettier --write"]
+    "*.{js,ts,jsx,tsx}": [
+      "prettier --write",
+      "eslint --fix"
+    ]
   }
 }

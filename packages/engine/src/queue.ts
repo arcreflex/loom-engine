@@ -1,7 +1,7 @@
-interface Task<T = any> {
+interface Task<T> {
   fn: () => Promise<T>;
   resolve: (value: T | PromiseLike<T>) => void;
-  reject: (reason?: any) => void;
+  reject: (reason?: unknown) => void;
 }
 
 /**
@@ -9,7 +9,8 @@ interface Task<T = any> {
  * one after another, ensuring serial execution.
  */
 export class SerialQueue {
-  private queue: Task[] = [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private queue: Task<any>[] = [];
   private isProcessing = false;
 
   enqueue<T>(fn: () => Promise<T>): Promise<T> {

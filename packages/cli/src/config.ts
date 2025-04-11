@@ -41,7 +41,7 @@ export async function loadConfig(dataDir: string): Promise<Config> {
     try {
       // Check if config file exists
       await fs.access(configPath);
-    } catch (error) {
+    } catch (_error) {
       // Create a default config file if it doesn't exist
       const defaultConfig = `# Loom CLI Configuration
 

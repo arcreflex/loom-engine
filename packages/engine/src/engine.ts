@@ -8,8 +8,7 @@ import type {
   ProviderType,
   RootConfig,
   Message,
-  NodeData,
-  Node
+  NodeData
 } from './types.ts';
 import { AnthropicProvider } from './providers/anthropic.ts';
 

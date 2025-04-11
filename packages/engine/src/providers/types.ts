@@ -13,7 +13,7 @@ export interface ProviderRequest {
   parameters: {
     max_tokens: number;
     temperature: number;
-    [key: string]: any; // Allow any other parameters
+    [key: string]: unknown; // Allow any other parameters
   };
 }
 
@@ -34,7 +34,7 @@ export interface ProviderResponse {
   finish_reason?: string | null;
 
   /** The raw response from the provider for debugging/extensions. */
-  rawResponse?: any;
+  rawResponse?: unknown;
 }
 
 /**
@@ -46,5 +46,5 @@ export interface IProvider {
    * @param request - The request parameters
    * @returns A Promise resolving to the provider's response
    */
-  generate(request: ProviderRequest): Promise<ProviderResponse>;
+  generate(_request: ProviderRequest): Promise<ProviderResponse>;
 }

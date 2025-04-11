@@ -81,7 +81,7 @@ export class FileSystemStore implements ILoomStore {
       try {
         const data = await fs.readFile(nodePath, 'utf-8');
         return JSON.parse(data) as NodeData;
-      } catch (error) {
+      } catch (_error) {
         // Node not found in this root, continue to next root
         continue;
       }
@@ -150,7 +150,7 @@ export class FileSystemStore implements ILoomStore {
       }
 
       return nodes;
-    } catch (error) {
+    } catch (_error) {
       // If directory doesn't exist or other error, return empty array
       return [];
     }
@@ -196,7 +196,7 @@ export class FileSystemStore implements ILoomStore {
     try {
       const data = await fs.readFile(this.rootsFilePath, 'utf-8');
       return JSON.parse(data) as RootData[];
-    } catch (error) {
+    } catch (_error) {
       // If file doesn't exist or is invalid, return empty array
       return [];
     }

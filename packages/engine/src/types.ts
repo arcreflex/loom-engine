@@ -95,7 +95,7 @@ export interface NodeMetadata {
   tags?: string[];
 
   /** Additional custom data associated with this node. */
-  custom_data?: Record<string, any>;
+  custom_data?: Record<string, unknown>;
 }
 
 /**

@@ -59,7 +59,7 @@ async function loadCurrentNode(engine: LoomEngine, dataDir: string) {
     const id = content.trim();
     const node = await engine.getForest().getNode(id as NodeId);
     return node;
-  } catch (error) {
+  } catch (_error) {
     // File doesn't exist or other error
     return null;
   }

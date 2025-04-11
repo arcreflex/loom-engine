@@ -15,15 +15,13 @@ interface CommandOptions {
   debug: boolean;
 }
 
-export type CommandResult = {};
-
 // Bookmark management functions
 async function loadBookmarks(dataDir: string): Promise<Record<string, string>> {
   try {
     const filePath = path.join(dataDir, 'bookmarks.json');
     const content = await fs.readFile(filePath, 'utf-8');
     return JSON.parse(content);
-  } catch (error) {
+  } catch (_error) {
     // File doesn't exist or other error
     return {};
   }
@@ -172,6 +170,7 @@ export async function handleCommand(
     case 'exit': {
       console.log(chalk.green('Goodbye!'));
       process.exit(0);
+      throw new Error('Process exited');
     }
 
     // Unknown command

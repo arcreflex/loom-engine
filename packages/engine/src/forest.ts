@@ -9,10 +9,7 @@ import type {
   RootData,
   NodeMetadata
 } from './types.ts';
-import type { IProvider, ProviderRequest } from './providers/types.ts';
-import path from 'path';
 import type { ILoomStore } from './store/types.ts';
-import { log } from './log.ts';
 import { SerialQueue } from './queue.ts';
 
 export class Forest {

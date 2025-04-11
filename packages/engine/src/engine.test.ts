@@ -88,16 +88,6 @@ describe('LoomEngine', () => {
 
   // --- generate Tests ---
   describe('generate', () => {
-    // Helper to find node by message content (since ID is dynamic)
-    const findNodeByContent = (content: string): NodeData | undefined => {
-      for (const node of mockStoreWrapper.nodes.values()) {
-        if (node.message.content === content) {
-          return node;
-        }
-      }
-      return undefined;
-    };
-
     beforeEach(() => {
       mockStoreWrapper.nodes.clear();
       mockStoreWrapper.roots.clear();
@@ -177,7 +167,6 @@ describe('LoomEngine', () => {
       ];
       const optionsN2 = { n: 2, max_tokens: 100, temperature: 0.7 };
 
-      debugger;
       const result = await engine.generate(rootConfig, userMessages, optionsN2);
 
       // Assertions
@@ -318,7 +307,6 @@ describe('LoomEngine', () => {
     });
 
     it('should throw an error for unsupported provider types', async () => {
-      const rootConfig: RootConfig = { providerType: 'openai', model: 'gpt-4' };
       const userMessages: Message[] = [
         { role: 'user', content: 'Write a poem' }
       ];

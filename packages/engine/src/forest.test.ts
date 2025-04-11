@@ -1,16 +1,11 @@
 import { describe, it, beforeEach, mock, afterEach } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { Forest } from './forest.ts';
-import type { ILoomStore, NodeQueryCriteria } from './store/types.ts';
 import type {
   Node,
-  NodeData,
   NodeId,
-  RootId,
-  RootData,
   RootConfig,
   Message,
-  SourceInfo,
   NodeMetadata
 } from './types.ts';
 import { createMockStore, mockNodeId, mockRootId } from './test-helpers.ts';
@@ -1000,7 +995,7 @@ describe('Forest', () => {
 
       const root = mockStoreWrapper.createTestRoot('deep_root', config);
 
-      let currentNodeId: NodeId = root.id;
+      const currentNodeId: NodeId = root.id;
       let parentNodeId = currentNodeId;
       const allNodes: Node[] = [root];
 

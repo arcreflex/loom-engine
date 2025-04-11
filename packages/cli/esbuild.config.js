@@ -1,10 +1,6 @@
 import esbuild from 'esbuild';
 import fs from 'fs';
 
-const pkg = JSON.parse(
-  fs.readFileSync(new URL('./package.json', import.meta.url), 'utf-8')
-);
-
 const externalDependencies = [];
 
 // Prepend the shebang

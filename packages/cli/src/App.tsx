@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import TextInput from 'ink-text-input';
 import {
@@ -35,7 +35,7 @@ interface DisplayMessage extends Message {
 async function getFormattedHistory(
   engine: LoomEngine,
   currentNodeId: NodeId,
-  debug: boolean
+  _debug: boolean
 ): Promise<{ system?: string; messages: DisplayMessage[] }> {
   const { root, path } = await engine
     .getForest()
@@ -65,7 +65,7 @@ export function LoomApp({
   options,
   onExit
 }: LoomAppProps) {
-  const { exit } = useApp();
+  useApp();
   const [currentNodeId, setCurrentNodeId] = useState<NodeId>(initialNodeId);
   const [history, setHistory] = useState<DisplayMessage[]>([]);
   const [systemPrompt, setSystemPrompt] = useState<string | undefined>(
@@ -142,7 +142,7 @@ export function LoomApp({
 
     try {
       if (trimmedInput.startsWith('/')) {
-        const [command, ...args] = trimmedInput.slice(1).trim().split(' ');
+        const [command, ..._args] = trimmedInput.slice(1).trim().split(' ');
 
         if (command === 'exit') {
           onExit(); // Call the passed exit handler
