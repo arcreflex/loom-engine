@@ -176,58 +176,35 @@ export function LoomApp({
   };
 
   // --- Keyboard Input Hook (Focus, Navigation) ---
+
+  // Global keys
+  useInput(async (input, key) => {
+    if (key.ctrl && input === 'c') {
+      onExit();
+      return;
+    }
+  });
+
+  // Input field
   useInput(
     async (input, key) => {
-      // Handle Ctrl+C for exit (useApp's exit is preferred)
-      if (key.ctrl && input === 'c') {
-        onExit();
-        return;
-      }
-
       if (isLoading) return;
-
-      switch (focusedElement) {
-        case 'input': {
-          if (key.return) {
-            await handleInput(inputValue);
-          } else if (key.upArrow && key.meta) {
-            await handleCommandAndUpdate('up', []);
-          } else if (key.leftArrow && key.meta) {
-            await handleCommandAndUpdate('left', []);
-          } else if (key.rightArrow && key.meta) {
-            await handleCommandAndUpdate('right', []);
-          } else if (key.downArrow && children.length > 0) {
-            setFocusedElement('children');
-            setSelectedChildIndex(0);
-          }
-          return;
-        }
-        case 'children': {
-          if (children.length === 0) return;
-          if (key.return) {
-            // Navigate to selected child
-            const selectedChild = sortedChildren[selectedChildIndex];
-            if (selectedChild) {
-              setCurrentNodeId(selectedChild.id);
-              setFocusedElement('input'); // Return focus to input after navigation
-            }
-          } else if (key.upArrow) {
-            if (selectedChildIndex > 0) {
-              setSelectedChildIndex(prev => prev - 1);
-            } else {
-              // Move focus back to input when pressing Up from the first child
-              setFocusedElement('input');
-            }
-          } else if (
-            key.downArrow &&
-            selectedChildIndex < children.length - 1
-          ) {
-            setSelectedChildIndex(prev => prev + 1);
-          }
-        }
+      if (key.return) {
+        await handleInput(inputValue);
+      } else if (key.upArrow && key.meta) {
+        await handleCommandAndUpdate('up', []);
+      } else if (key.leftArrow && key.meta) {
+        await handleCommandAndUpdate('left', []);
+      } else if (key.rightArrow && key.meta) {
+        await handleCommandAndUpdate('right', []);
+      } else if (key.downArrow && children.length > 0) {
+        setFocusedElement('children');
+        setSelectedChildIndex(0);
       }
     },
-    { isActive: true } // Ensure the hook is always active
+    {
+      isActive: focusedElement === 'input'
+    }
   );
 
   // --- Child Sorting and Rendering Logic ---
@@ -343,15 +320,27 @@ export function LoomApp({
           height={childrenHeight}
           overflowY="hidden"
         >
-          <Text dimColor>Children:</Text>
-          {sortedChildren
-            .slice(0, Math.min(sortedChildren.length, maxChildren))
-            .map((child, index) => {
-              const isSelected =
-                focusedElement === 'children' && index === selectedChildIndex;
+          <Text dimColor>{sortedChildren.length} children:</Text>
+          <ScrollableSelectList
+            items={sortedChildren}
+            maxVisibleItems={maxChildren}
+            focusedIndex={
+              focusedElement === 'children' ? selectedChildIndex : undefined
+            }
+            onFocusedIndexChange={(index: number | undefined) => {
+              if (index === undefined) {
+                setFocusedElement('input');
+              } else {
+                setSelectedChildIndex(index);
+              }
+            }}
+            onSelectItem={item => {
+              setCurrentNodeId(item.id);
+              setFocusedElement('input');
+            }}
+            renderItem={(child, isFocused) => {
               const isUnread =
                 child.parent_id && child.metadata.tags?.includes(UNREAD_TAG);
-
               const rawPreview = `${isUnread ? '* ' : ''}[${child.id}] (${child.message.role}) ${child.message.content.replace(/\n/g, ' ')}`;
               const preview =
                 rawPreview.substring(0, 80) +
@@ -359,16 +348,107 @@ export function LoomApp({
               return (
                 <Text
                   key={child.id}
-                  color={isSelected ? 'blue' : undefined}
+                  color={isFocused ? 'blue' : undefined}
                   bold={isUnread}
-                  inverse={isSelected}
+                  inverse={isFocused}
                 >
                   {preview}
                 </Text>
               );
-            })}
+            }}
+          />
         </Box>
       )}
     </Box>
+  );
+}
+
+interface ScrollableSelectListProps<T> {
+  items: T[];
+  maxVisibleItems: number;
+  focusedIndex: number | undefined;
+  onFocusedIndexChange: (newIndex: number | undefined) => void;
+  onSelectItem: (item: T, index: number) => void;
+  renderItem: (item: T, isFocused: boolean) => React.ReactNode;
+}
+
+export function ScrollableSelectList<Item>({
+  items,
+  maxVisibleItems,
+  focusedIndex,
+  renderItem,
+  onFocusedIndexChange,
+  onSelectItem
+}: ScrollableSelectListProps<Item>) {
+  const isActive = focusedIndex !== undefined;
+
+  const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
+  useEffect(() => {
+    const currentLastVisibleIndex = firstVisibleIndex + maxVisibleItems - 1;
+    let nextFirstVisibleIndex = firstVisibleIndex;
+
+    if (focusedIndex === undefined) {
+      nextFirstVisibleIndex = 0;
+    } else if (focusedIndex < firstVisibleIndex) {
+      nextFirstVisibleIndex = focusedIndex;
+    } else if (focusedIndex > currentLastVisibleIndex) {
+      nextFirstVisibleIndex = focusedIndex - maxVisibleItems + 1;
+    }
+
+    const maxPossibleFirstIndex = Math.max(0, items.length - maxVisibleItems);
+    nextFirstVisibleIndex = Math.max(
+      0,
+      Math.min(nextFirstVisibleIndex, maxPossibleFirstIndex)
+    );
+
+    if (nextFirstVisibleIndex !== firstVisibleIndex) {
+      setFirstVisibleIndex(nextFirstVisibleIndex);
+    }
+  }, [focusedIndex, maxVisibleItems, items.length, firstVisibleIndex]);
+
+  const visibleItems = items.slice(
+    firstVisibleIndex,
+    firstVisibleIndex + maxVisibleItems
+  );
+
+  useInput(
+    async (_input, key) => {
+      if (items.length === 0) return;
+      if (focusedIndex === undefined) return;
+      if (key.return) {
+        // Navigate to selected child
+        const selectedItem = items[focusedIndex];
+        if (selectedItem) {
+          onSelectItem(selectedItem, focusedIndex);
+        }
+        return;
+      }
+
+      let newFocusedIndex = focusedIndex;
+      if (key.upArrow) {
+        newFocusedIndex = focusedIndex - 1;
+      } else if (key.downArrow) {
+        newFocusedIndex = focusedIndex + 1;
+      }
+
+      if (newFocusedIndex < 0) {
+        onFocusedIndexChange(undefined);
+      }
+
+      if (newFocusedIndex < items.length && newFocusedIndex !== focusedIndex) {
+        onFocusedIndexChange(newFocusedIndex);
+      }
+    },
+    { isActive }
+  );
+
+  return (
+    <>
+      {visibleItems.map((item, i) => {
+        const index = firstVisibleIndex + i;
+        const isFocused = isActive && index === focusedIndex;
+        return renderItem(item, isFocused);
+      })}
+    </>
   );
 }

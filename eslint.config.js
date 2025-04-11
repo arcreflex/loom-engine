@@ -1,7 +1,6 @@
 import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import globals from 'globals';
-import prettierPlugin from 'eslint-plugin-prettier';
 
 export default [
   // Apply ESLint recommended rules
@@ -19,9 +18,6 @@ export default [
     linterOptions: {
       reportUnusedDisableDirectives: true
     },
-    plugins: {
-      prettier: prettierPlugin
-    },
     rules: {
       '@typescript-eslint/no-unused-vars': [
         'error',
@@ -30,8 +26,7 @@ export default [
           argsIgnorePattern: '_.*',
           caughtErrorsIgnorePattern: '_.*'
         }
-      ],
-      'prettier/prettier': 'error'
+      ]
     }
   },
 
