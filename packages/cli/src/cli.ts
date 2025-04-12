@@ -1,4 +1,4 @@
-import { LoomEngine } from '@ankhdt/loom-engine';
+import { coalesceMessages, LoomEngine } from '@ankhdt/loom-engine';
 import type { ProviderType } from '@ankhdt/loom-engine';
 import path from 'path';
 import fs from 'fs/promises';
@@ -8,7 +8,7 @@ import yargs from 'yargs/yargs';
 import { ConfigStore } from './config.ts';
 import { start } from './App.tsx';
 import chalk from 'chalk';
-import { formatError } from './util.ts';
+import { formatError, formatMessage } from './util.ts';
 
 /**
  * Resolves a directory path, expanding ~ to the user's home directory
@@ -79,6 +79,10 @@ async function main() {
       type: 'number',
       description: 'Default max tokens',
       default: 1024
+    })
+    .option('print', {
+      type: 'boolean',
+      description: 'Print the content of the current node to stdout and exit'
     })
     .options('debug', { type: 'boolean', default: false })
     .help()
@@ -158,6 +162,16 @@ async function main() {
       // No model/system specified and no persisted node
       console.log(chalk.red('Error: No existing conversation found.'));
       process.exit(1);
+    }
+
+    if (argv.print) {
+      const { root, messages } = await engine.getMessages(initialNode.id);
+      const content = coalesceMessages(messages)
+        .map(message => formatMessage(message))
+        .join('\n');
+      console.log(chalk.magenta(`[System] ${root.systemPrompt}`));
+      console.log(content);
+      process.exit(0);
     }
 
     await configStore.update({
