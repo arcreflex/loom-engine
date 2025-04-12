@@ -84,9 +84,13 @@ export class AnthropicProvider implements IProvider {
         system: request.systemMessage
       } as const;
 
-      this.logger.log(JSON.stringify(req, null, 2));
+      this.logger.log('Anthropic request:\n' + JSON.stringify(req, null, 2));
 
       const response = await anthropic.messages.create(req);
+
+      this.logger.log(
+        'Anthropic response:\n' + JSON.stringify(response, null, 2)
+      );
 
       const content = response.content.map(c => c.text).join('');
 

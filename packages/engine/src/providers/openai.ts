@@ -102,8 +102,9 @@ export class OpenAIProvider implements IProvider {
         stream: false
       } as const;
 
-      this.logger.log(JSON.stringify(req, null, 2));
+      this.logger.log('OpenAI request:\n' + JSON.stringify(req, null, 2));
       const response = await openai.chat.completions.create(req);
+      this.logger.log('OpenAI response:\n' + JSON.stringify(response, null, 2));
 
       const content = response.choices.length
         ? response.choices[0].message.content
