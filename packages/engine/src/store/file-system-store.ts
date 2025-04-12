@@ -30,6 +30,8 @@ class IdCache<T extends string> {
   }
 }
 
+type FileNodeId = NodeId & `${RootId}/node-${number}`;
+
 /**
  * Implements ILoomStore using the filesystem for persistence.
  * Directory structure:
@@ -44,7 +46,7 @@ export class FileSystemStore implements ILoomStore {
 
   private idCaches: {
     root: IdCache<RootId>;
-    node: Map<RootId, IdCache<NodeId>>;
+    node: Map<RootId, IdCache<FileNodeId>>;
   };
 
   private constructor(basePath: string) {
@@ -53,7 +55,7 @@ export class FileSystemStore implements ILoomStore {
       root: new IdCache<RootId>('root', (id: RootId) =>
         existsSync(this.rootDirPath(id))
       ),
-      node: new Map<RootId, IdCache<NodeId>>()
+      node: new Map<RootId, IdCache<FileNodeId>>()
     };
     this.rootsFilePath = path.join(basePath, 'roots.json');
   }
@@ -76,7 +78,7 @@ export class FileSystemStore implements ILoomStore {
   generateNodeId(root: RootId): NodeId {
     let cache = this.idCaches.node.get(root);
     if (!cache) {
-      cache = new IdCache<NodeId>('node', id =>
+      cache = new IdCache<FileNodeId>(`${root}/node`, id =>
         existsSync(this.nodeFilePath(root, id))
       );
       this.idCaches.node.set(root, cache);
@@ -119,7 +121,13 @@ export class FileSystemStore implements ILoomStore {
   }
 
   private nodeFilePath(rootId: RootId, nodeId: NodeId) {
-    return path.join(this.nodesDirPath(rootId), `${nodeId}.json`);
+    const [root, file] = nodeId.split('/');
+    if (root !== rootId) {
+      throw new Error(
+        `Node ID ${nodeId} does not belong to root ${rootId}. Expected an id of the form ${rootId}/node-<number>`
+      );
+    }
+    return path.join(this.nodesDirPath(rootId), `${file}.json`);
   }
 
   /**
