@@ -32,10 +32,16 @@ interface LoomAppProps {
   onExit: () => void; // Function to call for graceful exit
 }
 
-interface DisplayMessage extends Message {
-  nodeId: NodeId; // Keep track of the source node for potential future use
-  isChildPreview?: boolean;
-}
+type DisplayMessage =
+  | (Message & {
+      nodeId: NodeId;
+      isChildPreview?: boolean;
+    })
+  | {
+      role: 'system';
+      content: string;
+      isChildPreview?: never;
+    };
 
 type Status =
   | { status: 'loading' }
@@ -259,9 +265,16 @@ export function LoomApp({
     : 0;
   const fixedElementsHeight =
     inputHeight + statusHeight + childrenMargin + childrenHeight;
+
   const historyHeight = Math.max(1, process.stdout.rows - fixedElementsHeight); // Ensure at least 1 row
 
-  const context = [...history];
+  const context: DisplayMessage[] = [
+    {
+      role: 'system',
+      content: `[System] ${root?.config.systemPrompt || '(empty)'} \n`
+    },
+    ...history
+  ];
   if (focusedElement === 'children' && sortedChildren[selectedChildIndex]) {
     const previewMessage = sortedChildren[selectedChildIndex].message;
     context.push({
@@ -273,34 +286,7 @@ export function LoomApp({
 
   return (
     <Box flexDirection="column" width="100%" height="100%">
-      {/* 1. History View */}
-      <Box flexDirection="column" height={historyHeight} overflowY="hidden">
-        {root?.config.systemPrompt && (
-          <Text color="magenta">[System] {root?.config.systemPrompt}</Text>
-        )}
-        {context.slice(-historyHeight).map((msg, index) => {
-          const key = `${msg.nodeId}-${index}`;
-          const color = msg.isChildPreview
-            ? 'gray'
-            : msg.role === 'user'
-              ? 'green'
-              : 'cyan';
-          const text =
-            msg.role == 'user' ? `[USER] ${msg.content}` : `${msg.content}`;
-          return (
-            <Text key={key} color={color}>
-              {text}
-            </Text>
-          );
-        })}
-        {context.length > historyHeight && (
-          <Text dimColor>
-            ... ({context.length - historyHeight} older messages hidden)
-          </Text>
-        )}
-        {/* spacer if history is short to push input down */}
-        {context.length <= historyHeight && <Box flexGrow={1} />}
-      </Box>
+      <ContextView context={context} height={historyHeight} />
 
       {/* Status Line */}
       <Box
@@ -383,6 +369,71 @@ export function LoomApp({
           />
         </Box>
       )}
+    </Box>
+  );
+}
+
+export function ContextView({
+  context,
+  height
+}: {
+  context: DisplayMessage[];
+  height: number;
+}) {
+  const lineCounts = context.map(msg => msg.content.split('\n').length);
+  let totalLineCount = 0;
+  const cumulativeLineCounts: number[] = [];
+  for (const count of lineCounts) {
+    totalLineCount += count;
+    cumulativeLineCounts.push(totalLineCount);
+  }
+
+  let startLine = totalLineCount - height;
+  if (startLine < 0) {
+    startLine = 0;
+  }
+  // If we're omitting lines, add 1 to startLine to account for the ellipsis
+  if (startLine > 0) {
+    startLine += 1;
+  }
+
+  return (
+    <Box flexDirection="column" height={height} overflowY="hidden">
+      {startLine > 0 && (
+        <Text color="gray">{`(... ${totalLineCount - height} more lines ...)\n`}</Text>
+      )}
+      {context.map((msg, index) => {
+        const msgStartLine = cumulativeLineCounts[index] - lineCounts[0];
+        const msgEndLine = cumulativeLineCounts[index];
+        if (msgEndLine < startLine) {
+          return null; // Skip this message
+        }
+        let text =
+          msg.role == 'user' ? `[USER] ${msg.content}` : `${msg.content}`;
+        if (msgStartLine < startLine) {
+          // Remove the top (startLine - msgStartLine) lines
+          const lines = msg.content.split('\n');
+          const linesToRemove = startLine - msgStartLine;
+          lines.splice(0, linesToRemove);
+          text = lines.join('\n');
+        }
+        const key = msg.role === 'system' ? 'system' : msg.nodeId;
+
+        const color = msg.isChildPreview
+          ? 'gray'
+          : msg.role === 'user'
+            ? 'green'
+            : msg.role === 'system'
+              ? 'magenta'
+              : 'cyan';
+
+        return (
+          <Text key={key} color={color}>
+            {text}
+          </Text>
+        );
+      })}
+      {totalLineCount <= height && <Box flexGrow={1} />}
     </Box>
   );
 }
