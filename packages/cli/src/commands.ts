@@ -1,6 +1,7 @@
 import chalk from 'chalk';
 import { LoomEngine } from '@ankhdt/loom-engine';
 import type { GenerateOptions, NodeId } from '@ankhdt/loom-engine';
+import type { ConfigStore } from './config.ts';
 
 type CommandMap = {
   user: { content: string; generateOptions: GenerateOptions };
@@ -61,6 +62,7 @@ export function parseCommand(
 export async function handleCommand(
   [command, args]: CommandWithArgs,
   engine: LoomEngine,
+  configStore: ConfigStore,
   currentNodeId: NodeId
 ): Promise<NodeId> {
   // Handle commands
@@ -72,7 +74,12 @@ export async function handleCommand(
         .append(currentNodeId, [{ role: 'user', content }], {
           source_info: { type: 'user' }
         });
-      return handleCommand(['generate', generateOptions], engine, userNode.id);
+      return handleCommand(
+        ['generate', generateOptions],
+        engine,
+        configStore,
+        userNode.id
+      );
     }
     case 'generate': {
       return generate(engine, currentNodeId, args);
@@ -125,7 +132,24 @@ export async function handleCommand(
         throw new Error(`Please provide a title for the bookmark.`);
       }
 
-      throw new Error(`TODO: save bookmarks in config.toml`);
+      if (configStore.get().bookmarks?.some(b => b.title === title)) {
+        throw new Error(`Bookmark with title "${title}" already exists.`);
+      }
+
+      const now = new Date().toISOString();
+      await configStore.update({
+        bookmarks: [
+          ...(configStore.get().bookmarks || []),
+          {
+            title,
+            nodeId: currentNodeId,
+            createdAt: now,
+            updatedAt: now
+          }
+        ]
+      });
+
+      return currentNodeId;
     }
 
     // Exit the CLI

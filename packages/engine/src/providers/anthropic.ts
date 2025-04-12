@@ -44,10 +44,16 @@ export class AnthropicProvider implements IProvider {
 
       // Map parameters to Anthropic's expected format
       const anthropicMessages: Anthropic.MessageParam[] = [];
-      for (const msg of request.messages) {
+      for (let i = 0; i < request.messages.length; i++) {
+        const msg = request.messages[i];
+        let content = msg.content;
+        if (i === request.messages.length - 1) {
+          // last message isn't allowed to end with whitespace
+          content = content.replace(/[\s\n]+$/, '');
+        }
         anthropicMessages.push({
           role: msg.role,
-          content: msg.content
+          content
         });
       }
 

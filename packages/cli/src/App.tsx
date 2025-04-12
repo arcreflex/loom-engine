@@ -18,7 +18,7 @@ import {
 } from './commands.ts';
 import { render } from 'ink';
 import { formatError } from './util.ts';
-import type { ConfigStore } from './config.ts';
+import type { Config, ConfigStore } from './config.ts';
 
 // --- Interfaces ---
 
@@ -36,6 +36,11 @@ interface DisplayMessage extends Message {
   nodeId: NodeId; // Keep track of the source node for potential future use
   isChildPreview?: boolean;
 }
+
+type Status =
+  | { status: 'loading' }
+  | { status: 'idle' }
+  | { status: 'error'; error: string };
 
 // --- Main Component ---
 
@@ -65,11 +70,7 @@ export function LoomApp({
     'input'
   );
   const [selectedChildIndex, setSelectedChildIndex] = useState<number>(0);
-  const [status, setStatus] = useState<
-    | { status: 'loading' }
-    | { status: 'idle' }
-    | { status: 'error'; error: string }
-  >({ status: 'idle' });
+  const [status, setStatus] = useState<Status>({ status: 'idle' });
   const stopLoading = () => {
     setStatus(status =>
       status.status === 'loading' ? { status: 'idle' } : status
@@ -149,6 +150,7 @@ export function LoomApp({
         nextNodeId = await handleCommand(
           commandWithArgs,
           engine,
+          configStore,
           currentNodeId
         );
       }
@@ -312,19 +314,13 @@ export function LoomApp({
         }
         paddingX={1}
       >
-        {status.status === 'loading' ? (
-          <Text color={'yellow'}>...</Text>
-        ) : status.status === 'error' ? (
-          <Text color="red">{status.error}</Text>
-        ) : (
-          <>
-            <Text color="gray">
-              [{root?.id}:{root?.config.model}] node {currentNodeId}
-              {siblings.length > 1 &&
-                `(${siblings.indexOf(currentNodeId) + 1}/${siblings.length})`}
-            </Text>
-          </>
-        )}
+        <StatusLine
+          status={status}
+          config={configStore.get()}
+          root={root}
+          currentNodeId={currentNodeId}
+          siblings={siblings}
+        />
       </Box>
 
       {/* 2. Input Field */}
@@ -477,6 +473,52 @@ export function ScrollableSelectList<Item>({
         const isFocused = isActive && index === focusedIndex;
         return renderItem(item, isFocused);
       })}
+    </>
+  );
+}
+
+function StatusLine({
+  status,
+  config,
+  root,
+  currentNodeId,
+  siblings
+}: {
+  status: Status;
+  config: Config;
+  root?: RootData;
+  currentNodeId: NodeId;
+  siblings: NodeId[];
+}) {
+  if (status.status === 'loading') {
+    return <Text color={'yellow'}>Loading...</Text>;
+  }
+
+  if (status.status === 'error') {
+    return <Text color="red">{status.error}</Text>;
+  }
+
+  const bookmarkTitle = config.bookmarks?.find(
+    b => b.nodeId === currentNodeId
+  )?.title;
+
+  return (
+    <>
+      <Text color="gray">
+        [{root?.config.model}] {currentNodeId}
+      </Text>
+      {siblings.length > 1 && (
+        <Text color="white">
+          {' '}
+          ({siblings.indexOf(currentNodeId) + 1}/{siblings.length})
+        </Text>
+      )}
+      {bookmarkTitle && (
+        <Text color="cyan">
+          {' ⊛ '}
+          {bookmarkTitle}
+        </Text>
+      )}
     </>
   );
 }

@@ -2,13 +2,14 @@ import fs from 'fs/promises';
 import path from 'path';
 import chalk from 'chalk';
 import toml from '@iarna/toml';
-import type { RootId, NodeId } from '@ankhdt/loom-engine';
+import type { NodeId } from '@ankhdt/loom-engine';
 import { formatError } from './util.ts';
 
 export type Bookmark = {
-  name: string;
-  rootId: RootId;
+  title: string;
   nodeId: NodeId;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export interface Config {
