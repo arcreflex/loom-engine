@@ -162,6 +162,8 @@ export class Forest {
         throw new Error(`Parent node not found: ${parentId}`);
       }
 
+      messages = messages.filter(m => m.content.length > 0);
+
       if (!messages.length) {
         return parentNode;
       }

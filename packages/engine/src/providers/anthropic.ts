@@ -88,17 +88,13 @@ export class AnthropicProvider implements IProvider {
 
       const response = await anthropic.messages.create(req);
 
-      if (!response.content[0]) {
-        throw new Error(
-          `Missing content[0] in response: ${JSON.stringify(response)}`
-        );
-      }
+      const content = response.content.map(c => c.text).join('');
 
       // Map response to our expected format
       return {
         message: {
           role: 'assistant',
-          content: response.content[0].text
+          content: content
         },
         usage: {
           input_tokens: response.usage?.input_tokens,

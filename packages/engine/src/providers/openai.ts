@@ -105,18 +105,15 @@ export class OpenAIProvider implements IProvider {
       this.logger.log(JSON.stringify(req, null, 2));
       const response = await openai.chat.completions.create(req);
 
-      // Ensure we have a response content
-      if (!response.choices[0]?.message?.content) {
-        throw new Error(
-          `Missing content in response: ${JSON.stringify(response)}`
-        );
-      }
+      const content = response.choices.length
+        ? response.choices[0].message.content
+        : undefined;
 
       // Map response to our expected format
       return {
         message: {
           role: 'assistant',
-          content: response.choices[0].message.content
+          content: content || ''
         },
         usage: {
           input_tokens: response.usage?.prompt_tokens,
