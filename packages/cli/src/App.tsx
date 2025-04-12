@@ -6,7 +6,9 @@ import {
   type NodeId,
   type NodeData,
   type Message,
-  type RootData
+  type RootData,
+  type Node,
+  type GenerateOptions
 } from '@ankhdt/loom-engine';
 import {
   handleCommand,
@@ -16,21 +18,17 @@ import {
 } from './commands.ts';
 import { render } from 'ink';
 import { formatError } from './util.ts';
-import fs from 'fs/promises';
-import path from 'path';
+import type { ConfigStore } from './config.ts';
 
 // --- Interfaces ---
 
 interface LoomAppProps {
   engine: LoomEngine;
-  initialNodeId: NodeId;
-  options: {
-    dataDir: string;
-    n: number;
-    temperature: number;
-    max_tokens: number;
-    debug: boolean;
-  };
+  configStore: ConfigStore;
+  options: GenerateOptions;
+  initialNode: Node;
+  initialRoot: RootData;
+  debug: boolean;
   onExit: () => void; // Function to call for graceful exit
 }
 
@@ -48,35 +46,35 @@ export async function start(props: LoomAppProps) {
 
 export function LoomApp({
   engine,
-  initialNodeId,
+  configStore,
   options,
+  initialNode,
+  initialRoot,
+  debug,
   onExit
 }: LoomAppProps) {
   useApp();
-  const [currentNodeId, setCurrentNodeId] = useState<NodeId>(initialNodeId);
+  const [currentNodeId, setCurrentNodeId] = useState<NodeId>(initialNode.id);
+  const [root, setRoot] = useState<RootData>(initialRoot);
   const [history, setHistory] = useState<DisplayMessage[]>([]);
   const [children, setChildren] = useState<NodeData[]>([]);
   const [inputValue, setInputValue] = useState('');
+  const [siblings, setSiblings] = useState<NodeId[]>([]);
+  const [refresh, setRefresh] = useState(0);
+  const [focusedElement, setFocusedElement] = useState<'input' | 'children'>(
+    'input'
+  );
+  const [selectedChildIndex, setSelectedChildIndex] = useState<number>(0);
   const [status, setStatus] = useState<
     | { status: 'loading' }
     | { status: 'idle' }
     | { status: 'error'; error: string }
   >({ status: 'idle' });
-  const [siblings, setSiblings] = useState<NodeId[]>([]);
-  const [root, setRoot] = useState<RootData | null>(null);
-  const [refresh, setRefresh] = useState(0);
-
   const stopLoading = () => {
     setStatus(status =>
       status.status === 'loading' ? { status: 'idle' } : status
     );
   };
-
-  // State for focus management
-  const [focusedElement, setFocusedElement] = useState<'input' | 'children'>(
-    'input'
-  );
-  const [selectedChildIndex, setSelectedChildIndex] = useState<number>(0);
 
   // --- Data Fetching Effect ---
   useEffect(() => {
@@ -85,11 +83,9 @@ export function LoomApp({
       setStatus({ status: 'loading' });
       try {
         // Set current node ID
-        await fs.writeFile(
-          path.join(options.dataDir, 'current-node-id'),
-          currentNodeId,
-          'utf-8'
-        );
+        await configStore.update({
+          currentNodeId
+        });
 
         // Fetch history
         const nodeHistory = await engine
@@ -131,14 +127,14 @@ export function LoomApp({
         engine.log(err);
         setStatus({
           status: 'error',
-          error: formatError(err, options.debug)
+          error: formatError(err, debug)
         });
       } finally {
         stopLoading();
       }
     };
     fetchData();
-  }, [engine, currentNodeId, options.debug, options.dataDir, refresh]);
+  }, [engine, currentNodeId, debug, configStore, refresh]);
 
   // --- Input Handling ---
   const handleCommandAndUpdate = async (commandWithArgs: CommandWithArgs) => {
@@ -168,7 +164,7 @@ export function LoomApp({
       engine.log(err);
       setStatus({
         status: 'error',
-        error: formatError(err, options.debug)
+        error: formatError(err, debug)
       });
     } finally {
       stopLoading();
@@ -195,7 +191,7 @@ export function LoomApp({
       }
     } catch (e) {
       engine.log(e);
-      setStatus({ status: 'error', error: formatError(e, options.debug) });
+      setStatus({ status: 'error', error: formatError(e, debug) });
     } finally {
       stopLoading();
     }

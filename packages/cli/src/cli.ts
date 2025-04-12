@@ -1,11 +1,11 @@
 import { LoomEngine } from '@ankhdt/loom-engine';
-import type { NodeId, ProviderType } from '@ankhdt/loom-engine';
+import type { ProviderType } from '@ankhdt/loom-engine';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
 import { hideBin } from 'yargs/helpers';
 import yargs from 'yargs/yargs';
-import { loadConfig, setEnvFromConfig } from './config.ts';
+import { ConfigStore } from './config.ts';
 import { start } from './App.tsx';
 import chalk from 'chalk';
 import { formatError } from './util.ts';
@@ -49,33 +49,6 @@ function parseModelString(modelString: string): {
   }
 }
 
-/**
- * Loads the current node ID from the data directory
- */
-async function loadCurrentNode(engine: LoomEngine, dataDir: string) {
-  try {
-    const filePath = path.join(dataDir, 'current-node-id');
-    const content = await fs.readFile(filePath, 'utf-8');
-    const id = content.trim();
-    const node = await engine.getForest().getNode(id as NodeId);
-    return node;
-  } catch (_error) {
-    // File doesn't exist or other error
-    return null;
-  }
-}
-
-/**
- * Saves the current node ID to the data directory
- */
-async function saveCurrentNodeId(
-  dataDir: string,
-  nodeId: string
-): Promise<void> {
-  const filePath = path.join(dataDir, 'current-node-id');
-  await fs.writeFile(filePath, nodeId, 'utf-8');
-}
-
 async function main() {
   // Parse command line arguments
   const argv = await yargs(hideBin(process.argv))
@@ -97,7 +70,7 @@ async function main() {
       description: 'Default number of completions',
       default: 5
     })
-    .option('temp', {
+    .option('temperature', {
       type: 'number',
       description: 'Default temperature',
       default: 1
@@ -118,27 +91,26 @@ async function main() {
     await fs.mkdir(dataDir, { recursive: true });
 
     // Load config from config.toml
-    const config = await loadConfig(dataDir);
-
-    // Set environment variables from config
-    setEnvFromConfig(config);
+    const configStore = await ConfigStore.create(dataDir);
 
     // Create engine instance
     const engine = await LoomEngine.create(dataDir);
 
     // Load the last node ID if one exists
-    const persistedNode = await loadCurrentNode(engine, dataDir);
-    let startingNodeId = persistedNode?.id;
+    const config = configStore.get();
 
-    const defaultRoot =
-      persistedNode?.parent_id !== undefined
-        ? await engine.getForest().getRoot(persistedNode.root_id)
-        : persistedNode;
+    let initialNode = config.currentNodeId
+      ? await engine.getForest().getNode(config.currentNodeId)
+      : null;
+    let initialRoot =
+      initialNode?.parent_id !== undefined
+        ? await engine.getForest().getRoot(initialNode.root_id)
+        : initialNode;
 
-    if (!startingNodeId || argv.model || argv.system) {
+    if (!initialNode || argv.model || argv.system) {
       try {
-        let providerType = defaultRoot?.config.providerType;
-        let model = defaultRoot?.config.model;
+        let providerType = initialRoot?.config.providerType;
+        let model = initialRoot?.config.model;
 
         if (argv.model) {
           // Parse the model string
@@ -172,9 +144,9 @@ async function main() {
           .getForest()
           .getOrCreateRoot(targetRootConfig);
 
-        if (defaultRoot?.id !== targetRoot.id) {
-          // Different root, create a new conversation
-          startingNodeId = targetRoot.id;
+        if (initialRoot?.id !== targetRoot.id) {
+          initialNode = targetRoot;
+          initialRoot = targetRoot;
         }
       } catch (error) {
         console.log(chalk.red(formatError(error, argv.debug)));
@@ -182,35 +154,27 @@ async function main() {
       }
     }
 
-    if (!startingNodeId) {
+    if (!initialNode || !initialRoot) {
       // No model/system specified and no persisted node
       console.log(chalk.red('Error: No existing conversation found.'));
       process.exit(1);
     }
 
-    // Save the determined starting node ID
-    await saveCurrentNodeId(dataDir, startingNodeId);
-
-    // Ensure the determined starting node ID exists before rendering
-    try {
-      await engine.getForest().getNode(startingNodeId);
-    } catch (nodeError) {
-      console.log(chalk.red(formatError(nodeError, argv.debug)));
-      // Attempt to reset to the root if possible? Or just exit.
-      // Maybe try deleting the current-node-id file?
-      process.exit(1);
-    }
+    await configStore.update({
+      currentNodeId: initialNode.id
+    });
 
     await start({
       engine,
-      initialNodeId: startingNodeId,
+      configStore,
+      initialNode,
+      initialRoot,
       options: {
-        dataDir,
         n: argv.n ?? config.defaults.n,
-        temperature: argv.temp ?? config.defaults.temperature,
         max_tokens: argv['max-tokens'] ?? config.defaults.maxTokens,
-        debug: argv.debug
+        temperature: argv['temperature'] ?? config.defaults.temperature
       },
+      debug: argv.debug,
       onExit: async () => {
         // Save final node ID before exiting
         // Note: We might want to save more frequently within the app
