@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useReducer } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import TextInput from 'ink-text-input';
 import {
@@ -29,7 +29,6 @@ interface LoomAppProps {
   initialNode: Node;
   initialRoot: RootData;
   debug: boolean;
-  onExit: () => void; // Function to call for graceful exit
 }
 
 type DisplayMessage =
@@ -48,6 +47,104 @@ type Status =
   | { status: 'idle' }
   | { status: 'error'; error: string };
 
+export interface State {
+  currentNodeId: NodeId;
+  root: RootData;
+  history: DisplayMessage[];
+  children: NodeData[];
+  inputValue: string;
+  siblings: NodeId[];
+  focusedElement: 'input' | 'children';
+  selectedChildIndex: number;
+  status: Status;
+  refreshToken: number;
+}
+
+export type Action =
+  | { type: 'SET_STATUS_LOADING' }
+  | { type: 'SET_STATUS_IDLE' }
+  | { type: 'SET_STATUS_ERROR'; payload: { error: string } }
+  | {
+      type: 'SET_FETCHED_DATA';
+      payload: {
+        history: DisplayMessage[];
+        children: NodeData[];
+        siblings: NodeId[];
+        root: RootData;
+      };
+    }
+  | { type: 'SET_CURRENT_NODE_ID'; payload: { nodeId: NodeId } }
+  | { type: 'UPDATE_INPUT_VALUE'; payload: { value: string } }
+  | { type: 'CLEAR_INPUT_VALUE' }
+  | { type: 'FOCUS_INPUT' }
+  | { type: 'FOCUS_CHILDREN'; payload: { index: number } } // Combines focus and selection
+  | { type: 'UPDATE_SELECTED_CHILD_INDEX'; payload: { index: number } }
+  | { type: 'FORCE_FETCH' };
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'SET_STATUS_LOADING':
+      return { ...state, status: { status: 'loading' } };
+    case 'SET_STATUS_IDLE':
+      // Only change if currently loading or error
+      if (state.status.status !== 'idle') {
+        return { ...state, status: { status: 'idle' } };
+      }
+      return state; // No change if already idle
+    case 'SET_STATUS_ERROR':
+      return {
+        ...state,
+        status: { status: 'error', error: action.payload.error }
+      };
+    case 'SET_FETCHED_DATA':
+      return {
+        ...state,
+        history: action.payload.history,
+        children: action.payload.children,
+        siblings: action.payload.siblings,
+        root: action.payload.root,
+        status: { status: 'idle' }, // Fetch success implies idle
+        selectedChildIndex: 0 // Reset selection on new data
+      };
+    case 'SET_CURRENT_NODE_ID':
+      // Only update if the ID actually changed
+      if (state.currentNodeId !== action.payload.nodeId) {
+        return {
+          ...state,
+          currentNodeId: action.payload.nodeId,
+          // Resetting children/history/siblings here is redundant,
+          // as the fetch effect will handle it.
+          // Status will be set to loading by the fetch effect.
+          selectedChildIndex: 0 // Reset selection when node changes
+        };
+      }
+      return state;
+    case 'UPDATE_INPUT_VALUE':
+      return { ...state, inputValue: action.payload.value };
+    case 'CLEAR_INPUT_VALUE':
+      return { ...state, inputValue: '' };
+    case 'FOCUS_INPUT':
+      return { ...state, focusedElement: 'input' };
+    case 'FOCUS_CHILDREN':
+      return {
+        ...state,
+        focusedElement: 'children',
+        selectedChildIndex: action.payload.index
+      };
+    case 'UPDATE_SELECTED_CHILD_INDEX':
+      if (state.focusedElement === 'children') {
+        return { ...state, selectedChildIndex: action.payload.index };
+      }
+      return state; // Cannot select child if input is focused
+    case 'FORCE_FETCH':
+      return { ...state, refreshToken: state.refreshToken + 1 };
+    default:
+      // Ensure all action types are handled (useful for type checking)
+      action satisfies never;
+      return state;
+  }
+}
+
 // --- Main Component ---
 
 export async function start(props: LoomAppProps) {
@@ -61,35 +158,45 @@ export function LoomApp({
   options,
   initialNode,
   initialRoot,
-  debug,
-  onExit
+  debug
 }: LoomAppProps) {
-  useApp();
-  const [currentNodeId, setCurrentNodeId] = useState<NodeId>(initialNode.id);
-  const [root, setRoot] = useState<RootData>(initialRoot);
-  const [history, setHistory] = useState<DisplayMessage[]>([]);
-  const [children, setChildren] = useState<NodeData[]>([]);
-  const [inputValue, setInputValue] = useState('');
-  const [siblings, setSiblings] = useState<NodeId[]>([]);
-  const [refresh, setRefresh] = useState(0);
-  const [focusedElement, setFocusedElement] = useState<'input' | 'children'>(
-    'input'
-  );
-  const [selectedChildIndex, setSelectedChildIndex] = useState<number>(0);
-  const [status, setStatus] = useState<Status>({ status: 'idle' });
-  const stopLoading = () => {
-    setStatus(status =>
-      status.status === 'loading' ? { status: 'idle' } : status
-    );
+  const app = useApp();
+
+  // --- Initial State ---
+  const initialState: State = {
+    currentNodeId: initialNode.id,
+    root: initialRoot,
+    history: [],
+    children: [],
+    inputValue: '',
+    siblings: [],
+    focusedElement: 'input',
+    selectedChildIndex: 0,
+    status: { status: 'idle' },
+    refreshToken: 0
   };
+
+  const [state, dispatch] = useReducer(reducer, initialState);
+
+  const {
+    currentNodeId,
+    root,
+    history,
+    children,
+    inputValue,
+    siblings,
+    focusedElement,
+    selectedChildIndex,
+    status
+  } = state;
 
   // --- Data Fetching Effect ---
   useEffect(() => {
     const fetchData = async () => {
-      engine.log(`Current node: ${currentNodeId}`);
-      setStatus({ status: 'loading' });
+      engine.log(`Fetching data for node: ${currentNodeId}`);
+      dispatch({ type: 'SET_STATUS_LOADING' });
       try {
-        // Set current node ID
+        // Set current node ID in config store (Side effect is okay here)
         await configStore.update({
           currentNodeId
         });
@@ -106,90 +213,83 @@ export function LoomApp({
           })
         );
 
-        setRoot(nodeHistory.root);
-        setHistory(displayMessages);
-
         // Fetch children
         const fetchedChildren = await engine
           .getForest()
           .getChildren(currentNodeId);
-        setChildren(fetchedChildren);
 
         const node = await engine.getForest().getNode(currentNodeId);
         const parentNode = node?.parent_id
           ? await engine.getForest().getNode(node.parent_id)
           : null;
-        setSiblings(parentNode?.child_ids || [currentNodeId]);
+        const fetchedSiblings = parentNode?.child_ids || [currentNodeId];
 
-        // Clear the unread tag
-        if (node?.parent_id) {
+        // Clear the unread tag (Side effect is okay here)
+        if (node?.parent_id && node.metadata.tags?.includes(UNREAD_TAG)) {
           await engine.getForest().updateNodeMetadata(node.id, {
             ...node.metadata,
             tags: node.metadata.tags?.filter(tag => tag !== UNREAD_TAG)
           });
         }
 
-        setSelectedChildIndex(0); // Reset selection when node changes
+        // Dispatch success action with all fetched data
+        dispatch({
+          type: 'SET_FETCHED_DATA',
+          payload: {
+            history: displayMessages,
+            children: fetchedChildren,
+            siblings: fetchedSiblings,
+            root: nodeHistory.root
+          }
+        });
+        // No need to set idle status or selected index here, reducer handles it
       } catch (err) {
         engine.log(err);
-        setStatus({
-          status: 'error',
-          error: formatError(err, debug)
+        // Dispatch error action
+        dispatch({
+          type: 'SET_STATUS_ERROR',
+          payload: { error: formatError(err, debug) }
         });
-      } finally {
-        stopLoading();
       }
+      // No finally block needed to set status idle
     };
     fetchData();
-  }, [engine, currentNodeId, debug, configStore, refresh]);
+    // Depend only on currentNodeId and potentially engine/configStore/debug if they could change
+  }, [engine, currentNodeId, debug, configStore]);
 
   // --- Input Handling ---
-  const handleCommandAndUpdate = async (commandWithArgs: CommandWithArgs) => {
-    setStatus({ status: 'loading' });
-    let nextNodeId = currentNodeId;
-
+  const handleCommandChecked = async (commandWithArgs: CommandWithArgs) => {
+    dispatch({ type: 'SET_STATUS_LOADING' });
     try {
-      if (commandWithArgs[0] === 'exit') {
-        onExit(); // Call the passed exit handler
-        return;
-      } else {
-        nextNodeId = await handleCommand(
-          commandWithArgs,
-          engine,
-          configStore,
-          currentNodeId
-        );
-      }
+      await handleCommand(
+        app,
+        engine,
+        configStore,
+        dispatch,
+        currentNodeId,
+        commandWithArgs
+      );
 
-      if (nextNodeId !== currentNodeId) {
-        setCurrentNodeId(nextNodeId);
-      }
-
-      if (commandWithArgs[0] === 'generate') {
-        setRefresh(prev => prev + 1);
-      }
+      dispatch({ type: 'SET_STATUS_IDLE' });
     } catch (err) {
       engine.log(err);
-      setStatus({
-        status: 'error',
-        error: formatError(err, debug)
+      dispatch({
+        type: 'SET_STATUS_ERROR',
+        payload: { error: formatError(err, debug) }
       });
-    } finally {
-      stopLoading();
     }
   };
 
   const handleInput = async (value: string) => {
     if (status.status === 'loading') return;
     if (!value.trim()) return;
-    setInputValue('');
-    setStatus({ status: 'loading' });
+    dispatch({ type: 'CLEAR_INPUT_VALUE' });
     try {
       const parsedCommand = parseCommand(value, options);
       if (parsedCommand) {
-        await handleCommandAndUpdate(parsedCommand);
+        await handleCommandChecked(parsedCommand);
       } else {
-        await handleCommandAndUpdate([
+        await handleCommandChecked([
           'user',
           {
             content: value,
@@ -199,9 +299,10 @@ export function LoomApp({
       }
     } catch (e) {
       engine.log(e);
-      setStatus({ status: 'error', error: formatError(e, debug) });
-    } finally {
-      stopLoading();
+      dispatch({
+        type: 'SET_STATUS_ERROR',
+        payload: { error: formatError(e, debug) }
+      });
     }
   };
 
@@ -210,7 +311,7 @@ export function LoomApp({
   // Global keys
   useInput(async (input, key) => {
     if (key.ctrl && input === 'c') {
-      onExit();
+      handleCommandChecked(['exit', undefined]);
       return;
     }
   });
@@ -222,14 +323,13 @@ export function LoomApp({
       if (key.return) {
         await handleInput(inputValue);
       } else if (key.upArrow && key.meta) {
-        await handleCommandAndUpdate(['up', undefined]);
+        await handleCommandChecked(['up', undefined]);
       } else if (key.leftArrow && key.meta) {
-        await handleCommandAndUpdate(['left', undefined]);
+        await handleCommandChecked(['left', undefined]);
       } else if (key.rightArrow && key.meta) {
-        await handleCommandAndUpdate(['right', undefined]);
+        await handleCommandChecked(['right', undefined]);
       } else if (key.downArrow && children.length > 0) {
-        setFocusedElement('children');
-        setSelectedChildIndex(0);
+        dispatch({ type: 'FOCUS_CHILDREN', payload: { index: 0 } });
       }
     },
     {
@@ -260,8 +360,8 @@ export function LoomApp({
   const inputHeight = 1;
   const statusHeight = 3;
   const childrenMargin = 1;
-  const childrenHeight = children.length
-    ? Math.min(children.length, maxChildren) + 3
+  const childrenHeight = sortedChildren.length
+    ? Math.min(sortedChildren.length, maxChildren) + 3
     : 0;
   const fixedElementsHeight =
     inputHeight + statusHeight + childrenMargin + childrenHeight;
@@ -314,7 +414,9 @@ export function LoomApp({
         <Text color={focusedElement === 'input' ? 'blue' : 'grey'}>{'> '}</Text>
         <TextInput
           value={inputValue}
-          onChange={setInputValue}
+          onChange={value =>
+            dispatch({ type: 'UPDATE_INPUT_VALUE', payload: { value } })
+          }
           focus={focusedElement === 'input'}
         />
       </Box>
@@ -339,14 +441,20 @@ export function LoomApp({
             }
             onFocusedIndexChange={(index: number | undefined) => {
               if (index === undefined) {
-                setFocusedElement('input');
+                dispatch({ type: 'FOCUS_INPUT' });
               } else {
-                setSelectedChildIndex(index);
+                dispatch({
+                  type: 'UPDATE_SELECTED_CHILD_INDEX',
+                  payload: { index }
+                });
               }
             }}
             onSelectItem={item => {
-              setCurrentNodeId(item.id);
-              setFocusedElement('input');
+              dispatch({
+                type: 'SET_CURRENT_NODE_ID',
+                payload: { nodeId: item.id }
+              });
+              dispatch({ type: 'FOCUS_INPUT' });
             }}
             renderItem={(child, isFocused) => {
               const isUnread =

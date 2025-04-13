@@ -1,7 +1,8 @@
-import chalk from 'chalk';
 import { LoomEngine } from '@ankhdt/loom-engine';
 import type { GenerateOptions, NodeId } from '@ankhdt/loom-engine';
 import type { ConfigStore } from './config.ts';
+import type { Dispatch } from 'react';
+import type { Action } from './App.tsx';
 
 type CommandMap = {
   user: { content: string; generateOptions: GenerateOptions };
@@ -60,11 +61,15 @@ export function parseCommand(
  * Returns the new current node ID
  */
 export async function handleCommand(
-  [command, args]: CommandWithArgs,
+  app: {
+    exit: (error?: Error) => void;
+  },
   engine: LoomEngine,
   configStore: ConfigStore,
-  currentNodeId: NodeId
-): Promise<NodeId> {
+  dispatch: Dispatch<Action>,
+  currentNodeId: NodeId,
+  [command, args]: CommandWithArgs
+): Promise<void> {
   // Handle commands
   switch (command) {
     case 'user': {
@@ -74,15 +79,21 @@ export async function handleCommand(
         .append(currentNodeId, [{ role: 'user', content }], {
           source_info: { type: 'user' }
         });
-      return handleCommand(
-        ['generate', generateOptions],
-        engine,
-        configStore,
-        userNode.id
-      );
+      await handleCommand(app, engine, configStore, dispatch, userNode.id, [
+        'generate',
+        generateOptions
+      ]);
+      break;
     }
     case 'generate': {
-      return generate(engine, currentNodeId, args);
+      const nodeId = await generate(engine, currentNodeId, args);
+      if (nodeId === currentNodeId) {
+        // Since generate leaves us on the same node but adds children, force a fetch
+        dispatch({ type: 'FORCE_FETCH' });
+      } else {
+        dispatch({ type: 'SET_CURRENT_NODE_ID', payload: { nodeId } });
+      }
+      break;
     }
 
     case 'left':
@@ -90,13 +101,13 @@ export async function handleCommand(
       // Get current node
       const node = await engine.getForest().getNode(currentNodeId);
       if (!node || !node.parent_id) {
-        return currentNodeId;
+        break;
       }
 
       // Get parent node
       const parent = await engine.getForest().getNode(node.parent_id);
       if (!parent) {
-        return currentNodeId;
+        break;
       }
 
       // Get all siblings (children of the parent)
@@ -106,23 +117,29 @@ export async function handleCommand(
       const desiredIndex =
         command === 'left' ? currentIndex - 1 : currentIndex + 1;
       if (desiredIndex < 0 || desiredIndex >= siblings.length) {
-        return currentNodeId;
+        break;
       }
       const newNode = siblings[desiredIndex];
       if (!newNode) {
-        return currentNodeId;
+        break;
       }
-      return newNode.id;
+      dispatch({
+        type: 'SET_CURRENT_NODE_ID',
+        payload: { nodeId: newNode.id }
+      });
+      break;
     }
 
     // Move to parent node
     case 'up': {
       const node = await engine.getForest().getNode(currentNodeId);
       if (node && node.parent_id) {
-        return node.parent_id;
-      } else {
-        return currentNodeId;
+        dispatch({
+          type: 'SET_CURRENT_NODE_ID',
+          payload: { nodeId: node.parent_id }
+        });
       }
+      break;
     }
 
     // Save current node as a bookmark
@@ -149,20 +166,18 @@ export async function handleCommand(
         ]
       });
 
-      return currentNodeId;
+      break;
     }
 
     // Exit the CLI
     case 'exit': {
-      console.log(chalk.green('Goodbye!'));
-      process.exit(0);
-      throw new Error('Process exited');
+      app.exit();
+      break;
     }
 
     default: {
       command satisfies never;
-      console.log(chalk.yellow(`Unknown command: ${command}`));
-      return currentNodeId;
+      throw new Error(`Unknown command: ${command}`);
     }
   }
 }

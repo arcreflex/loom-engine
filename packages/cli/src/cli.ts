@@ -188,15 +188,7 @@ async function main() {
         max_tokens: argv['max-tokens'] ?? config.defaults.maxTokens,
         temperature: argv['temperature'] ?? config.defaults.temperature
       },
-      debug: argv.debug,
-      onExit: async () => {
-        // Save final node ID before exiting
-        // Note: We might want to save more frequently within the app
-        // await saveCurrentNodeId(dataDir, ???); // Need access to the *current* node ID from the app state here. This is tricky.
-        console.log(chalk.green('\nGoodbye!'));
-        // appInstance.unmount(); // Let Ink handle unmount on exit
-        // process.exit(0); // Let the app handle the actual exit via useApp().exit() or similar
-      }
+      debug: argv.debug
     });
   } catch (error) {
     console.log(chalk.red(formatError(error, argv.debug)));
