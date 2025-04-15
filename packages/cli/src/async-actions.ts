@@ -1,62 +1,27 @@
-import { LoomEngine } from '@ankhdt/loom-engine';
-import type { GenerateOptions, NodeId } from '@ankhdt/loom-engine';
-import type { ConfigStore } from './config.ts';
-import type { Dispatch } from 'react';
-import type { Action } from './App.tsx';
+import type { GenerateOptions } from '@ankhdt/loom-engine';
+import type { AppContext } from './App.tsx';
+import { formatError } from './util.ts';
 
 export const UNREAD_TAG = 'cli/unread';
 
-type AppContext = {
-  exit: () => void;
-  engine: LoomEngine;
-  configStore: ConfigStore;
-  dispatch: Dispatch<Action>;
-
-  currentNodeId: NodeId;
-};
-
 export type AsyncAction = (ctx: AppContext) => Promise<void> | void;
 
-export function parseSlashCommand(
-  input: string,
-  baseGenerateOptions: GenerateOptions
-): AsyncAction | undefined {
-  input = input.trim();
-  if (!input.startsWith('/')) {
-    return undefined;
+export async function handleAsyncAction(
+  appContext: AppContext,
+  cb: AsyncAction
+) {
+  const { engine, dispatch } = appContext;
+  dispatch({ type: 'SET_STATUS_LOADING' });
+  try {
+    await cb(appContext);
+    dispatch({ type: 'SET_STATUS_IDLE' });
+  } catch (err) {
+    engine.log(err);
+    dispatch({
+      type: 'SET_STATUS_ERROR',
+      payload: { error: formatError(err, appContext.debug) }
+    });
   }
-
-  const [command, ...rest] = input.slice(1).trim().split(' ');
-  switch (command) {
-    case 'save': {
-      return ctx => save(ctx, { title: rest.join(' ') });
-    }
-    case '': {
-      return ctx => generate(ctx, baseGenerateOptions);
-    }
-    case 'up':
-      return ctx => navigateToParent(ctx);
-    case 'left':
-    case 'right':
-      return ctx => navigateToSibling(ctx, { direction: command });
-    case 'exit': {
-      return ctx => {
-        ctx.exit();
-      };
-    }
-    default: {
-      const n = parseInt(command, 10);
-      if (!isNaN(n)) {
-        return ctx => {
-          // If n is a number, we want to generate n responses
-          return generate(ctx, { ...baseGenerateOptions, n });
-        };
-      }
-      throw new Error(`Unknown command: ${command}`);
-    }
-  }
-
-  return undefined;
 }
 
 export async function userMessage(
@@ -66,18 +31,24 @@ export async function userMessage(
     generateOptions: GenerateOptions;
   }
 ) {
-  const { engine, currentNodeId } = ctx;
+  const {
+    engine,
+    state: { currentNodeId }
+  } = ctx;
   const { content, generateOptions } = args;
   const userNode = await engine
     .getForest()
     .append(currentNodeId, [{ role: 'user', content }], {
       source_info: { type: 'user' }
     });
-  await generate({ ...ctx, currentNodeId: userNode.id }, generateOptions);
+  await generate(
+    { ...ctx, state: { ...ctx.state, currentNodeId: userNode.id } },
+    generateOptions
+  );
 }
 
 export async function navigateToSibling(
-  { engine, dispatch, currentNodeId }: AppContext,
+  { engine, dispatch, state: { currentNodeId } }: AppContext,
   args: { direction: 'left' | 'right' }
 ) {
   const { direction } = args;
@@ -115,7 +86,7 @@ export async function navigateToSibling(
 export async function navigateToParent({
   engine,
   dispatch,
-  currentNodeId
+  state: { currentNodeId }
 }: AppContext) {
   const node = await engine.getForest().getNode(currentNodeId);
   if (node && node.parent_id) {
@@ -127,7 +98,7 @@ export async function navigateToParent({
 }
 
 export async function save(
-  { currentNodeId, configStore }: AppContext,
+  { state: { currentNodeId }, configStore }: AppContext,
   args: { title: string }
 ) {
   const { title } = args;
@@ -154,7 +125,7 @@ export async function save(
 }
 
 async function generate(
-  { engine, dispatch, currentNodeId }: AppContext,
+  { engine, dispatch, state: { currentNodeId } }: AppContext,
   generateOptions: GenerateOptions
 ) {
   // Get current context

@@ -1,4 +1,10 @@
-import React, { useState, useEffect, useMemo, useReducer } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useMemo,
+  useReducer,
+  type Dispatch
+} from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import TextInput from 'ink-text-input';
 import {
@@ -11,16 +17,21 @@ import {
   type GenerateOptions
 } from '@ankhdt/loom-engine';
 import {
+  handleAsyncAction,
   navigateToParent,
   navigateToSibling,
-  parseSlashCommand,
   UNREAD_TAG,
-  userMessage,
-  type AsyncAction
+  userMessage
 } from './async-actions.ts';
 import { render } from 'ink';
 import { formatError } from './util.ts';
 import type { Config, ConfigStore } from './config.ts';
+import {
+  CommandPalette,
+  reducePaletteState,
+  type PaletteAction,
+  type PaletteState
+} from './CommandPalette.tsx';
 
 // --- Interfaces ---
 
@@ -44,6 +55,15 @@ type DisplayMessage =
       isChildPreview?: never;
     };
 
+export type AppContext = {
+  exit: () => void;
+  engine: LoomEngine;
+  configStore: ConfigStore;
+  dispatch: Dispatch<Action>;
+  state: State;
+  debug: boolean;
+};
+
 type Status =
   | { status: 'loading' }
   | { status: 'idle' }
@@ -56,10 +76,11 @@ export interface State {
   children: NodeData[];
   inputValue: string;
   siblings: NodeId[];
-  focusedElement: 'input' | 'children';
+  focusedElement: 'input' | 'children' | 'palette';
   selectedChildIndex: number;
   status: Status;
   refreshToken: number;
+  paletteState: PaletteState;
 }
 
 export type Action =
@@ -81,7 +102,11 @@ export type Action =
   | { type: 'FOCUS_INPUT' }
   | { type: 'FOCUS_CHILDREN'; payload: { index: number } } // Combines focus and selection
   | { type: 'UPDATE_SELECTED_CHILD_INDEX'; payload: { index: number } }
-  | { type: 'FORCE_FETCH' };
+  | { type: 'FORCE_FETCH' }
+  | {
+      type: 'PALETTE';
+      payload: PaletteAction;
+    };
 
 function reducer(state: State, action: Action): State {
   switch (action.type) {
@@ -140,6 +165,20 @@ function reducer(state: State, action: Action): State {
       return state; // Cannot select child if input is focused
     case 'FORCE_FETCH':
       return { ...state, refreshToken: state.refreshToken + 1 };
+    case 'PALETTE': {
+      let focusedElement = state.focusedElement;
+      if (action.payload.type === 'CLOSE') {
+        focusedElement = 'input';
+      }
+      if (action.payload.type === 'OPEN') {
+        focusedElement = 'palette';
+      }
+      return {
+        ...state,
+        focusedElement,
+        paletteState: reducePaletteState(state.paletteState, action.payload)
+      };
+    }
     default:
       // Ensure all action types are handled (useful for type checking)
       action satisfies never;
@@ -175,6 +214,7 @@ export function LoomApp({
     focusedElement: 'input',
     selectedChildIndex: 0,
     status: { status: 'idle' },
+    paletteState: { status: 'closed' },
     refreshToken: 0
   };
 
@@ -259,40 +299,23 @@ export function LoomApp({
     // Depend only on currentNodeId and potentially engine/configStore/debug if they could change
   }, [engine, currentNodeId, debug, configStore]);
 
-  const handleAsyncAction = async (cb: AsyncAction) => {
-    dispatch({ type: 'SET_STATUS_LOADING' });
-    try {
-      await cb({
-        configStore,
-        engine,
-        dispatch,
-        exit: () => app.exit(),
-        currentNodeId
-      });
-
-      dispatch({ type: 'SET_STATUS_IDLE' });
-    } catch (err) {
-      engine.log(err);
-      dispatch({
-        type: 'SET_STATUS_ERROR',
-        payload: { error: formatError(err, debug) }
-      });
-    }
+  const appContext: AppContext = {
+    exit: () => app.exit(),
+    engine,
+    configStore,
+    dispatch,
+    state,
+    debug
   };
 
-  const handleInput = async (value: string) => {
+  const handleSubmit = async (value: string) => {
     if (status.status === 'loading') return;
     if (!value.trim()) return;
     dispatch({ type: 'CLEAR_INPUT_VALUE' });
     try {
-      const parsedCommand = parseSlashCommand(value, options);
-      if (parsedCommand) {
-        await handleAsyncAction(parsedCommand);
-      } else {
-        await handleAsyncAction(ctx =>
-          userMessage(ctx, { content: value, generateOptions: options })
-        );
-      }
+      await handleAsyncAction(appContext, ctx =>
+        userMessage(ctx, { content: value, generateOptions: options })
+      );
     } catch (e) {
       engine.log(e);
       dispatch({
@@ -310,6 +333,16 @@ export function LoomApp({
       app.exit();
       return;
     }
+
+    if (input === 'p' && (key.meta || key.ctrl)) {
+      // Strip off "p" from the input hacky but whatever
+      dispatch({
+        type: 'UPDATE_INPUT_VALUE',
+        payload: { value: state.inputValue.replace(/p$/i, '') }
+      });
+
+      dispatch({ type: 'PALETTE', payload: { type: 'OPEN' } });
+    }
   });
 
   // Input field
@@ -317,15 +350,15 @@ export function LoomApp({
     async (input, key) => {
       if (status.status === 'loading') return;
       if (key.return) {
-        await handleInput(inputValue);
+        await handleSubmit(inputValue);
       } else if (key.upArrow && key.meta) {
-        await handleAsyncAction(navigateToParent);
+        await handleAsyncAction(appContext, navigateToParent);
       } else if (key.leftArrow && key.meta) {
-        await handleAsyncAction(ctx =>
+        await handleAsyncAction(appContext, ctx =>
           navigateToSibling(ctx, { direction: 'left' })
         );
       } else if (key.rightArrow && key.meta) {
-        await handleAsyncAction(ctx =>
+        await handleAsyncAction(appContext, ctx =>
           navigateToSibling(ctx, { direction: 'right' })
         );
       } else if (key.downArrow && children.length > 0) {
@@ -363,8 +396,13 @@ export function LoomApp({
   const childrenHeight = sortedChildren.length
     ? Math.min(sortedChildren.length, maxChildren) + 3
     : 0;
+  const commandPaletteHeight = state.paletteState.status === 'open' ? 15 : 0;
   const fixedElementsHeight =
-    inputHeight + statusHeight + childrenMargin + childrenHeight;
+    inputHeight +
+    statusHeight +
+    childrenMargin +
+    childrenHeight +
+    commandPaletteHeight;
 
   const historyHeight = Math.max(1, process.stdout.rows - fixedElementsHeight); // Ensure at least 1 row
 
@@ -386,6 +424,8 @@ export function LoomApp({
 
   return (
     <Box flexDirection="column" width="100%" height="100%">
+      <CommandPalette appContext={appContext} height={commandPaletteHeight} />
+
       <ContextView context={context} height={historyHeight} />
 
       {/* Status Line */}
@@ -414,9 +454,9 @@ export function LoomApp({
         <Text color={focusedElement === 'input' ? 'blue' : 'grey'}>{'> '}</Text>
         <TextInput
           value={inputValue}
-          onChange={value =>
-            dispatch({ type: 'UPDATE_INPUT_VALUE', payload: { value } })
-          }
+          onChange={value => {
+            dispatch({ type: 'UPDATE_INPUT_VALUE', payload: { value } });
+          }}
           focus={focusedElement === 'input'}
         />
       </Box>
