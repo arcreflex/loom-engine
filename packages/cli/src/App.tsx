@@ -166,17 +166,21 @@ function reducer(state: State, action: Action): State {
     case 'FORCE_FETCH':
       return { ...state, refreshToken: state.refreshToken + 1 };
     case 'PALETTE': {
+      const paletteState = reducePaletteState(
+        state.paletteState,
+        action.payload
+      );
       let focusedElement = state.focusedElement;
-      if (action.payload.type === 'CLOSE') {
+      if (paletteState.status === 'closed' && focusedElement === 'palette') {
         focusedElement = 'input';
       }
-      if (action.payload.type === 'OPEN') {
+      if (paletteState.status !== 'closed' && focusedElement !== 'palette') {
         focusedElement = 'palette';
       }
       return {
         ...state,
         focusedElement,
-        paletteState: reducePaletteState(state.paletteState, action.payload)
+        paletteState
       };
     }
     default:
@@ -396,7 +400,7 @@ export function LoomApp({
   const childrenHeight = sortedChildren.length
     ? Math.min(sortedChildren.length, maxChildren) + 3
     : 0;
-  const commandPaletteHeight = state.paletteState.status === 'open' ? 15 : 0;
+  const commandPaletteHeight = state.paletteState.status !== 'closed' ? 15 : 0;
   const fixedElementsHeight =
     inputHeight +
     statusHeight +

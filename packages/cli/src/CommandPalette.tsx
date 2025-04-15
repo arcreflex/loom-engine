@@ -6,6 +6,7 @@ import {
   handleAsyncAction,
   navigateToParent,
   navigateToSibling,
+  save,
   type AsyncAction
 } from './async-actions.ts';
 import fuzzysort from 'fuzzysort';
@@ -15,10 +16,14 @@ export type PaletteState =
       status: 'closed';
     }
   | {
-      status: 'open';
+      status: 'command';
       query: string;
       items: PaletteCommandItem[];
       selectedIndex: number;
+    }
+  | {
+      status: 'save';
+      title: string;
     };
 
 export interface PaletteCommandItem {
@@ -32,6 +37,8 @@ export type PaletteAction =
       type: 'OPEN';
     }
   | { type: 'CLOSE' }
+  | { type: 'START_SAVE' }
+  | { type: 'SET_SAVE_TITLE'; payload: { title: string } }
   | { type: 'UPDATE_QUERY'; payload: { query: string } } // Just update query
   | { type: 'SET_ITEMS'; payload: { items: PaletteCommandItem[] } } // Set filtered items
   | { type: 'NAVIGATE'; payload: { direction: 'up' | 'down' } };
@@ -43,7 +50,7 @@ export function reducePaletteState(
   switch (action.type) {
     case 'OPEN':
       return {
-        status: 'open',
+        status: 'command',
         query: '',
         items: APP_COMMANDS,
         selectedIndex: 0
@@ -51,17 +58,17 @@ export function reducePaletteState(
     case 'CLOSE':
       return { status: 'closed' };
     case 'UPDATE_QUERY':
-      if (state.status === 'closed') return state;
+      if (state.status !== 'command') return state;
       return { ...state, query: action.payload.query };
     case 'SET_ITEMS':
-      if (state.status === 'closed') return state;
+      if (state.status !== 'command') return state;
       return {
         ...state,
         items: action.payload.items,
         selectedIndex: 0
       };
     case 'NAVIGATE': {
-      if (state.status === 'closed' || state.items.length === 0) {
+      if (state.status !== 'command' || state.items.length === 0) {
         return state;
       }
       const current = state.selectedIndex;
@@ -73,6 +80,13 @@ export function reducePaletteState(
         next = current >= maxIndex ? 0 : current + 1;
       }
       return { ...state, selectedIndex: next };
+    }
+    case 'START_SAVE': {
+      return { status: 'save', title: '' };
+    }
+    case 'SET_SAVE_TITLE': {
+      if (state.status !== 'save') return state;
+      return { ...state, title: action.payload.title };
     }
   }
 }
@@ -92,6 +106,14 @@ const APP_COMMANDS: PaletteCommandItem[] = [
     id: 'right',
     label: 'Next sibling',
     action: ctx => navigateToSibling(ctx, { direction: 'right' })
+  },
+  {
+    id: 'save',
+    label: 'Save bookmark',
+    action: {
+      type: 'PALETTE',
+      payload: { type: 'START_SAVE' }
+    }
   }
 ];
 
@@ -134,7 +156,7 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
 
   // Filter logic is now triggered by query changes
   useEffect(() => {
-    if (status === 'closed') return;
+    if (status !== 'command') return;
     // Regenerate and filter whenever the query changes
     const allCommands = generateAllCommands(appContext);
     const filteredItems = filterCommands(state.query, allCommands);
@@ -142,7 +164,7 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
       type: 'SET_ITEMS',
       payload: { items: filteredItems.map(x => x.obj) }
     });
-  }, [state.status === 'open' && state.query, state.status]); // TODO: re-run filter if bookmarks change
+  }, [state.status === 'command' && state.query, state.status]); // TODO: re-run filter if bookmarks change
 
   // Input handling
   useInput(
@@ -161,7 +183,22 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
         });
       } else if (key.return) {
         if (state.status === 'closed') return;
-        if (state.items && state.items.length > 0 && state.selectedIndex >= 0) {
+        if (state.status === 'save') {
+          const title = state.title.trim();
+          if (!title) {
+            dispatch({
+              type: 'SET_STATUS_ERROR',
+              payload: { error: 'Bookmark title cannot be empty' }
+            });
+          } else {
+            dispatchPaletteAction({ type: 'CLOSE' });
+            handleAsyncAction(appContext, ctx => save(ctx, { title }));
+          }
+        } else if (
+          state.items &&
+          state.items.length > 0 &&
+          state.selectedIndex >= 0
+        ) {
           const selectedCommand = state.items[state.selectedIndex];
           dispatchPaletteAction({ type: 'CLOSE' });
           if (typeof selectedCommand.action === 'function') {
@@ -171,13 +208,37 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
           }
         }
       }
-      // Let TextInput handle other keys
     },
-    { isActive: state.status === 'open' }
+    { isActive: state.status !== 'closed' }
   );
 
   if (state.status === 'closed') {
     return null;
+  }
+
+  if (state.status === 'save') {
+    return (
+      <Box
+        margin={1}
+        height={height - 2}
+        borderStyle="round"
+        borderColor="blue"
+        padding={1}
+        flexDirection="column"
+      >
+        <TextInput
+          value={state.title}
+          onChange={value =>
+            dispatchPaletteAction({
+              type: 'SET_SAVE_TITLE',
+              payload: { title: value }
+            })
+          }
+          placeholder="Bookmark title..."
+          focus={true}
+        />
+      </Box>
+    );
   }
 
   const maxVisibleItems = height - 2 - 2 - 2 - 1; // 2 each for border, padding, margin, and 1 for input
@@ -203,7 +264,7 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
             })
           }
           placeholder="Run command..."
-          focus={state.status === 'open'} // Auto-focus
+          focus={state.status === 'command'} // Auto-focus
         />
       </Box>
       <Box flexDirection="column" marginTop={1}>
