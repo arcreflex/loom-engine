@@ -11,11 +11,13 @@ import {
   type GenerateOptions
 } from '@ankhdt/loom-engine';
 import {
-  handleCommand,
-  parseCommand,
+  navigateToParent,
+  navigateToSibling,
+  parseSlashCommand,
   UNREAD_TAG,
-  type CommandWithArgs
-} from './commands.ts';
+  userMessage,
+  type AsyncAction
+} from './async-actions.ts';
 import { render } from 'ink';
 import { formatError } from './util.ts';
 import type { Config, ConfigStore } from './config.ts';
@@ -257,18 +259,16 @@ export function LoomApp({
     // Depend only on currentNodeId and potentially engine/configStore/debug if they could change
   }, [engine, currentNodeId, debug, configStore]);
 
-  // --- Input Handling ---
-  const handleCommandChecked = async (commandWithArgs: CommandWithArgs) => {
+  const handleAsyncAction = async (cb: AsyncAction) => {
     dispatch({ type: 'SET_STATUS_LOADING' });
     try {
-      await handleCommand(
-        app,
-        engine,
+      await cb({
         configStore,
+        engine,
         dispatch,
-        currentNodeId,
-        commandWithArgs
-      );
+        exit: () => app.exit(),
+        currentNodeId
+      });
 
       dispatch({ type: 'SET_STATUS_IDLE' });
     } catch (err) {
@@ -285,17 +285,13 @@ export function LoomApp({
     if (!value.trim()) return;
     dispatch({ type: 'CLEAR_INPUT_VALUE' });
     try {
-      const parsedCommand = parseCommand(value, options);
+      const parsedCommand = parseSlashCommand(value, options);
       if (parsedCommand) {
-        await handleCommandChecked(parsedCommand);
+        await handleAsyncAction(parsedCommand);
       } else {
-        await handleCommandChecked([
-          'user',
-          {
-            content: value,
-            generateOptions: options
-          }
-        ]);
+        await handleAsyncAction(ctx =>
+          userMessage(ctx, { content: value, generateOptions: options })
+        );
       }
     } catch (e) {
       engine.log(e);
@@ -311,7 +307,7 @@ export function LoomApp({
   // Global keys
   useInput(async (input, key) => {
     if (key.ctrl && input === 'c') {
-      handleCommandChecked(['exit', undefined]);
+      app.exit();
       return;
     }
   });
@@ -323,11 +319,15 @@ export function LoomApp({
       if (key.return) {
         await handleInput(inputValue);
       } else if (key.upArrow && key.meta) {
-        await handleCommandChecked(['up', undefined]);
+        await handleAsyncAction(navigateToParent);
       } else if (key.leftArrow && key.meta) {
-        await handleCommandChecked(['left', undefined]);
+        await handleAsyncAction(ctx =>
+          navigateToSibling(ctx, { direction: 'left' })
+        );
       } else if (key.rightArrow && key.meta) {
-        await handleCommandChecked(['right', undefined]);
+        await handleAsyncAction(ctx =>
+          navigateToSibling(ctx, { direction: 'right' })
+        );
       } else if (key.downArrow && children.length > 0) {
         dispatch({ type: 'FOCUS_CHILDREN', payload: { index: 0 } });
       }
