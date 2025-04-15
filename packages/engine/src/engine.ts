@@ -11,6 +11,7 @@ import type {
   NodeData
 } from './types.ts';
 import { AnthropicProvider } from './providers/anthropic.ts';
+import { GoogleProvider } from './providers/google.ts';
 
 export interface GenerateOptions {
   n: number;
@@ -101,8 +102,8 @@ export class LoomEngine {
         return new OpenAIProvider(this);
       case 'anthropic':
         return new AnthropicProvider(this);
-      // case 'google':
-      //   return new GoogleProvider();
+      case 'google':
+        return new GoogleProvider(this);
       default:
         throw new Error(`Unsupported provider: ${provider}`);
     }

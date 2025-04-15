@@ -8,6 +8,7 @@
     "default": "./dist/index.js"
   },
   "scripts": {
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
     "test": "node --test src/**/*.test.ts",
@@ -23,6 +24,7 @@
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.17.1",
+    "@google/genai": "^0.8.0",
     "openai": "^4.33.1"
   },
   "devDependencies": {

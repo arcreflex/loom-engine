@@ -28,6 +28,7 @@ export interface ProviderResponse {
   usage?: {
     input_tokens?: number;
     output_tokens?: number;
+    raw?: unknown;
   };
 
   /** The reason the generation stopped. */

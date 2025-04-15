@@ -11,7 +11,8 @@
     "format": "prettier --write \"packages/**/*.ts\"",
     "test": "pnpm -r test",
     "prepare": "husky",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck"
   },
   "keywords": [],
   "author": "",

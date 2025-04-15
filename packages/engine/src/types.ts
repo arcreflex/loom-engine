@@ -70,6 +70,7 @@ export type SourceInfo =
       usage?: {
         input_tokens?: number;
         output_tokens?: number;
+        raw?: unknown;
       };
     }
   | {

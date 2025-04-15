@@ -1,6 +1,7 @@
 import type { Logger } from '../log.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
 import Anthropic from '@anthropic-ai/sdk';
+
 /**
  * Implements IProvider for Anthropic's Claude API.
  * Requires the Anthropic SDK: npm install @anthropic-ai/sdk
@@ -108,7 +109,8 @@ export class AnthropicProvider implements IProvider {
         },
         usage: {
           input_tokens: response.usage?.input_tokens,
-          output_tokens: response.usage?.output_tokens
+          output_tokens: response.usage?.output_tokens,
+          raw: response.usage
         },
         finish_reason: response.stop_reason || null,
         rawResponse: response

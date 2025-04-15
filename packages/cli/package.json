@@ -19,6 +19,7 @@
     "access": "public"
   },
   "scripts": {
+    "typecheck": "tsc --noEmit",
     "start": "npx tsx src/cli.ts",
     "dev": "node --watch src/cli.ts",
     "test": "node --test src/**/*.test.ts",

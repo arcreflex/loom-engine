@@ -118,7 +118,8 @@ export class OpenAIProvider implements IProvider {
         },
         usage: {
           input_tokens: response.usage?.prompt_tokens,
-          output_tokens: response.usage?.completion_tokens
+          output_tokens: response.usage?.completion_tokens,
+          raw: response.usage
         },
         finish_reason: response.choices[0].finish_reason || null,
         rawResponse: response
