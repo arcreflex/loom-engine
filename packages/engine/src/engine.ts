@@ -5,7 +5,7 @@ import type { ILoomStore } from './store/types.ts';
 import { Forest } from './forest.ts';
 import type {
   NodeId,
-  ProviderType,
+  ProviderName,
   RootConfig,
   Message,
   NodeData
@@ -49,7 +49,7 @@ export class LoomEngine {
     options: GenerateOptions
   ): Promise<NodeData[]> {
     const root = await this.forest.getOrCreateRoot(config);
-    const provider = this.getProvider(root.config.providerType);
+    const provider = this.getProvider(root.config.provider);
 
     const coalesced = coalesceMessages(contextMessages, '');
 
@@ -96,7 +96,7 @@ export class LoomEngine {
     return { root: root.config, messages };
   }
 
-  private getProvider(provider: ProviderType) {
+  private getProvider(provider: ProviderName) {
     switch (provider) {
       case 'openai':
         return new OpenAIProvider(this);

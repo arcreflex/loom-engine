@@ -15,7 +15,7 @@ export type RootId = NodeId & { readonly __rootIdBrand: unique symbol };
  */
 export type Role = 'user' | 'assistant';
 
-export type ProviderType = 'openai' | 'anthropic' | 'google';
+export type ProviderName = 'openai' | 'anthropic' | 'google';
 
 /**
  * Represents a message in a conversation.
@@ -37,7 +37,7 @@ export interface Message {
  */
 export interface RootConfig {
   /** The type of language model provider. */
-  providerType: ProviderType;
+  provider: ProviderName;
 
   /** The specific model to use, e.g., 'gpt-4', 'claude-3-opus-20240229'. */
   model: string;

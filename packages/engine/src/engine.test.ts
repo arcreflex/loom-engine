@@ -32,7 +32,7 @@ describe('LoomEngine', () => {
   describe('getMessages', () => {
     it('should retrieve message path and root config from the store via Forest', async () => {
       const rootConfig: RootConfig = {
-        providerType: 'openai',
+        provider: 'openai',
         model: 'gpt-4-turbo'
       };
       const root = createTestRoot('r1', rootConfig);
@@ -143,7 +143,7 @@ describe('LoomEngine', () => {
       // Pre-conditions: maps are empty
 
       // Action
-      const rootConfig: RootConfig = { providerType: 'openai', model: 'gpt-4' };
+      const rootConfig: RootConfig = { provider: 'openai', model: 'gpt-4' };
       const userMessages: Message[] = [
         { role: 'user', content: 'Write a poem' }
       ];
@@ -161,7 +161,7 @@ describe('LoomEngine', () => {
     });
 
     it('should handle n > 1 correctly', async () => {
-      const rootConfig: RootConfig = { providerType: 'openai', model: 'gpt-4' };
+      const rootConfig: RootConfig = { provider: 'openai', model: 'gpt-4' };
       const userMessages: Message[] = [
         { role: 'user', content: 'Write a poem' }
       ];
@@ -181,7 +181,7 @@ describe('LoomEngine', () => {
     });
 
     it('should append correctly if user message prefix already exists', async () => {
-      const rootConfig: RootConfig = { providerType: 'openai', model: 'gpt-4' };
+      const rootConfig: RootConfig = { provider: 'openai', model: 'gpt-4' };
       const existingMessages: Message[] = [
         { role: 'user', content: 'Write a poem' },
         { role: 'assistant', content: 'A short poem.' }
@@ -228,7 +228,7 @@ describe('LoomEngine', () => {
 
     it('should coalesce messages before sending them to the provider', async () => {
       const rootConfig: RootConfig = {
-        providerType: 'openai',
+        provider: 'openai',
         model: 'gpt-4',
         systemPrompt: 'system message'
       };
@@ -313,7 +313,7 @@ describe('LoomEngine', () => {
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
 
       const unsupportedConfig: RootConfig = {
-        providerType: 'unsupported' as any,
+        provider: 'unsupported' as any,
         model: 'some-model'
       };
 
@@ -336,7 +336,7 @@ describe('LoomEngine', () => {
     });
 
     it('should propagate errors from provider.generate', async () => {
-      const rootConfig: RootConfig = { providerType: 'openai', model: 'gpt-4' };
+      const rootConfig: RootConfig = { provider: 'openai', model: 'gpt-4' };
       const userMessages: Message[] = [
         { role: 'user', content: 'Write a poem' }
       ];

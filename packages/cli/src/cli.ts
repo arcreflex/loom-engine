@@ -1,5 +1,5 @@
 import { coalesceMessages, LoomEngine } from '@ankhdt/loom-engine';
-import type { ProviderType } from '@ankhdt/loom-engine';
+import type { ProviderName } from '@ankhdt/loom-engine';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
@@ -24,7 +24,7 @@ function resolveDataDir(dataDir: string): string {
  * Parses a model string in the format "provider/model"
  */
 function parseModelString(modelString: string): {
-  providerType: ProviderType;
+  provider: ProviderName;
   model: string;
 } {
   const parts = modelString.split('/');
@@ -39,7 +39,7 @@ function parseModelString(modelString: string): {
     case 'anthropic':
       // case 'google':
       return {
-        providerType: parts[0],
+        provider: parts[0],
         model: parts[1]
       };
     default:
@@ -113,23 +113,23 @@ async function main() {
 
     if (!initialNode || argv.model || argv.system) {
       try {
-        let providerType = initialRoot?.config.providerType;
+        let provider = initialRoot?.config.provider;
         let model = initialRoot?.config.model;
 
         if (argv.model) {
           // Parse the model string
           const parsedModel = parseModelString(argv.model);
-          providerType = parsedModel.providerType;
+          provider = parsedModel.provider;
           model = parsedModel.model;
         }
 
         if (!model && config.defaults.model) {
           const parsedModel = parseModelString(config.defaults.model);
-          providerType = parsedModel.providerType;
+          provider = parsedModel.provider;
           model = parsedModel.model;
         }
 
-        if (!providerType) {
+        if (!provider) {
           throw new Error('Provider type is required.');
         }
         if (!model) {
@@ -137,7 +137,7 @@ async function main() {
         }
 
         const targetRootConfig = {
-          providerType,
+          provider,
           model,
           systemPrompt: argv.system || config.defaults.systemPrompt
         };

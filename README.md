@@ -41,7 +41,7 @@ const engine = new LoomEngine('./my-loom-data');
 
 // Define the root configuration for a conversation tree
 const rootConfig = {
-  providerType: 'anthropic' as const, // or 'openai', etc.
+  provider: 'anthropic' as const, // or 'openai', etc.
   model: 'claude-3-haiku-20240307',
   systemPrompt: 'You are a helpful assistant.',
 };

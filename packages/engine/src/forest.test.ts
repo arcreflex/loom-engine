@@ -36,7 +36,7 @@ describe('Forest', () => {
     it('should return existing root if it exists with identical config', async () => {
       // Setup
       const config: RootConfig = {
-        providerType: 'openai',
+        provider: 'openai',
         model: 'gpt-4'
       };
 
@@ -60,7 +60,7 @@ describe('Forest', () => {
     it('should create and return a new root if none exists with identical config', async () => {
       // Setup
       const config: RootConfig = {
-        providerType: 'anthropic',
+        provider: 'anthropic',
         model: 'claude-3'
       };
 
@@ -89,7 +89,7 @@ describe('Forest', () => {
     it('should return root data if it exists', async () => {
       // Setup
       const config: RootConfig = {
-        providerType: 'openai',
+        provider: 'openai',
         model: 'gpt-4'
       };
 
@@ -171,7 +171,7 @@ describe('Forest', () => {
     it('should return all messages in path from root to specified node', async () => {
       // Setup
       const config: RootConfig = {
-        providerType: 'openai',
+        provider: 'openai',
         model: 'gpt-4'
       };
 
@@ -989,7 +989,7 @@ describe('Forest', () => {
     it('should handle deeply nested node path when getting messages', async () => {
       // Setup - create a very deep nesting of nodes (10 levels)
       const config: RootConfig = {
-        providerType: 'openai',
+        provider: 'openai',
         model: 'gpt-4'
       };
 
@@ -1036,14 +1036,14 @@ describe('Forest', () => {
 
       // Setup - create two configs that are identical in content but with different object references
       const config1 = {
-        providerType: 'openai' as const,
+        provider: 'openai' as const,
         model: 'gpt-4',
         parameters: { temperature: 0.7, max_tokens: 500 }
       };
 
       // Create a separate but identical object
       const config2 = {
-        providerType: 'openai' as const,
+        provider: 'openai' as const,
         model: 'gpt-4',
         parameters: { temperature: 0.7, max_tokens: 500 }
       };

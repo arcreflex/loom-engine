@@ -111,7 +111,7 @@ export function createMockStore() {
       id: string,
       config: RootConfig = {
         model: 'claude-3-opus',
-        providerType: 'anthropic'
+        provider: 'anthropic'
       }
     ): RootData => {
       const rootId = mockRootId(id);
