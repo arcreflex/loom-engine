@@ -54,7 +54,7 @@ export class Forest {
     return this.store.loadRootInfo(rootId);
   }
 
-  private async listRoots(): Promise<RootData[]> {
+  async listRoots(): Promise<RootData[]> {
     return this.store.listRootInfos();
   }
 

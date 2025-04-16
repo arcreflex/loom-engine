@@ -201,9 +201,13 @@ const APP_COMMANDS: PaletteCommandItem[] = [
   }
 ];
 
-function generateAllCommands(ctx: AppContext): PaletteCommandItem[] {
+async function generateAllCommands(
+  ctx: AppContext
+): Promise<PaletteCommandItem[]> {
   const commands = [...APP_COMMANDS];
   const bookmarks = ctx.configStore.get().bookmarks || [];
+
+  const bookmarkedNodes = new Set();
   for (const bookmark of bookmarks) {
     commands.push({
       id: 'bookmark-' + bookmark.title,
@@ -213,6 +217,20 @@ function generateAllCommands(ctx: AppContext): PaletteCommandItem[] {
         payload: { nodeId: bookmark.nodeId }
       }
     });
+    bookmarkedNodes.add(bookmark.nodeId);
+  }
+
+  for (const root of await ctx.engine.getForest().listRoots()) {
+    if (!bookmarkedNodes.has(root.id)) {
+      commands.push({
+        id: 'bookmark-' + root.id,
+        label: `Load model: ${root.config.model} / ${root.config.systemPrompt ?? '(empty)'}`,
+        action: {
+          type: 'SET_CURRENT_NODE_ID',
+          payload: { nodeId: root.id }
+        }
+      });
+    }
   }
   return commands;
 }
@@ -240,14 +258,17 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
 
   // Filter logic is now triggered by query changes
   useEffect(() => {
-    if (status !== 'command') return;
-    // Regenerate and filter whenever the query changes
-    const allCommands = generateAllCommands(appContext);
-    const filteredItems = filterCommands(state.query, allCommands);
-    dispatchPaletteAction({
-      type: 'SET_ITEMS',
-      payload: { items: filteredItems.map(x => x.obj) }
-    });
+    const updateCommands = async () => {
+      if (status !== 'command') return;
+      // Regenerate and filter whenever the query changes
+      const allCommands = await generateAllCommands(appContext);
+      const filteredItems = filterCommands(state.query, allCommands);
+      dispatchPaletteAction({
+        type: 'SET_ITEMS',
+        payload: { items: filteredItems.map(x => x.obj) }
+      });
+    };
+    updateCommands();
   }, [state.status === 'command' && state.query, state.status]); // TODO: re-run filter if bookmarks change
 
   // Input handling
@@ -258,33 +279,11 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
           type: 'SET_STATUS',
           payload: { status: 'closed' }
         });
-      } else if (key.upArrow) {
-        dispatchPaletteAction({
-          type: 'NAVIGATE',
-          payload: { direction: 'up' }
-        });
-      } else if (key.downArrow) {
-        dispatchPaletteAction({
-          type: 'NAVIGATE',
-          payload: { direction: 'down' }
-        });
       } else if (key.return) {
         switch (state.status) {
           case 'closed':
+          case 'command':
             return;
-          case 'command': {
-            const selectedCommand = state.items[state.selectedIndex];
-            dispatchPaletteAction({
-              type: 'SET_STATUS',
-              payload: { status: 'closed' }
-            });
-            if (typeof selectedCommand.action === 'function') {
-              handleAsyncAction(appContext, selectedCommand.action);
-            } else {
-              dispatch(selectedCommand.action);
-            }
-            return;
-          }
           case 'model-picker': {
             const { focus, model, system } = state;
             if (focus === 'model' && model) {
@@ -324,7 +323,11 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
   );
 
   const boxHeight = height - 2; // 2 for margin
-  const interiorHeight = height - 2 - 2 - 2 - 1; // 2 each for border, padding, margin, and 1 for input
+  const interiorHeight = height - 2 - 2 - 2; // 2 each for border, padding, margin
+
+  appContext.engine.log(
+    `height: ${height}, boxHeight: ${boxHeight}, interiorHeight: ${interiorHeight}`
+  );
 
   if (state.status === 'closed') {
     return null;
@@ -410,8 +413,6 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
     );
   }
 
-  const visibleItems = state.items.slice(0, interiorHeight);
-
   return (
     <Box
       margin={1}
@@ -436,22 +437,44 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
         />
       </Box>
       <Box flexDirection="column" marginTop={1}>
-        {/* Render items */}
-        {visibleItems.length === 0 && <Text>No matching commands.</Text>}
-        {visibleItems.map((item, index) => (
-          <Text
-            key={item.id} // Use the unique command ID
-            inverse={index === state.selectedIndex}
-            color={index === state.selectedIndex ? 'blue' : undefined}
-          >
-            {item.label}
-          </Text>
-        ))}
-        {state.items.length > interiorHeight && (
-          <Text dimColor>
-            ... {state.items.length - interiorHeight} more ...
-          </Text>
-        )}
+        <ScrollableSelectList
+          focusedIndex={
+            state.status === 'command' ? state.selectedIndex : undefined
+          }
+          items={state.items}
+          maxVisibleItems={interiorHeight - 2}
+          onFocusedIndexChange={index => {
+            if (index !== undefined) {
+              dispatchPaletteAction({
+                type: 'NAVIGATE',
+                payload: {
+                  direction: index > state.selectedIndex ? 'down' : 'up'
+                }
+              });
+            }
+          }}
+          onSelectItem={selectedCommand => {
+            dispatchPaletteAction({
+              type: 'SET_STATUS',
+              payload: { status: 'closed' }
+            });
+            if (typeof selectedCommand.action === 'function') {
+              handleAsyncAction(appContext, selectedCommand.action);
+            } else {
+              dispatch(selectedCommand.action);
+            }
+          }}
+          renderItem={(item, isFocused) => (
+            <Text
+              key={item.id} // Use the unique command ID
+              inverse={isFocused}
+              color={isFocused ? 'blue' : undefined}
+              wrap="truncate"
+            >
+              {item.label}
+            </Text>
+          )}
+        />
       </Box>
     </Box>
   );
