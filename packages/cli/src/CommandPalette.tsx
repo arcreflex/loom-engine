@@ -191,6 +191,13 @@ const APP_COMMANDS: PaletteCommandItem[] = [
         .getNode(ctx.state.currentNodeId);
       return deleteNodes(ctx, node?.child_ids || []);
     }
+  },
+  {
+    id: 'toggle-request-on-submit',
+    label: 'Toggle request on submit',
+    action: {
+      type: 'TOGGLE_REQUEST_ON_SUBMIT'
+    }
   }
 ];
 

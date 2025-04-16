@@ -8,7 +8,8 @@ import {
   type Message,
   type RootData,
   type Node,
-  type GenerateOptions
+  type GenerateOptions,
+  type Role
 } from '@ankhdt/loom-engine';
 import {
   generate,
@@ -16,18 +17,18 @@ import {
   navigateToParent,
   navigateToSibling,
   UNREAD_TAG,
-  addUserMessage
+  addMessage
 } from './async-actions.ts';
 import { render } from 'ink';
 import { formatError } from './util.ts';
-import type { Config, ConfigStore } from './config.ts';
+import type { ConfigStore } from './config.ts';
 import {
   CommandPalette,
   reducePaletteState,
   type PaletteAction,
   type PaletteState
 } from './CommandPalette.tsx';
-import { ContextView } from './ContextView.tsx';
+import { ContextView, getRoleColor } from './ContextView.tsx';
 import { ScrollableSelectList } from './ScrollableSelectList.tsx';
 
 // --- Interfaces ---
@@ -71,7 +72,9 @@ export interface State {
   root: RootData;
   history: DisplayMessage[];
   children: NodeData[];
+  inputRole: Role;
   inputValue: string;
+  requestOnSubmit: boolean;
   siblings: NodeId[];
   focusedElement: 'input' | 'children' | 'palette';
   selectedChildIndex: number;
@@ -95,6 +98,7 @@ export type Action =
     }
   | { type: 'SET_CURRENT_NODE_ID'; payload: { nodeId: NodeId } }
   | { type: 'UPDATE_INPUT_VALUE'; payload: { value: string } }
+  | { type: 'TOGGLE_REQUEST_ON_SUBMIT' }
   | { type: 'CLEAR_INPUT_VALUE' }
   | { type: 'FOCUS_INPUT' }
   | { type: 'FOCUS_CHILDREN'; payload: { index: number } } // Combines focus and selection
@@ -143,8 +147,30 @@ function reducer(state: State, action: Action): State {
         };
       }
       return state;
-    case 'UPDATE_INPUT_VALUE':
-      return { ...state, inputValue: action.payload.value };
+    case 'UPDATE_INPUT_VALUE': {
+      const { value } = action.payload;
+      if (value === '/user') {
+        return {
+          ...state,
+          inputRole: 'user',
+          inputValue: ''
+        };
+      }
+      if (value === '/assistant' || value === '/model') {
+        return {
+          ...state,
+          inputRole: 'assistant',
+          inputValue: ''
+        };
+      }
+      return { ...state, inputValue: value };
+    }
+    case 'TOGGLE_REQUEST_ON_SUBMIT': {
+      return {
+        ...state,
+        requestOnSubmit: !state.requestOnSubmit
+      };
+    }
     case 'CLEAR_INPUT_VALUE':
       return { ...state, inputValue: '' };
     case 'FOCUS_INPUT':
@@ -210,7 +236,9 @@ export function LoomApp({
     root: initialRoot,
     history: [],
     children: [],
+    inputRole: 'user',
     inputValue: '',
+    requestOnSubmit: true,
     siblings: [],
     focusedElement: 'input',
     selectedChildIndex: 0,
@@ -227,6 +255,7 @@ export function LoomApp({
     history,
     children,
     inputValue,
+    inputRole,
     siblings,
     focusedElement,
     selectedChildIndex,
@@ -309,21 +338,36 @@ export function LoomApp({
     debug
   };
 
-  const handleSubmit = async (value: string, request: boolean) => {
+  const handleSubmit = async () => {
     if (status.status === 'loading') return;
+    let value = inputValue;
     if (!value.trim()) return;
     dispatch({ type: 'CLEAR_INPUT_VALUE' });
     try {
-      if (value === '/') {
-        await handleAsyncAction(appContext, ctx => generate(ctx, options));
-        return;
+      if (value.startsWith('/')) {
+        const after = value.slice(1).trim();
+        if (after === '') {
+          await handleAsyncAction(appContext, ctx => generate(ctx, options));
+          return;
+        }
+        const n = parseInt(after, 10);
+        if (!isNaN(n)) {
+          await handleAsyncAction(appContext, ctx => generate(ctx, options));
+          return;
+        }
+
+        if (after === '/') {
+          // cheap escaping so there's a way to write "/user" or "/5" as an actual message
+          value = value.slice(1);
+        }
       }
 
       await handleAsyncAction(appContext, ctx =>
-        addUserMessage(ctx, {
+        addMessage(ctx, {
+          role: inputRole,
           content: value,
           generateOptions: options,
-          sendRequest: request
+          sendRequest: state.requestOnSubmit
         })
       );
     } catch (e) {
@@ -361,9 +405,12 @@ export function LoomApp({
   // Input field
   useInput(
     async (input, key) => {
+      engine.log(
+        `<TextInput> input: ${JSON.stringify(input)}, Key: ${JSON.stringify(key)}`
+      );
       if (status.status === 'loading') return;
       if (key.return) {
-        await handleSubmit(inputValue, !(key.ctrl || key.meta || key.shift));
+        await handleSubmit();
       } else if (key.upArrow && key.meta) {
         await handleAsyncAction(appContext, navigateToParent);
       } else if (key.leftArrow && key.meta) {
@@ -441,30 +488,13 @@ export function LoomApp({
 
       <ContextView context={context} height={historyHeight} />
 
-      {/* Status Line */}
-      <Box
-        borderStyle="round"
-        borderColor={
-          status.status === 'loading'
-            ? 'yellow'
-            : status.status === 'error'
-              ? 'red'
-              : 'gray'
-        }
-        paddingX={1}
-      >
-        <StatusLine
-          status={status}
-          config={configStore.get()}
-          root={root}
-          currentNodeId={currentNodeId}
-          siblings={siblings}
-        />
-      </Box>
+      <StatusLine ctx={appContext} root={root} siblings={siblings} />
 
       {/* 2. Input Field */}
       <Box>
-        <Text color={focusedElement === 'input' ? 'blue' : 'grey'}>{'> '}</Text>
+        <Text
+          color={focusedElement === 'input' ? getRoleColor(inputRole) : 'grey'}
+        >{`${inputRole}> `}</Text>
         <TextInput
           value={inputValue}
           onChange={value => {
@@ -535,47 +565,70 @@ export function LoomApp({
 }
 
 function StatusLine({
-  status,
-  config,
+  ctx,
   root,
-  currentNodeId,
   siblings
 }: {
-  status: Status;
-  config: Config;
+  ctx: AppContext;
   root?: RootData;
-  currentNodeId: NodeId;
   siblings: NodeId[];
 }) {
+  const { configStore, state } = ctx;
+  const { status, currentNodeId } = state;
+
+  let contents;
   if (status.status === 'loading') {
-    return <Text color={'yellow'}>Loading...</Text>;
+    contents = <Text color={'yellow'}>Loading...</Text>;
+  } else if (status.status === 'error') {
+    contents = <Text color="red">{status.error}</Text>;
+  } else {
+    const bookmarkTitle = configStore
+      .get()
+      .bookmarks?.find(b => b.nodeId === currentNodeId)?.title;
+    contents = (
+      <>
+        <Box flexGrow={1}>
+          <Text color="gray">
+            [{root?.config.model}] {currentNodeId}
+          </Text>
+          {siblings.length > 1 && (
+            <Text color="white">
+              {' '}
+              ({siblings.indexOf(currentNodeId) + 1}/{siblings.length})
+            </Text>
+          )}
+          {bookmarkTitle && (
+            <Text color="cyan">
+              {' ⊛ '}
+              {bookmarkTitle}
+            </Text>
+          )}
+        </Box>
+        <Box flexGrow={0}>
+          {state.requestOnSubmit ? (
+            <Text color="greenBright">⊛</Text>
+          ) : (
+            <Text color="gray">⊘</Text>
+          )}
+        </Box>
+      </>
+    );
   }
-
-  if (status.status === 'error') {
-    return <Text color="red">{status.error}</Text>;
-  }
-
-  const bookmarkTitle = config.bookmarks?.find(
-    b => b.nodeId === currentNodeId
-  )?.title;
 
   return (
-    <>
-      <Text color="gray">
-        [{root?.config.model}] {currentNodeId}
-      </Text>
-      {siblings.length > 1 && (
-        <Text color="white">
-          {' '}
-          ({siblings.indexOf(currentNodeId) + 1}/{siblings.length})
-        </Text>
-      )}
-      {bookmarkTitle && (
-        <Text color="cyan">
-          {' ⊛ '}
-          {bookmarkTitle}
-        </Text>
-      )}
-    </>
+    <Box
+      borderStyle="round"
+      borderColor={
+        status.status === 'loading'
+          ? 'yellow'
+          : status.status === 'error'
+            ? 'red'
+            : 'gray'
+      }
+      paddingX={1}
+      flexDirection="row"
+    >
+      {contents}
+    </Box>
   );
 }

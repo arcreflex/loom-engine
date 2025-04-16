@@ -1,4 +1,4 @@
-import type { GenerateOptions, NodeId } from '@ankhdt/loom-engine';
+import type { GenerateOptions, NodeId, Role } from '@ankhdt/loom-engine';
 import type { AppContext } from './App.tsx';
 import { formatError } from './util.ts';
 import { parseModelString } from './parse-model-string.ts';
@@ -25,9 +25,10 @@ export async function handleAsyncAction(
   }
 }
 
-export async function addUserMessage(
+export async function addMessage(
   ctx: AppContext,
   args: {
+    role: Role;
     content: string;
     generateOptions: GenerateOptions;
     sendRequest: boolean;
@@ -37,10 +38,10 @@ export async function addUserMessage(
     engine,
     state: { currentNodeId }
   } = ctx;
-  const { content } = args;
+  const { role, content } = args;
   const userNode = await engine
     .getForest()
-    .append(currentNodeId, [{ role: 'user', content }], {
+    .append(currentNodeId, [{ role, content }], {
       source_info: { type: 'user' }
     });
   ctx.dispatch({

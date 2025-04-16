@@ -2,6 +2,11 @@ import { Box, measureElement, Text } from 'ink';
 import type { DisplayMessage } from './App.tsx';
 import { useEffect, useRef, useState } from 'react';
 import wrapAnsi from 'wrap-ansi';
+import type { Role } from '@ankhdt/loom-engine';
+
+export function getRoleColor(role: Role | 'system') {
+  return role === 'user' ? 'green' : role === 'system' ? 'magenta' : 'cyan';
+}
 
 function formatLines(
   messages: DisplayMessage[],
@@ -13,13 +18,7 @@ function formatLines(
     const text =
       msg.role == 'user' ? `[USER] ${msg.content}` : `${msg.content}`;
     const wrapped = wrapAnsi(text, width);
-    const color = msg.isChildPreview
-      ? 'gray'
-      : msg.role === 'user'
-        ? 'green'
-        : msg.role === 'system'
-          ? 'magenta'
-          : 'cyan';
+    const color = msg.isChildPreview ? 'gray' : getRoleColor(msg.role);
 
     const lines = wrapped.split('\n');
     totalLineCount += lines.length;
