@@ -1,10 +1,4 @@
-import React, {
-  useState,
-  useEffect,
-  useMemo,
-  useReducer,
-  type Dispatch
-} from 'react';
+import { useEffect, useMemo, useReducer, type Dispatch } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import TextInput from 'ink-text-input';
 import {
@@ -33,6 +27,8 @@ import {
   type PaletteAction,
   type PaletteState
 } from './CommandPalette.tsx';
+import { ContextView } from './ContextView.tsx';
+import { ScrollableSelectList } from './ScrollableSelectList.tsx';
 
 // --- Interfaces ---
 
@@ -45,7 +41,7 @@ interface LoomAppProps {
   debug: boolean;
 }
 
-type DisplayMessage =
+export type DisplayMessage =
   | (Message & {
       nodeId: NodeId;
       isChildPreview?: boolean;
@@ -532,161 +528,6 @@ export function LoomApp({
         </Box>
       )}
     </Box>
-  );
-}
-
-export function ContextView({
-  context,
-  height
-}: {
-  context: DisplayMessage[];
-  height: number;
-}) {
-  const lineCounts = context.map(msg => msg.content.split('\n').length);
-  let totalLineCount = 0;
-  const cumulativeLineCounts: number[] = [];
-  for (const count of lineCounts) {
-    totalLineCount += count;
-    cumulativeLineCounts.push(totalLineCount);
-  }
-
-  let startLine = totalLineCount - height;
-  if (startLine < 0) {
-    startLine = 0;
-  }
-  // If we're omitting lines, add 1 to startLine to account for the ellipsis
-  if (startLine > 0) {
-    startLine += 1;
-  }
-
-  return (
-    <Box flexDirection="column" height={height} overflowY="hidden">
-      {startLine > 0 && (
-        <Text color="gray">{`(... ${totalLineCount - height} more lines ...)\n`}</Text>
-      )}
-      {context.map((msg, index) => {
-        const msgStartLine = cumulativeLineCounts[index] - lineCounts[0];
-        const msgEndLine = cumulativeLineCounts[index];
-        if (msgEndLine < startLine) {
-          return null; // Skip this message
-        }
-        let text =
-          msg.role == 'user' ? `[USER] ${msg.content}` : `${msg.content}`;
-        if (msgStartLine < startLine) {
-          // Remove the top (startLine - msgStartLine) lines
-          const lines = msg.content.split('\n');
-          const linesToRemove = startLine - msgStartLine;
-          lines.splice(0, linesToRemove);
-          text = lines.join('\n');
-        }
-        const key = msg.role === 'system' ? 'system' : msg.nodeId;
-
-        const color = msg.isChildPreview
-          ? 'gray'
-          : msg.role === 'user'
-            ? 'green'
-            : msg.role === 'system'
-              ? 'magenta'
-              : 'cyan';
-
-        return (
-          <Text key={key} color={color}>
-            {text}
-          </Text>
-        );
-      })}
-      {totalLineCount <= height && <Box flexGrow={1} />}
-    </Box>
-  );
-}
-
-interface ScrollableSelectListProps<T> {
-  items: T[];
-  maxVisibleItems: number;
-  focusedIndex: number | undefined;
-  onFocusedIndexChange: (newIndex: number | undefined) => void;
-  onSelectItem: (item: T, index: number) => void;
-  renderItem: (item: T, isFocused: boolean) => React.ReactNode;
-}
-
-export function ScrollableSelectList<Item>({
-  items,
-  maxVisibleItems,
-  focusedIndex,
-  renderItem,
-  onFocusedIndexChange,
-  onSelectItem
-}: ScrollableSelectListProps<Item>) {
-  const isActive = focusedIndex !== undefined;
-
-  const [firstVisibleIndex, setFirstVisibleIndex] = useState(0);
-  useEffect(() => {
-    const currentLastVisibleIndex = firstVisibleIndex + maxVisibleItems - 1;
-    let nextFirstVisibleIndex = firstVisibleIndex;
-
-    if (focusedIndex === undefined) {
-      nextFirstVisibleIndex = 0;
-    } else if (focusedIndex < firstVisibleIndex) {
-      nextFirstVisibleIndex = focusedIndex;
-    } else if (focusedIndex > currentLastVisibleIndex) {
-      nextFirstVisibleIndex = focusedIndex - maxVisibleItems + 1;
-    }
-
-    const maxPossibleFirstIndex = Math.max(0, items.length - maxVisibleItems);
-    nextFirstVisibleIndex = Math.max(
-      0,
-      Math.min(nextFirstVisibleIndex, maxPossibleFirstIndex)
-    );
-
-    if (nextFirstVisibleIndex !== firstVisibleIndex) {
-      setFirstVisibleIndex(nextFirstVisibleIndex);
-    }
-  }, [focusedIndex, maxVisibleItems, items.length, firstVisibleIndex]);
-
-  const visibleItems = items.slice(
-    firstVisibleIndex,
-    firstVisibleIndex + maxVisibleItems
-  );
-
-  useInput(
-    async (_input, key) => {
-      if (items.length === 0) return;
-      if (focusedIndex === undefined) return;
-      if (key.return) {
-        // Navigate to selected child
-        const selectedItem = items[focusedIndex];
-        if (selectedItem) {
-          onSelectItem(selectedItem, focusedIndex);
-        }
-        return;
-      }
-
-      let newFocusedIndex = focusedIndex;
-      if (key.upArrow) {
-        newFocusedIndex = focusedIndex - 1;
-      } else if (key.downArrow) {
-        newFocusedIndex = focusedIndex + 1;
-      }
-
-      if (newFocusedIndex < 0) {
-        onFocusedIndexChange(undefined);
-      }
-
-      if (newFocusedIndex < items.length && newFocusedIndex !== focusedIndex) {
-        onFocusedIndexChange(newFocusedIndex);
-      }
-    },
-    { isActive }
-  );
-
-  return (
-    <>
-      {visibleItems.map((item, i) => {
-        const index = firstVisibleIndex + i;
-        const isFocused = isActive && index === focusedIndex;
-        return renderItem(item, isFocused);
-      })}
-    </>
   );
 }
 
