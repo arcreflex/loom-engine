@@ -342,6 +342,9 @@ export function LoomApp({
     if (status.status === 'loading') return;
     let value = inputValue;
     if (!value.trim()) return;
+    if (value.trim().endsWith('\\')) {
+      value.replace(/\\\s+$/, '\n');
+    }
     dispatch({ type: 'CLEAR_INPUT_VALUE' });
     try {
       if (value.startsWith('/')) {

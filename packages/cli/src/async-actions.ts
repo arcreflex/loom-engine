@@ -44,15 +44,16 @@ export async function addMessage(
     .append(currentNodeId, [{ role, content }], {
       source_info: { type: 'user' }
     });
-  ctx.dispatch({
-    type: 'SET_CURRENT_NODE_ID',
-    payload: { nodeId: userNode.id }
-  });
   if (args.sendRequest) {
     await generate(
       { ...ctx, state: { ...ctx.state, currentNodeId: userNode.id } },
       args.generateOptions
     );
+  } else {
+    ctx.dispatch({
+      type: 'SET_CURRENT_NODE_ID',
+      payload: { nodeId: userNode.id }
+    });
   }
 }
 
@@ -157,7 +158,11 @@ export async function generate(
       });
     }
 
-    // Since generate leaves us on the same node but adds children, force a fetch
+    dispatch({
+      type: 'SET_CURRENT_NODE_ID',
+      payload: { nodeId: currentNodeId }
+    });
+    // Since we may already be on this node, force a fetch so we see the new children
     dispatch({ type: 'FORCE_FETCH' });
   }
 }
