@@ -71,6 +71,9 @@ importers:
       react-devtools-core:
         specifier: ^4.28.5
         version: 4.28.5
+      wrap-ansi:
+        specifier: ^9.0.0
+        version: 9.0.0
       yargs:
         specifier: ^17.7.2
         version: 17.7.2

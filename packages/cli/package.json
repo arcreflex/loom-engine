@@ -20,8 +20,8 @@
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "start": "npx tsx src/cli.ts",
-    "dev": "node --watch src/cli.ts",
+    "start": "pnpm -wr build && npx tsx src/cli.ts",
+    "debug": "pnpm -wr build && node --inspect-brk --import tsx src/cli.ts",
     "test": "node --test src/**/*.test.ts",
     "build": "rm -rf dist && node esbuild.config.js && chmod +x dist/cli.js",
     "prepublishOnly": "pnpm build"
@@ -51,6 +51,7 @@
     "inquirer": "^9.2.15",
     "react": "^18.0.0",
     "react-devtools-core": "^4.28.5",
+    "wrap-ansi": "^9.0.0",
     "yargs": "^17.7.2"
   },
   "devDependencies": {

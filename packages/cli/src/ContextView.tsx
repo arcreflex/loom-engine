@@ -1,5 +1,78 @@
-import { Box, Text } from 'ink';
+import { Box, measureElement, Text } from 'ink';
 import type { DisplayMessage } from './App.tsx';
+import { useEffect, useRef, useState } from 'react';
+import wrapAnsi from 'wrap-ansi';
+
+function formatLines(
+  messages: DisplayMessage[],
+  { width, height, offset }: { width: number; height: number; offset: number }
+) {
+  const counted = [];
+  let totalLineCount = 0;
+  for (const msg of messages) {
+    const text =
+      msg.role == 'user' ? `[USER] ${msg.content}` : `${msg.content}`;
+    const wrapped = wrapAnsi(text, width);
+    const color = msg.isChildPreview
+      ? 'gray'
+      : msg.role === 'user'
+        ? 'green'
+        : msg.role === 'system'
+          ? 'magenta'
+          : 'cyan';
+
+    const lines = wrapped.split('\n');
+    totalLineCount += lines.length;
+    counted.push({
+      lines: lines,
+      color,
+      key: msg.role === 'system' ? 'system' : msg.nodeId
+    });
+  }
+
+  const startLine = Math.max(0, totalLineCount - height - offset);
+
+  const out = [];
+  let line = 0;
+
+  for (const item of counted) {
+    const msgEnd = line + item.lines.length;
+    if (msgEnd <= startLine) {
+      line += item.lines.length;
+      continue;
+    }
+    let lines = item.lines;
+    if (line < startLine) {
+      lines = lines.slice(startLine - line);
+    }
+    if (msgEnd > startLine + height) {
+      lines = lines.slice(0, height - line);
+    }
+    line += item.lines.length;
+    out.push({
+      color: item.color,
+      lines,
+      key: item.key
+    });
+  }
+
+  if (startLine > 0) {
+    out.unshift({
+      color: 'gray',
+      lines: [`(... ${startLine} more lines)`],
+      key: 'ellipsis-top'
+    });
+  }
+  if (startLine + height < totalLineCount) {
+    out.push({
+      color: 'gray',
+      lines: [`(... ${totalLineCount - startLine - height} more lines)`],
+      key: 'ellipsis-bottom'
+    });
+  }
+
+  return out;
+}
 
 export function ContextView({
   context,
@@ -8,60 +81,31 @@ export function ContextView({
   context: DisplayMessage[];
   height: number;
 }) {
-  const lineCounts = context.map(msg => msg.content.split('\n').length);
-  let totalLineCount = 0;
-  const cumulativeLineCounts: number[] = [];
-  for (const count of lineCounts) {
-    totalLineCount += count;
-    cumulativeLineCounts.push(totalLineCount);
-  }
+  const [width, setWidth] = useState(Infinity);
+  const ref = useRef(null);
 
-  let startLine = totalLineCount - height;
-  if (startLine < 0) {
-    startLine = 0;
-  }
-  // If we're omitting lines, add 1 to startLine to account for the ellipsis
-  if (startLine > 0) {
-    startLine += 1;
-  }
+  useEffect(() => {
+    if (!ref.current) return;
+    const measured = measureElement(ref.current);
+    setWidth(measured.width);
+  }, []);
+
+  const items = formatLines(context, {
+    width,
+    height: height - 2,
+    offset: 0
+  });
 
   return (
-    <Box flexDirection="column" height={height} overflowY="hidden">
-      {startLine > 0 && (
-        <Text color="gray">{`(... ${totalLineCount - height} more lines ...)\n`}</Text>
-      )}
-      {context.map((msg, index) => {
-        const msgStartLine = cumulativeLineCounts[index] - lineCounts[0];
-        const msgEndLine = cumulativeLineCounts[index];
-        if (msgEndLine < startLine) {
-          return null; // Skip this message
-        }
-        let text =
-          msg.role == 'user' ? `[USER] ${msg.content}` : `${msg.content}`;
-        if (msgStartLine < startLine) {
-          // Remove the top (startLine - msgStartLine) lines
-          const lines = msg.content.split('\n');
-          const linesToRemove = startLine - msgStartLine;
-          lines.splice(0, linesToRemove);
-          text = lines.join('\n');
-        }
-        const key = msg.role === 'system' ? 'system' : msg.nodeId;
-
-        const color = msg.isChildPreview
-          ? 'gray'
-          : msg.role === 'user'
-            ? 'green'
-            : msg.role === 'system'
-              ? 'magenta'
-              : 'cyan';
-
+    <Box ref={ref} flexDirection="column" height={height} overflowY="hidden">
+      {items.map(item => {
         return (
-          <Text key={key} color={color}>
-            {text}
+          <Text key={item.key} color={item.color}>
+            {item.lines.join('\n')}
           </Text>
         );
       })}
-      {totalLineCount <= height && <Box flexGrow={1} />}
+      <Box flexGrow={1} />
     </Box>
   );
 }
