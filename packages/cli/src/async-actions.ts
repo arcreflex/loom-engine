@@ -1,4 +1,4 @@
-import type { GenerateOptions } from '@ankhdt/loom-engine';
+import type { GenerateOptions, NodeId } from '@ankhdt/loom-engine';
 import type { AppContext } from './App.tsx';
 import { formatError } from './util.ts';
 
@@ -24,27 +24,34 @@ export async function handleAsyncAction(
   }
 }
 
-export async function userMessage(
+export async function addUserMessage(
   ctx: AppContext,
   args: {
     content: string;
     generateOptions: GenerateOptions;
+    sendRequest: boolean;
   }
 ) {
   const {
     engine,
     state: { currentNodeId }
   } = ctx;
-  const { content, generateOptions } = args;
+  const { content } = args;
   const userNode = await engine
     .getForest()
     .append(currentNodeId, [{ role: 'user', content }], {
       source_info: { type: 'user' }
     });
-  await generate(
-    { ...ctx, state: { ...ctx.state, currentNodeId: userNode.id } },
-    generateOptions
-  );
+  ctx.dispatch({
+    type: 'SET_CURRENT_NODE_ID',
+    payload: { nodeId: userNode.id }
+  });
+  if (args.sendRequest) {
+    await generate(
+      { ...ctx, state: { ...ctx.state, currentNodeId: userNode.id } },
+      args.generateOptions
+    );
+  }
 }
 
 export async function navigateToSibling(
@@ -124,7 +131,7 @@ export async function save(
   });
 }
 
-async function generate(
+export async function generate(
   { engine, dispatch, state: { currentNodeId } }: AppContext,
   generateOptions: GenerateOptions
 ) {
@@ -149,6 +156,49 @@ async function generate(
     }
 
     // Since generate leaves us on the same node but adds children, force a fetch
+    dispatch({ type: 'FORCE_FETCH' });
+  }
+}
+
+export async function deleteNodes(
+  { engine, configStore, dispatch, state: { currentNodeId } }: AppContext,
+  nodeIds: NodeId[]
+) {
+  let nextSibling: NodeId | undefined;
+  let nextParent: NodeId | undefined;
+  for (const nodeId of nodeIds) {
+    const node = await engine.getForest().getNode(nodeId);
+    const parent =
+      node?.parent_id && (await engine.getForest().getNode(node.parent_id));
+    nextParent = node?.parent_id;
+    const siblings = parent?.child_ids || [];
+    const currentIndex = siblings.findIndex(s => s === nodeId);
+    if (currentIndex >= 0 && currentIndex < siblings.length - 1) {
+      nextSibling = siblings[currentIndex + 1];
+    }
+
+    await engine.getForest().deleteNode(nodeId, false);
+
+    const bookmarks = configStore.get().bookmarks || [];
+    if (bookmarks.some(b => b.nodeId === nodeId)) {
+      await configStore.update({
+        bookmarks: bookmarks.filter(b => b.nodeId !== nodeId)
+      });
+    }
+    await engine.getForest().deleteNode(nodeId, false);
+  }
+
+  if (!nextParent) {
+    throw new Error(`Programming error: deleted node without a parent`);
+  }
+
+  const currentNodeExists = !!(await engine.getForest().getNode(currentNodeId));
+  if (!currentNodeExists) {
+    dispatch({
+      type: 'SET_CURRENT_NODE_ID',
+      payload: { nodeId: nextSibling || nextParent }
+    });
+  } else {
     dispatch({ type: 'FORCE_FETCH' });
   }
 }

@@ -342,37 +342,47 @@ export class Forest {
     }
 
     // Get the parent node if it exists
-    const parentNode = node.parent_id
-      ? await this.store.loadNode(node.parent_id)
-      : null;
+    const parentNode = await this.store.loadNode(node.parent_id);
+    if (!parentNode) {
+      throw new Error(`Parent node not found: ${node.parent_id}`);
+    }
 
-    if (reparentToGrandparent && parentNode && node.child_ids.length > 0) {
-      // Update the parent node to include the children of the node being deleted
-      parentNode.child_ids = parentNode.child_ids
-        .filter(id => id !== nodeId) // Remove the node being deleted
-        .concat(node.child_ids); // Add its children
-
-      // Update all children to point to the grandparent
+    if (reparentToGrandparent) {
+      const parentChildren = parentNode.child_ids.filter(id => id !== nodeId);
       for (const childId of node.child_ids) {
+        parentChildren.push(childId);
         const childNode = await this.store.loadNode(childId);
         if (childNode) {
           childNode.parent_id = node.parent_id;
           await this.store.saveNode(childNode);
         }
       }
-
-      // Save the updated parent
-      await this.store.saveNode(parentNode);
-    } else if (parentNode) {
-      // Just remove the node from its parent's child list
+      parentNode.child_ids = parentChildren;
+    } else {
+      const descendants = await this.findAllDescendants(node);
+      for (const id of descendants) {
+        await this.store.deleteNode(id);
+      }
       parentNode.child_ids = parentNode.child_ids.filter(id => id !== nodeId);
-      await this.store.saveNode(parentNode);
     }
+    await this.store.saveNode(parentNode);
 
-    // Delete the node from the store
     await this.store.deleteNode(nodeId);
 
     return parentNode;
+  }
+
+  private async findAllDescendants(node: Node): Promise<NodeId[]> {
+    const descendants: NodeId[] = [];
+    for (const childId of node.child_ids) {
+      descendants.push(childId);
+      const childNode = await this.store.loadNode(childId);
+      if (childNode) {
+        const childDescendants = await this.findAllDescendants(childNode);
+        descendants.push(...childDescendants);
+      }
+    }
+    return descendants;
   }
 
   /**

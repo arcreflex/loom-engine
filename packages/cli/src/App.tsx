@@ -17,11 +17,12 @@ import {
   type GenerateOptions
 } from '@ankhdt/loom-engine';
 import {
+  generate,
   handleAsyncAction,
   navigateToParent,
   navigateToSibling,
   UNREAD_TAG,
-  userMessage
+  addUserMessage
 } from './async-actions.ts';
 import { render } from 'ink';
 import { formatError } from './util.ts';
@@ -301,7 +302,7 @@ export function LoomApp({
     };
     fetchData();
     // Depend only on currentNodeId and potentially engine/configStore/debug if they could change
-  }, [engine, currentNodeId, debug, configStore]);
+  }, [engine, currentNodeId, debug, configStore, state.refreshToken]);
 
   const appContext: AppContext = {
     exit: () => app.exit(),
@@ -312,13 +313,22 @@ export function LoomApp({
     debug
   };
 
-  const handleSubmit = async (value: string) => {
+  const handleSubmit = async (value: string, request: boolean) => {
     if (status.status === 'loading') return;
     if (!value.trim()) return;
     dispatch({ type: 'CLEAR_INPUT_VALUE' });
     try {
+      if (value === '/') {
+        await handleAsyncAction(appContext, ctx => generate(ctx, options));
+        return;
+      }
+
       await handleAsyncAction(appContext, ctx =>
-        userMessage(ctx, { content: value, generateOptions: options })
+        addUserMessage(ctx, {
+          content: value,
+          generateOptions: options,
+          sendRequest: request
+        })
       );
     } catch (e) {
       engine.log(e);
@@ -354,7 +364,7 @@ export function LoomApp({
     async (input, key) => {
       if (status.status === 'loading') return;
       if (key.return) {
-        await handleSubmit(inputValue);
+        await handleSubmit(inputValue, !(key.ctrl || key.meta || key.shift));
       } else if (key.upArrow && key.meta) {
         await handleAsyncAction(appContext, navigateToParent);
       } else if (key.leftArrow && key.meta) {

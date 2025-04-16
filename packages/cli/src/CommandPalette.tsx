@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import type { Action, AppContext } from './App.tsx';
 import {
+  deleteNodes,
   handleAsyncAction,
   navigateToParent,
   navigateToSibling,
@@ -113,6 +114,38 @@ const APP_COMMANDS: PaletteCommandItem[] = [
     action: {
       type: 'PALETTE',
       payload: { type: 'START_SAVE' }
+    }
+  },
+  {
+    id: 'delete',
+    label: 'Delete current node',
+    action: ctx => deleteNodes(ctx, [ctx.state.currentNodeId])
+  },
+  {
+    id: 'delete-siblings',
+    label: 'Delete all siblings',
+    action: async ctx => {
+      const node = await ctx.engine
+        .getForest()
+        .getNode(ctx.state.currentNodeId);
+      if (!node?.parent_id) {
+        return;
+      }
+      const parent = await ctx.engine.getForest().getNode(node.parent_id);
+      return deleteNodes(
+        ctx,
+        parent?.child_ids.filter(id => id !== ctx.state.currentNodeId) || []
+      );
+    }
+  },
+  {
+    id: 'delete-children',
+    label: 'Delete children',
+    action: async ctx => {
+      const node = await ctx.engine
+        .getForest()
+        .getNode(ctx.state.currentNodeId);
+      return deleteNodes(ctx, node?.child_ids || []);
     }
   }
 ];
