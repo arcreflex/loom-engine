@@ -8,9 +8,12 @@ import {
   navigateToParent,
   navigateToSibling,
   save,
+  switchModel,
   type AsyncAction
 } from './async-actions.ts';
 import fuzzysort from 'fuzzysort';
+import { ScrollableSelectList } from './ScrollableSelectList.tsx';
+import { KNOWN_MODELS } from '@ankhdt/loom-engine';
 
 export type PaletteState =
   | {
@@ -25,6 +28,12 @@ export type PaletteState =
   | {
       status: 'save';
       title: string;
+    }
+  | {
+      status: 'model-picker';
+      focus: 'model' | 'system';
+      model: string | undefined;
+      system: string | undefined;
     };
 
 export interface PaletteCommandItem {
@@ -35,29 +44,44 @@ export interface PaletteCommandItem {
 
 export type PaletteAction =
   | {
-      type: 'OPEN';
+      type: 'SET_STATUS';
+      payload: { status: PaletteState['status'] };
     }
-  | { type: 'CLOSE' }
-  | { type: 'START_SAVE' }
   | { type: 'SET_SAVE_TITLE'; payload: { title: string } }
   | { type: 'UPDATE_QUERY'; payload: { query: string } } // Just update query
   | { type: 'SET_ITEMS'; payload: { items: PaletteCommandItem[] } } // Set filtered items
-  | { type: 'NAVIGATE'; payload: { direction: 'up' | 'down' } };
+  | { type: 'NAVIGATE'; payload: { direction: 'up' | 'down' } }
+  | { type: 'SET_MODEL_PICKER_MODEL'; payload: { model: string; done?: true } }
+  | { type: 'SET_MODEL_PICKER_SYSTEM'; payload: { system: string } };
 
 export function reducePaletteState(
   state: PaletteState,
   action: PaletteAction
 ): PaletteState {
   switch (action.type) {
-    case 'OPEN':
-      return {
-        status: 'command',
-        query: '',
-        items: APP_COMMANDS,
-        selectedIndex: 0
-      };
-    case 'CLOSE':
-      return { status: 'closed' };
+    case 'SET_STATUS':
+      if (action.payload.status === 'command') {
+        return {
+          status: 'command',
+          query: '',
+          items: APP_COMMANDS,
+          selectedIndex: 0
+        };
+      } else if (action.payload.status === 'model-picker') {
+        return {
+          status: 'model-picker',
+          focus: 'model',
+          model: undefined,
+          system: undefined
+        };
+      } else if (action.payload.status === 'save') {
+        return { status: 'save', title: '' };
+      } else if (action.payload.status === 'closed') {
+        return { status: 'closed' };
+      } else {
+        action.payload.status satisfies never;
+        throw new Error(`Unknown palette status: ${action.payload.status}`);
+      }
     case 'UPDATE_QUERY':
       if (state.status !== 'command') return state;
       return { ...state, query: action.payload.query };
@@ -82,12 +106,24 @@ export function reducePaletteState(
       }
       return { ...state, selectedIndex: next };
     }
-    case 'START_SAVE': {
-      return { status: 'save', title: '' };
-    }
     case 'SET_SAVE_TITLE': {
       if (state.status !== 'save') return state;
       return { ...state, title: action.payload.title };
+    }
+    case 'SET_MODEL_PICKER_MODEL': {
+      if (state.status !== 'model-picker') return state;
+      return {
+        ...state,
+        model: action.payload.model,
+        focus: action.payload.done ? 'system' : 'model'
+      };
+    }
+    case 'SET_MODEL_PICKER_SYSTEM': {
+      if (state.status !== 'model-picker') return state;
+      return {
+        ...state,
+        system: action.payload.system
+      };
     }
   }
 }
@@ -109,11 +145,19 @@ const APP_COMMANDS: PaletteCommandItem[] = [
     action: ctx => navigateToSibling(ctx, { direction: 'right' })
   },
   {
+    id: 'model-picker',
+    label: 'Change model',
+    action: {
+      type: 'PALETTE',
+      payload: { type: 'SET_STATUS', payload: { status: 'model-picker' } }
+    }
+  },
+  {
     id: 'save',
     label: 'Save bookmark',
     action: {
       type: 'PALETTE',
-      payload: { type: 'START_SAVE' }
+      payload: { type: 'SET_STATUS', payload: { status: 'save' } }
     }
   },
   {
@@ -203,7 +247,10 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
   useInput(
     (input, key) => {
       if (key.escape) {
-        dispatchPaletteAction({ type: 'CLOSE' });
+        dispatchPaletteAction({
+          type: 'SET_STATUS',
+          payload: { status: 'closed' }
+        });
       } else if (key.upArrow) {
         dispatchPaletteAction({
           type: 'NAVIGATE',
@@ -215,35 +262,62 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
           payload: { direction: 'down' }
         });
       } else if (key.return) {
-        if (state.status === 'closed') return;
-        if (state.status === 'save') {
-          const title = state.title.trim();
-          if (!title) {
-            dispatch({
-              type: 'SET_STATUS_ERROR',
-              payload: { error: 'Bookmark title cannot be empty' }
+        switch (state.status) {
+          case 'closed':
+            return;
+          case 'command': {
+            const selectedCommand = state.items[state.selectedIndex];
+            dispatchPaletteAction({
+              type: 'SET_STATUS',
+              payload: { status: 'closed' }
             });
-          } else {
-            dispatchPaletteAction({ type: 'CLOSE' });
-            handleAsyncAction(appContext, ctx => save(ctx, { title }));
+            if (typeof selectedCommand.action === 'function') {
+              handleAsyncAction(appContext, selectedCommand.action);
+            } else {
+              dispatch(selectedCommand.action);
+            }
+            return;
           }
-        } else if (
-          state.items &&
-          state.items.length > 0 &&
-          state.selectedIndex >= 0
-        ) {
-          const selectedCommand = state.items[state.selectedIndex];
-          dispatchPaletteAction({ type: 'CLOSE' });
-          if (typeof selectedCommand.action === 'function') {
-            handleAsyncAction(appContext, selectedCommand.action);
-          } else {
-            dispatch(selectedCommand.action);
+          case 'model-picker': {
+            const { focus, model, system } = state;
+            if (focus === 'model' && model) {
+              dispatchPaletteAction({
+                type: 'SET_MODEL_PICKER_MODEL',
+                payload: { model: model, done: true }
+              });
+            } else if (focus === 'system' && model) {
+              handleAsyncAction(appContext, ctx =>
+                switchModel(ctx, {
+                  model,
+                  system
+                })
+              );
+            }
+            return;
+          }
+          case 'save': {
+            const title = state.title.trim();
+            if (!title) {
+              dispatch({
+                type: 'SET_STATUS_ERROR',
+                payload: { error: 'Bookmark title cannot be empty' }
+              });
+            } else {
+              dispatchPaletteAction({
+                type: 'SET_STATUS',
+                payload: { status: 'closed' }
+              });
+              handleAsyncAction(appContext, ctx => save(ctx, { title }));
+            }
           }
         }
       }
     },
     { isActive: state.status !== 'closed' }
   );
+
+  const boxHeight = height - 2; // 2 for margin
+  const interiorHeight = height - 2 - 2 - 2 - 1; // 2 each for border, padding, margin, and 1 for input
 
   if (state.status === 'closed') {
     return null;
@@ -253,7 +327,7 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
     return (
       <Box
         margin={1}
-        height={height - 2}
+        height={boxHeight}
         borderStyle="round"
         borderColor="blue"
         padding={1}
@@ -274,13 +348,67 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
     );
   }
 
-  const maxVisibleItems = height - 2 - 2 - 2 - 1; // 2 each for border, padding, margin, and 1 for input
-  const visibleItems = state.items.slice(0, maxVisibleItems);
+  if (state.status === 'model-picker') {
+    const models = Object.keys(KNOWN_MODELS);
+
+    return (
+      <Box
+        margin={1}
+        height={boxHeight}
+        borderStyle="round"
+        borderColor="blue"
+        padding={1}
+        flexDirection="column"
+        overflowY="hidden"
+      >
+        {state.focus === 'model' ? (
+          <ScrollableSelectList
+            focusedIndex={models.indexOf(state.model ?? models[0])}
+            items={models}
+            maxVisibleItems={interiorHeight}
+            onFocusedIndexChange={index => {
+              if (index !== undefined) {
+                dispatchPaletteAction({
+                  type: 'SET_MODEL_PICKER_MODEL',
+                  payload: { model: models[index] }
+                });
+              }
+            }}
+            onSelectItem={model => {
+              dispatchPaletteAction({
+                type: 'SET_MODEL_PICKER_MODEL',
+                payload: { model, done: true }
+              });
+            }}
+            renderItem={(model, isFocused) => (
+              <Text key={model} inverse={isFocused}>
+                {model}
+              </Text>
+            )}
+          />
+        ) : (
+          <TextInput
+            value={state.system ?? ''}
+            onChange={value =>
+              dispatchPaletteAction({
+                type: 'SET_MODEL_PICKER_SYSTEM',
+                payload: { system: value }
+              })
+            }
+            placeholder="System prompt..."
+            focus={true}
+          />
+        )}
+      </Box>
+    );
+  }
+
+  const visibleItems = state.items.slice(0, interiorHeight);
 
   return (
     <Box
       margin={1}
-      height={height - 2}
+      height={boxHeight}
       borderStyle="round"
       borderColor="blue"
       padding={1}
@@ -312,9 +440,9 @@ export function CommandPalette({ appContext, height }: PaletteProps) {
             {item.label}
           </Text>
         ))}
-        {state.items.length > maxVisibleItems && (
+        {state.items.length > interiorHeight && (
           <Text dimColor>
-            ... {state.items.length - maxVisibleItems} more ...
+            ... {state.items.length - interiorHeight} more ...
           </Text>
         )}
       </Box>

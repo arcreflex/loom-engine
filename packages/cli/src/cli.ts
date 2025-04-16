@@ -1,5 +1,4 @@
 import { coalesceMessages, LoomEngine } from '@ankhdt/loom-engine';
-import type { ProviderName } from '@ankhdt/loom-engine';
 import path from 'path';
 import fs from 'fs/promises';
 import os from 'os';
@@ -9,6 +8,7 @@ import { ConfigStore } from './config.ts';
 import { start } from './App.tsx';
 import chalk from 'chalk';
 import { formatError, formatMessage } from './util.ts';
+import { parseModelString } from './parse-model-string.ts';
 
 /**
  * Resolves a directory path, expanding ~ to the user's home directory
@@ -18,35 +18,6 @@ function resolveDataDir(dataDir: string): string {
     return path.join(os.homedir(), dataDir.slice(1));
   }
   return dataDir;
-}
-
-/**
- * Parses a model string in the format "provider/model"
- */
-function parseModelString(modelString: string): {
-  provider: ProviderName;
-  model: string;
-} {
-  const parts = modelString.split('/');
-  if (parts.length !== 2) {
-    throw new Error(
-      'Invalid model format. Expected "provider/model" (e.g., "anthropic/claude-3-opus-20240229").'
-    );
-  }
-
-  switch (parts[0]) {
-    case 'openai':
-    case 'anthropic':
-      // case 'google':
-      return {
-        provider: parts[0],
-        model: parts[1]
-      };
-    default:
-      throw new Error(
-        `Unsupported provider "${parts[0]}". Supported providers: openai, anthropic, google.`
-      );
-  }
 }
 
 async function main() {

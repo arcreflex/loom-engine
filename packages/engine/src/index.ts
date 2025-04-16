@@ -13,3 +13,4 @@ export { Forest } from './forest.ts';
 // Re-export providers through a namespace
 import * as providers from './providers/index.ts';
 export { providers };
+export * from './providers/known-models.ts';

@@ -351,7 +351,10 @@ export function LoomApp({
         payload: { value: state.inputValue.replace(/p$/i, '') }
       });
 
-      dispatch({ type: 'PALETTE', payload: { type: 'OPEN' } });
+      dispatch({
+        type: 'PALETTE',
+        payload: { type: 'SET_STATUS', payload: { status: 'command' } }
+      });
     }
   });
 

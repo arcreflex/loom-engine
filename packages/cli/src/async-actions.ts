@@ -1,6 +1,7 @@
 import type { GenerateOptions, NodeId } from '@ankhdt/loom-engine';
 import type { AppContext } from './App.tsx';
 import { formatError } from './util.ts';
+import { parseModelString } from './parse-model-string.ts';
 
 export const UNREAD_TAG = 'cli/unread';
 
@@ -201,4 +202,20 @@ export async function deleteNodes(
   } else {
     dispatch({ type: 'FORCE_FETCH' });
   }
+}
+
+export async function switchModel(
+  { engine, dispatch }: AppContext,
+  args: { model: string; system: string | undefined }
+) {
+  const { model, provider } = parseModelString(args.model);
+
+  const rootConfig = {
+    provider,
+    model,
+    systemPrompt: args.system
+  };
+
+  const targetRoot = await engine.getForest().getOrCreateRoot(rootConfig);
+  dispatch({ type: 'SET_CURRENT_NODE_ID', payload: { nodeId: targetRoot.id } });
 }

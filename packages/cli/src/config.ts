@@ -169,4 +169,9 @@ function setEnvFromConfig(config: Config): void {
   if (config.providers?.openai?.apiKey && !process.env.OPENAI_API_KEY) {
     process.env.OPENAI_API_KEY = config.providers.openai.apiKey;
   }
+
+  // Set Google API key if present in config and not already set in env
+  if (config.providers?.google?.apiKey && !process.env.GOOGLE_API_KEY) {
+    process.env.GOOGLE_API_KEY = config.providers.google.apiKey;
+  }
 }

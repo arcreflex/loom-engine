@@ -120,14 +120,24 @@ export class FileSystemStore implements ILoomStore {
     return path.join(this.basePath, rootId, 'nodes');
   }
 
-  private nodeFilePath(rootId: RootId, nodeId: NodeId) {
+  private parseNodeId(nodeId: NodeId) {
     const [root, file] = nodeId.split('/');
-    if (root !== rootId) {
+    if (!root || !file) {
+      throw new Error(
+        `Invalid node ID format. Expected "rootId/node", but got ${nodeId}`
+      );
+    }
+    return { rootId: root as RootId, file };
+  }
+
+  private nodeFilePath(rootId: RootId, nodeId: NodeId) {
+    const parsed = this.parseNodeId(nodeId);
+    if (parsed.rootId !== rootId) {
       throw new Error(
         `Node ID ${nodeId} does not belong to root ${rootId}. Expected an id of the form ${rootId}/node-<number>`
       );
     }
-    return path.join(this.nodesDirPath(rootId), `${file}.json`);
+    return path.join(this.nodesDirPath(rootId), `${parsed.file}.json`);
   }
 
   /**
@@ -139,19 +149,21 @@ export class FileSystemStore implements ILoomStore {
     // Since we don't know the root ID, we need to search through all roots
     const roots = await this.listRootInfos();
 
-    for (const root of roots) {
-      if (root.id === nodeId) {
-        return root;
-      }
+    const directlyMatchingRoot = roots.find(r => r.id === nodeId);
+    if (directlyMatchingRoot) {
+      // If the node ID matches a root ID, return the root data
+      return directlyMatchingRoot;
+    }
 
+    const { rootId } = this.parseNodeId(nodeId);
+    const root = roots.find(r => r.id === rootId);
+    if (root) {
       const nodePath = this.nodeFilePath(root.id, nodeId);
-
       try {
         const data = await fs.readFile(nodePath, 'utf-8');
         return JSON.parse(data) as NodeData;
       } catch (_error) {
-        // Node not found in this root, continue to next root
-        continue;
+        this.log(`Could not load node ${nodeId}: ${_error}`);
       }
     }
 
