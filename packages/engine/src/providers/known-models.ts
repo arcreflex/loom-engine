@@ -58,6 +58,20 @@ export const KNOWN_MODELS: {
     cost: { input: 15, output: 75 }
   },
 
+  'openai/o3-2025-04-16': {
+    provider: 'openai',
+    model: 'o3-2025-04-16',
+    capabilities: { max_input_tokens: 200000, max_output_tokens: 100000 },
+    cost: { input: 10, output: 40, cached_input: 2.5 }
+  },
+
+  'openai/o4-mini-2025-04-16': {
+    provider: 'openai',
+    model: 'o4-mini-2025-04-16',
+    capabilities: { max_input_tokens: 200000, max_output_tokens: 100000 },
+    cost: { input: 1.1, output: 4.4, cached_input: 0.275 }
+  },
+
   'openai/gpt-4.1-2025-04-14': {
     provider: 'openai',
     model: 'gpt-4.1-2025-04-14',
