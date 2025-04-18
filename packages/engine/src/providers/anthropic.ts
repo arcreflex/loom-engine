@@ -1,4 +1,5 @@
 import type { Logger } from '../log.ts';
+import { KNOWN_MODELS } from './known-models.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -78,12 +79,17 @@ export class AnthropicProvider implements IProvider {
         throw new Error('stop must be an array');
       }
 
+      const modelMaxTokens =
+        KNOWN_MODELS[`anthropic/${request.model}`]?.capabilities
+          .max_output_tokens ?? Infinity;
+      const adjusted_max_tokens = Math.min(max_tokens, modelMaxTokens);
+
       // Create message with Anthropic API
       const req = {
         model: request.model,
         messages: anthropicMessages,
         temperature,
-        max_tokens,
+        max_tokens: adjusted_max_tokens,
         top_p,
         top_k,
         stop_sequences,

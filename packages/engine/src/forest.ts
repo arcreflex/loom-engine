@@ -145,6 +145,23 @@ export class Forest {
     return this.store.findNodes({ parentId: node.id, rootId });
   }
 
+  async getSiblings(nodeId: NodeId): Promise<NodeData[]> {
+    // Get the node
+    const node = await this.store.loadNode(nodeId);
+    if (!node || !node.parent_id) {
+      return []; // Node doesn't exist or has no parent
+    }
+
+    // Get the parent
+    const parentNode = await this.store.loadNode(node.parent_id);
+    if (!parentNode) {
+      return []; // Parent doesn't exist
+    }
+
+    const all = await this.getChildren(parentNode.id);
+    return all.filter(child => child.id !== nodeId);
+  }
+
   /**
    * Appends messages to a node, with prefix matching.
    * @returns The final node created or matched
@@ -325,6 +342,14 @@ export class Forest {
     );
   }
 
+  async deleteNodes(nodeIds: NodeId[]) {
+    return this.enqueue(async () => {
+      for (const nodeId of nodeIds) {
+        await this.deleteNodeUnsafe(nodeId, false);
+      }
+    });
+  }
+
   private async deleteNodeUnsafe(
     nodeId: NodeId,
     reparentToGrandparent: boolean
@@ -372,7 +397,7 @@ export class Forest {
     return parentNode;
   }
 
-  private async findAllDescendants(node: Node): Promise<NodeId[]> {
+  async findAllDescendants(node: Node): Promise<NodeId[]> {
     const descendants: NodeId[] = [];
     for (const childId of node.child_ids) {
       descendants.push(childId);
@@ -383,69 +408,6 @@ export class Forest {
       }
     }
     return descendants;
-  }
-
-  /**
-   * Deletes all sibling nodes of the given node (nodes with the same parent).
-   *
-   * @param nodeId - The ID of the node whose siblings should be deleted
-   * @returns The parent node with updated child_ids, or null if the node doesn't exist
-   */
-  async deleteSiblings(nodeId: NodeId): Promise<Node | null> {
-    return this.enqueue(async () => {
-      // Get the node
-      const node = await this.store.loadNode(nodeId);
-      if (!node || !node.parent_id) {
-        return null; // Node doesn't exist or has no parent
-      }
-
-      // Get the parent
-      const parentNode = await this.store.loadNode(node.parent_id);
-      if (!parentNode) {
-        return null; // Parent doesn't exist
-      }
-
-      // Find all siblings (all children of the parent except this node)
-      const siblings = parentNode.child_ids.filter(id => id !== nodeId);
-
-      // Delete each sibling
-      for (const siblingId of siblings) {
-        await this.deleteNodeUnsafe(siblingId, false);
-      }
-
-      // Update parent's child_ids to contain only this node
-      parentNode.child_ids = [nodeId];
-      await this.store.saveNode(parentNode);
-
-      return parentNode;
-    });
-  }
-
-  /**
-   * Deletes all children of the given node.
-   *
-   * @param nodeId - The ID of the node whose children should be deleted
-   * @returns The node with updated child_ids, or null if the node doesn't exist
-   */
-  async deleteChildren(nodeId: NodeId): Promise<Node | null> {
-    return this.enqueue(async () => {
-      // Get the node
-      const node = await this.store.loadNode(nodeId);
-      if (!node) {
-        return null; // Node doesn't exist
-      }
-
-      // Delete each child
-      for (const childId of node.child_ids) {
-        await this.deleteNodeUnsafe(childId, false);
-      }
-
-      // Update the node's child_ids to be empty
-      node.child_ids = [];
-      await this.store.saveNode(node);
-
-      return node;
-    });
   }
 
   async updateNodeMetadata(
@@ -464,5 +426,13 @@ export class Forest {
         metadata
       });
     });
+  }
+
+  /**
+   * Gets the structural information of all nodes across all roots.
+   * @returns An array of node structures suitable for graph visualization
+   */
+  async getAllNodeStructures() {
+    return this.store.listAllNodeStructures();
   }
 }

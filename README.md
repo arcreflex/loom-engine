@@ -99,6 +99,10 @@ pnpm lint
 
 MIT
 
+## Future Features
+
+- [ ] Add generation parameter preset selection to the CLI interface.
+
 ## Credits
 
 * [@repligate](https://x.com/repligate) for the original "loom of time" idea.

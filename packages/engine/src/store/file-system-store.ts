@@ -2,7 +2,7 @@ import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
 import type { NodeData, NodeId, RootId, RootData, Node } from '../types.ts';
-import type { ILoomStore, NodeQueryCriteria } from './types.ts';
+import type { ILoomStore, NodeQueryCriteria, NodeStructure } from './types.ts';
 import { initializeLog, log } from '../log.ts';
 
 class IdCache<T extends string> {
@@ -279,5 +279,63 @@ export class FileSystemStore implements ILoomStore {
 
   log(msg: unknown) {
     log(this.basePath, msg);
+  }
+
+  /**
+   * Lists the structure of all nodes across all roots, excluding content.
+   * @returns An array of NodeStructure objects
+   */
+  async listAllNodeStructures(): Promise<NodeStructure[]> {
+    const roots = await this.listRootInfos();
+    const allStructures: NodeStructure[] = [];
+
+    // First, add root structures
+    for (const root of roots) {
+      allStructures.push({
+        id: root.id,
+        parent_id: null,
+        child_ids: root.child_ids,
+        root_id: root.id,
+        timestamp: root.createdAt,
+        role: 'system' // Roots are treated as system nodes
+      });
+
+      // Get nodes directory path for this root
+      const nodesDir = this.nodesDirPath(root.id);
+
+      try {
+        // Read all node files in this root's directory
+        const files = await fs.readdir(nodesDir);
+
+        for (const file of files) {
+          if (!file.endsWith('.json')) continue;
+
+          try {
+            // Read and parse the node file
+            const nodePath = path.join(nodesDir, file);
+            const data = await fs.readFile(nodePath, 'utf-8');
+            const node = JSON.parse(data) as NodeData;
+
+            // Create the NodeStructure with minimal information
+            allStructures.push({
+              id: node.id,
+              parent_id: node.parent_id,
+              child_ids: node.child_ids,
+              root_id: node.root_id,
+              timestamp: node.metadata.timestamp,
+              role: node.message.role
+            });
+          } catch (error) {
+            this.log(`Error reading node file ${file}: ${error}`);
+            // Continue with next file on error
+          }
+        }
+      } catch (error) {
+        this.log(`Error reading nodes directory for root ${root.id}: ${error}`);
+        // Continue with next root on error
+      }
+    }
+
+    return allStructures;
   }
 }

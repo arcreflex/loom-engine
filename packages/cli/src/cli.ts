@@ -1,24 +1,16 @@
-import { coalesceMessages, LoomEngine } from '@ankhdt/loom-engine';
-import path from 'path';
+import {
+  coalesceMessages,
+  LoomEngine,
+  ConfigStore,
+  resolveDataDir
+} from '@ankhdt/loom-engine';
 import fs from 'fs/promises';
-import os from 'os';
 import { hideBin } from 'yargs/helpers';
 import yargs from 'yargs/yargs';
-import { ConfigStore } from './config.ts';
 import { start } from './App.tsx';
 import chalk from 'chalk';
 import { formatError, formatMessage } from './util.ts';
-import { parseModelString } from './parse-model-string.ts';
-
-/**
- * Resolves a directory path, expanding ~ to the user's home directory
- */
-function resolveDataDir(dataDir: string): string {
-  if (dataDir.startsWith('~')) {
-    return path.join(os.homedir(), dataDir.slice(1));
-  }
-  return dataDir;
-}
+import { parseModelString } from '@ankhdt/loom-engine';
 
 async function main() {
   // Parse command line arguments

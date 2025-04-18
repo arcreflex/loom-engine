@@ -1,4 +1,5 @@
 import type { Logger } from '../log.ts';
+import { KNOWN_MODELS } from './known-models.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
 import OpenAI from 'openai';
 
@@ -89,12 +90,17 @@ export class OpenAIProvider implements IProvider {
         throw new Error('stop must be an array');
       }
 
+      const modelMaxTokens =
+        KNOWN_MODELS[`openai/${request.model}`]?.capabilities
+          .max_output_tokens ?? Infinity;
+      const adjusted_max_tokens = Math.min(max_tokens, modelMaxTokens);
+
       // Create completion with OpenAI API
       const req = {
         model: request.model,
         messages: messages,
         temperature,
-        max_tokens,
+        max_completion_tokens: modelMaxTokens,
         top_p,
         frequency_penalty,
         presence_penalty,

@@ -1,7 +1,7 @@
 import type { GenerateOptions, NodeId, Role } from '@ankhdt/loom-engine';
 import type { AppContext } from './App.tsx';
 import { formatError } from './util.ts';
-import { parseModelString } from './parse-model-string.ts';
+import { parseModelString } from '@ankhdt/loom-engine';
 
 export const UNREAD_TAG = 'cli/unread';
 

@@ -70,6 +70,30 @@ export function createMockStore() {
       return Array.from(roots.values()).map(root => ({ ...root }));
     }),
 
+    listAllNodeStructures: mock.fn(async () => {
+      // Convert roots to NodeStructure objects
+      const rootStructures = Array.from(roots.values()).map(root => ({
+        id: root.id,
+        parent_id: null,
+        child_ids: root.child_ids,
+        root_id: root.id,
+        timestamp: root.createdAt,
+        role: 'system' as const
+      }));
+
+      // Convert nodes to NodeStructure objects
+      const nodeStructures = Array.from(nodes.values()).map(node => ({
+        id: node.id,
+        parent_id: node.parent_id,
+        child_ids: node.child_ids,
+        root_id: node.root_id,
+        timestamp: node.metadata.timestamp,
+        role: node.message.role
+      }));
+
+      return [...rootStructures, ...nodeStructures];
+    }),
+
     log: console.log.bind(console)
   };
 

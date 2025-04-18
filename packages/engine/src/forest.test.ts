@@ -290,6 +290,47 @@ describe('Forest', () => {
     });
   });
 
+  describe('getSiblings', () => {
+    it('should return the siblings of a node', async () => {
+      // Setup
+      const parentNode = mockStoreWrapper.createTestNode(
+        'parent',
+        'root1',
+        null,
+        createMessage('user', 'Parent node')
+      );
+      const sibling1 = mockStoreWrapper.createTestNode(
+        'sibling1',
+        'root1',
+        'parent',
+        createMessage('assistant', 'Sibling 1 message')
+      );
+      const sibling2 = mockStoreWrapper.createTestNode(
+        'sibling2',
+        'root1',
+        'parent',
+        createMessage('user', 'Sibling 2 message')
+      );
+      const targetNode = mockStoreWrapper.createTestNode(
+        'target',
+        'root1',
+        'parent',
+        createMessage('user', 'Target node')
+      );
+      parentNode.child_ids = [sibling1.id, sibling2.id, targetNode.id];
+      await mockStoreWrapper.mockStore.saveNode(parentNode);
+      await mockStoreWrapper.mockStore.saveNode(sibling1);
+      await mockStoreWrapper.mockStore.saveNode(sibling2);
+      await mockStoreWrapper.mockStore.saveNode(targetNode);
+      // Execute
+      const result = await forest.getSiblings(targetNode.id);
+      // Verify
+      assert.equal(result.length, 2);
+      assert.deepEqual(result[0], sibling1);
+      assert.deepEqual(result[1], sibling2);
+    });
+  });
+
   describe('append', () => {
     it('should append messages to a node', async () => {
       // Setup
@@ -814,173 +855,6 @@ describe('Forest', () => {
 
       // Verify
       assert.equal(result, null);
-    });
-  });
-
-  describe('deleteSiblings', () => {
-    it('should delete all siblings of a node', async () => {
-      // Setup
-      const parent = mockStoreWrapper.createTestNode(
-        'parent',
-        'root1',
-        null,
-        createMessage('user', 'first')
-      );
-      const node = mockStoreWrapper.createTestNode(
-        'node1',
-        'root1',
-        'parent',
-        createMessage('assistant', 'second')
-      );
-      const sibling1 = mockStoreWrapper.createTestNode(
-        'sibling1',
-        'root1',
-        'parent',
-        createMessage('assistant', 'third')
-      );
-      const sibling2 = mockStoreWrapper.createTestNode(
-        'sibling2',
-        'root1',
-        'parent',
-        createMessage('assistant', 'fourth')
-      );
-
-      parent.child_ids = [node.id, sibling1.id, sibling2.id];
-      await mockStoreWrapper.mockStore.saveNode(parent);
-      await mockStoreWrapper.mockStore.saveNode(node);
-      await mockStoreWrapper.mockStore.saveNode(sibling1);
-      await mockStoreWrapper.mockStore.saveNode(sibling2);
-
-      // Execute
-      await forest.deleteSiblings(node.id);
-
-      // Verify parent was updated
-      const updatedParent = await mockStoreWrapper.mockStore.loadNode(
-        parent.id
-      );
-      assert.equal(updatedParent?.child_ids.length, 1);
-      assert.equal(updatedParent?.child_ids[0], node.id);
-
-      // Verify siblings were deleted
-      const deletedSibling1 = await mockStoreWrapper.mockStore.loadNode(
-        sibling1.id
-      );
-      const deletedSibling2 = await mockStoreWrapper.mockStore.loadNode(
-        sibling2.id
-      );
-
-      assert.equal(deletedSibling1, null);
-      assert.equal(deletedSibling2, null);
-
-      // Verify node still exists
-      const nodeStillExists = await mockStoreWrapper.mockStore.loadNode(
-        node.id
-      );
-      assert.ok(nodeStillExists);
-    });
-
-    it('should return null if the node does not exist', async () => {
-      // Setup
-      const nonExistentNodeId = mockNodeId('nonexistent');
-
-      // Execute
-      const result = await forest.deleteSiblings(nonExistentNodeId);
-
-      // Verify
-      assert.equal(result, null);
-    });
-
-    it('should return null if the node has no parent', async () => {
-      // Setup - root node with no parent
-      const rootNode = mockStoreWrapper.createTestNode(
-        'root_node',
-        'root1',
-        null,
-        createMessage('user', 'first')
-      );
-
-      // Execute
-      const result = await forest.deleteSiblings(rootNode.id);
-
-      // Verify
-      assert.equal(result, null);
-    });
-  });
-
-  describe('deleteChildren', () => {
-    it('should delete all children of a node', async () => {
-      // Setup
-      const parent = mockStoreWrapper.createTestNode(
-        'parent',
-        'root1',
-        null,
-        createMessage('assistant', 'blah')
-      );
-      const child1 = mockStoreWrapper.createTestNode(
-        'child1',
-        'root1',
-        'parent',
-        createMessage('assistant', 'blah')
-      );
-      const child2 = mockStoreWrapper.createTestNode(
-        'child2',
-        'root1',
-        'parent',
-        createMessage('assistant', 'blah')
-      );
-
-      parent.child_ids = [child1.id, child2.id];
-      await mockStoreWrapper.mockStore.saveNode(parent);
-      await mockStoreWrapper.mockStore.saveNode(child1);
-      await mockStoreWrapper.mockStore.saveNode(child2);
-
-      // Execute
-      await forest.deleteChildren(parent.id);
-
-      // Verify parent was updated
-      const updatedParent = await mockStoreWrapper.mockStore.loadNode(
-        parent.id
-      );
-      assert.equal(updatedParent?.child_ids.length, 0);
-
-      // Verify children were deleted
-      const deletedChild1 = await mockStoreWrapper.mockStore.loadNode(
-        child1.id
-      );
-      const deletedChild2 = await mockStoreWrapper.mockStore.loadNode(
-        child2.id
-      );
-
-      assert.equal(deletedChild1, null);
-      assert.equal(deletedChild2, null);
-    });
-
-    it('should return null if the node does not exist', async () => {
-      // Setup
-      const nonExistentNodeId = mockNodeId('nonexistent');
-
-      // Execute
-      const result = await forest.deleteChildren(nonExistentNodeId);
-
-      // Verify
-      assert.equal(result, null);
-    });
-
-    it('should work correctly for a node with no children', async () => {
-      // Setup
-      const node = mockStoreWrapper.createTestNode(
-        'node1',
-        'root1',
-        null,
-        createMessage('assistant', 'blah')
-      );
-
-      // Execute
-      const result = await forest.deleteChildren(node.id);
-
-      // Verify
-      assert.deepEqual(result, node);
-      assert.equal(node.child_ids.length, 0);
     });
   });
 

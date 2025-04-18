@@ -34,3 +34,4 @@ data/
 
 # Coding agent workspace
 playground/
+**/.claude/settings.local.json

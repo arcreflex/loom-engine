@@ -43,8 +43,9 @@ export class GoogleProvider implements IProvider {
 
       // Add conversation history
       for (const msg of request.messages) {
+        const role: 'user' | 'model' = msg.role === 'user' ? 'user' : 'model';
         messages.push({
-          role: msg.role,
+          role,
           parts: [{ text: msg.content }]
         });
       }

@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "cd packages/cli && npx tsx src/cli.ts",
+    "start:gui": "cd packages/gui && pnpm dev",
     "dev": "pnpm -r dev",
     "lint": "eslint .",
     "format": "prettier --write \"packages/**/*.ts\"",
@@ -22,6 +23,8 @@
     "@typescript-eslint/eslint-plugin": "^8.29.1",
     "@typescript-eslint/parser": "^8.29.1",
     "eslint": "^9.24.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.19",
     "globals": "^16.0.0",
     "husky": "^9.1.7",
     "lint-staged": "^15.5.0",
@@ -41,6 +44,9 @@
     "*.{js,ts,jsx,tsx}": [
       "prettier --write",
       "eslint --fix"
+    ],
+    "*.css": [
+      "prettier --write"
     ]
   }
 }

@@ -1,4 +1,23 @@
-import type { NodeId, RootId, RootData, Node, NodeData } from '../types.ts';
+import type {
+  NodeId,
+  RootId,
+  RootData,
+  Node,
+  NodeData,
+  Role
+} from '../types.ts';
+
+/**
+ * Represents the minimal structure of a node for graph visualization.
+ */
+export interface NodeStructure {
+  id: NodeId;
+  parent_id: NodeId | null; // Use null for roots
+  child_ids: NodeId[];
+  root_id: RootId;
+  timestamp: string;
+  role: Role | 'system'; // Include role for styling
+}
 
 /**
  * Criteria for querying nodes in the store.
@@ -62,6 +81,12 @@ export interface ILoomStore {
    * @returns An array of root information
    */
   listRootInfos: () => Promise<RootData[]>;
+
+  /**
+   * Lists the structure of all nodes across all roots, excluding content.
+   * @returns An array of NodeStructure objects
+   */
+  listAllNodeStructures: () => Promise<NodeStructure[]>;
 
   log(msg: unknown): void;
 }

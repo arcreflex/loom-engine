@@ -5,7 +5,7 @@
   "type": "module",
   "exports": {
     "types": "./src/index.ts",
-    "default": "./dist/index.js"
+    "default": "./src/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -25,6 +25,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.17.1",
     "@google/genai": "^0.8.0",
+    "@iarna/toml": "^2.2.5",
     "openai": "^4.33.1"
   },
   "devDependencies": {
