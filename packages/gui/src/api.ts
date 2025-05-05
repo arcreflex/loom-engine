@@ -240,6 +240,10 @@ export async function listModels(): Promise<string[]> {
 export async function getGraphTopology(): Promise<NodeStructure[]> {
   return fetchApi<NodeStructure[]>('/api/graph/topology');
 }
+// Alias for fetching the entire graph topology
+export async function getEntireGraph(): Promise<NodeStructure[]> {
+  return getGraphTopology();
+}
 
 export async function getConfigPresets(): Promise<PresetConfig> {
   const rawConfig = await fetchApi<{

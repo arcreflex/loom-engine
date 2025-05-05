@@ -34,7 +34,7 @@ import { GraphView } from './components/GraphView';
 import { InputArea } from './components/InputArea';
 import { CommandPalette } from './components/CommandPalette';
 import { ModelSwitcherModal } from './components/ModelSwitcherModal.tsx';
-import { HomePage } from './components/HomePage';
+import HomeView from './components/HomeView';
 import type { Command, GenerateOptions, DisplayMessage } from './types';
 import type { NodeData, NodeId, Role } from '@ankhdt/loom-engine';
 import { ChildNavigator } from './components/ChildNavigator';
@@ -1099,7 +1099,7 @@ function App() {
   return (
     <AppProvider>
       <Routes>
-        <Route index element={<HomePage />} />
+        <Route index element={<HomeView />} />
         <Route path="/nodes/:nodeId" element={<AppContent />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
