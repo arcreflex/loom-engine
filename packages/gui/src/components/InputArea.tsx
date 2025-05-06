@@ -29,9 +29,8 @@ export function InputArea({
   const [content, setContent] = useState('');
 
   const handleSubmit = async () => {
-    if (!content.trim() || disabled) return;
+    if (disabled) return;
     setContent('');
-
     try {
       // Use the requestOnSubmit prop directly
       await onSend(role, content.trim(), requestOnSubmit);
@@ -42,24 +41,24 @@ export function InputArea({
   };
 
   const handleKeyDown = async (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    // Type event correctly
-    // Ctrl+Enter or Cmd+Enter submits *without* generating (useful override)
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      // Send but explicitly *don't* generate
-      setContent('');
-      try {
-        await onSend(role, content.trim(), false);
-      } catch (error) {
-        console.error('Failed to send message:', error);
+    if (event.key === 'Enter') {
+      // ctrl-enter = submit but don't generate
+      if (event.ctrlKey) {
+        try {
+          event.preventDefault();
+          setContent('');
+          await onSend(role, content.trim(), false);
+        } catch (error) {
+          console.error('Failed to send message:', error);
+        }
+        return;
       }
-      return;
-    }
 
-    // Enter alone submits (respecting requestOnSubmit)
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      handleSubmit();
+      // cmd-enter = submit
+      if (event.metaKey) {
+        event.preventDefault();
+        handleSubmit();
+      }
     }
   };
 
@@ -113,7 +112,7 @@ export function InputArea({
             }
           }}
           disabled={disabled}
-          placeholder="Type message... (Shift+Enter for newline, Ctrl+Enter to send w/o generating)"
+          placeholder="Type message... (Cmd+Enter to send & generate, Ctrl+Enter to send w/o generating)"
           className="w-full resize-none p-2 bg-transparent outline-none min-h-[40px]" // Reduced padding/min-height
           minRows={1} // Start smaller
           maxRows={10} // Limit excessive growth
@@ -121,10 +120,10 @@ export function InputArea({
         {/* Send button stays aligned to the bottom right */}
         <button
           onClick={handleSubmit}
-          disabled={!content.trim() || disabled}
-          className={`self-end p-2 m-1 btn ${!content.trim() || disabled ? 'opacity-50 cursor-not-allowed' : ''}`} // Adjusted margin
+          disabled={disabled}
+          className={`self-end text-lg px-2 mx-1 btn ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`} // Adjusted margin
         >
-          Send
+          ⌘⏎
         </button>
       </div>
     </div>
