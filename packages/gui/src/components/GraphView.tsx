@@ -305,22 +305,26 @@ function GraphViewInner({
     [onNodeClick] // Dependency array for useCallback
   );
 
-  const { previewRoot, previewMessages } = state.previewNodeId ? state : {};
+  const { previewNodeId, previewRoot, previewMessages } = state.previewNodeId
+    ? state
+    : {};
 
   // Prepare the content for the tooltip
   const tooltipContent = useMemo(() => {
-    if (!previewMessages || !previewRoot || previewMessages.length === 0) {
+    if (!previewNodeId || !previewMessages || !previewRoot) {
       return null;
     }
     const maxMessagesToShow = 3;
     const relevantMessages = [];
-    relevantMessages.push(previewMessages[0]);
-    const remaining = Math.min(
-      maxMessagesToShow - 1,
-      previewMessages.length - 1
-    );
-    if (remaining > 0) {
-      relevantMessages.push(...previewMessages.slice(-remaining));
+    if (previewMessages.length) {
+      relevantMessages.push(previewMessages[0]);
+      const remaining = Math.min(
+        maxMessagesToShow - 1,
+        previewMessages.length - 1
+      );
+      if (remaining > 0) {
+        relevantMessages.push(...previewMessages.slice(-remaining));
+      }
     }
 
     const renderedMessages = [];
@@ -345,23 +349,16 @@ function GraphViewInner({
       );
     }
 
-    const bookmark = bookmarkMap.get(
-      previewMessages[previewMessages.length - 1].nodeId
-    );
+    const bookmark = bookmarkMap.get(previewNodeId);
 
     return (
       <div className="flex flex-col text-sm leading-tight">
         {bookmark && (
           <div className="text-terminal-focus text-xs">{bookmark.title}</div>
         )}
-        {previewRoot?.systemPrompt && (
-          <div className="text-gray-300 italic mb-2 line-clamp-2">
-            <span className="text-gray-400 font-semibold uppercase">
-              System:
-            </span>{' '}
-            {previewRoot.systemPrompt}
-          </div>
-        )}
+        <div className="text-gray-300 text-xs mb-2 line-clamp-2">
+          [{previewRoot.model}] {previewRoot.systemPrompt}
+        </div>
         {renderedMessages[0]}
         {previewMessages.length > maxMessagesToShow && (
           <div className="text-gray-400 text-xs mt-1">
@@ -371,7 +368,7 @@ function GraphViewInner({
         {renderedMessages.slice(1)}
       </div>
     );
-  }, [bookmarkMap, previewMessages, previewRoot]);
+  }, [previewNodeId, bookmarkMap, previewMessages, previewRoot]);
 
   const onNodeHoverRef = useRef(onNodeHover);
   useEffect(() => {
