@@ -44,6 +44,22 @@ export function CommandPalette({
     }
   }, [isOpen]);
 
+  // Scroll selected item into view
+  useEffect(() => {
+    if (
+      filteredCommands.length > 0 &&
+      selectedIndex >= 0 &&
+      selectedIndex < filteredCommands.length
+    ) {
+      const selectedItemElement = document.getElementById(
+        `command-item-${filteredCommands[selectedIndex].id}`
+      );
+      if (selectedItemElement) {
+        selectedItemElement.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [selectedIndex, filteredCommands]);
+
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
@@ -93,6 +109,7 @@ export function CommandPalette({
               {filteredCommands.map((command, index) => (
                 <li
                   key={command.id}
+                  id={`command-item-${command.id}`} // Added id for scrolling
                   className={`p-3 cursor-pointer ${index === selectedIndex ? 'bg-terminal-selection' : 'hover:bg-terminal-border'}`}
                   onClick={() => {
                     onSelectedIndexChange(index);

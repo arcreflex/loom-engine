@@ -1,6 +1,6 @@
 // packages/gui/src/components/InputArea.tsx
 import { Role } from '@ankhdt/loom-engine';
-import { KeyboardEvent, useState } from 'react'; // Removed unused setRequestOnSubmit prop
+import { KeyboardEvent, useState, useRef, useEffect } from 'react'; // Modified import
 import TextareaAutosize from 'react-textarea-autosize';
 import type { GenerateOptions } from '../types';
 
@@ -12,6 +12,7 @@ interface InputAreaProps {
   ) => Promise<void>;
   role: Role; // Receive current role from App
   requestOnSubmit: boolean; // Receive status from App
+  currentNodeId?: string | null; // Added currentNodeId prop
   disabled?: boolean;
   generationParams: GenerateOptions | null; // Generation parameters to display
   handleLargePaste?: (content: string) => void | Promise<void>; // Function to handle large paste events
@@ -21,12 +22,21 @@ export function InputArea({
   onSend,
   role, // Use prop
   requestOnSubmit, // Use prop
+  currentNodeId, // Use prop
   disabled = false,
   generationParams,
   handleLargePaste
 }: InputAreaProps) {
   const PASTE_THRESHOLD_CHARS = 500; // Threshold for what constitutes a "large" paste
   const [content, setContent] = useState('');
+  const textareaRef = useRef<HTMLTextAreaElement>(null); // Added ref for the textarea
+
+  // useEffect to focus the textarea when the currentNodeId changes or it becomes enabled
+  useEffect(() => {
+    if (textareaRef.current && !disabled) {
+      textareaRef.current.focus();
+    }
+  }, [currentNodeId, disabled]); // Dependencies: currentNodeId and disabled status
 
   const handleSubmit = async () => {
     if (disabled) return;
@@ -101,6 +111,7 @@ export function InputArea({
         {' '}
         {/* Use items-end */}
         <TextareaAutosize
+          ref={textareaRef} // Assigned ref to TextareaAutosize
           value={content}
           onChange={e => setContent(e.target.value)}
           onKeyDown={handleKeyDown}

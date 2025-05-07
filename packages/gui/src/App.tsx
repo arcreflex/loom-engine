@@ -1086,6 +1086,7 @@ function AppContent() {
         role={inputRole}
         generationParams={effectiveGenerationParams}
         handleLargePaste={handleLargePasteSubmit}
+        currentNodeId={currentNode?.id} // Pass current node ID
       />
 
       <ChildNavigator
