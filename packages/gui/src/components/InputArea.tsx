@@ -43,7 +43,7 @@ export function InputArea({
     setContent('');
     try {
       // Use the requestOnSubmit prop directly
-      await onSend(role, content.trim(), requestOnSubmit);
+      await onSend(role, content, requestOnSubmit);
     } catch (error) {
       console.error('Failed to send message:', error);
       // Maybe show an error indication here later?
@@ -57,7 +57,7 @@ export function InputArea({
         try {
           event.preventDefault();
           setContent('');
-          await onSend(role, content.trim(), false);
+          await onSend(role, content, false);
         } catch (error) {
           console.error('Failed to send message:', error);
         }
