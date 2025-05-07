@@ -117,7 +117,11 @@ export function InputArea({
           onKeyDown={handleKeyDown}
           onPaste={event => {
             const pastedText = event.clipboardData.getData('text');
-            if (pastedText.length > PASTE_THRESHOLD_CHARS && handleLargePaste) {
+            if (
+              content.trim() === '' &&
+              pastedText.length > PASTE_THRESHOLD_CHARS &&
+              handleLargePaste
+            ) {
               event.preventDefault();
               handleLargePaste(pastedText);
             }
