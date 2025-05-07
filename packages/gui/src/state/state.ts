@@ -3,8 +3,7 @@ import type { Role } from '@ankhdt/loom-engine';
 
 export const initialState: GuiAppState = {
   // Core Data
-  currentNodeId: null,
-  currentRootId: null,
+  currentNode: null,
   root: null,
   messages: [],
   children: [],
@@ -20,6 +19,7 @@ export const initialState: GuiAppState = {
 
   // Metadata
   bookmarks: [],
+  roots: [],
 
   // Generation Presets
   presets: {},

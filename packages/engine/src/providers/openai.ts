@@ -100,7 +100,7 @@ export class OpenAIProvider implements IProvider {
         model: request.model,
         messages: messages,
         temperature,
-        max_completion_tokens: modelMaxTokens,
+        max_completion_tokens: adjusted_max_tokens,
         top_p,
         frequency_penalty,
         presence_penalty,

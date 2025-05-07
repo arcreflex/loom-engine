@@ -4,7 +4,8 @@ import type {
   Node,
   NodeData,
   Role,
-  Bookmark
+  Bookmark,
+  RootData
 } from '@ankhdt/loom-engine';
 import type { DisplayMessage, GenerateOptions } from '../types';
 import type { PresetDefinition } from '../api';
@@ -62,6 +63,9 @@ export interface GuiAppState {
   // --- Metadata ---
   /** The list of saved bookmarks. */
   bookmarks: Bookmark[];
+
+  /** The list of root nodes (conversations) available in the application. */
+  roots: RootData[];
 
   // --- Generation Presets ---
   /** Available generation parameter presets */
@@ -121,6 +125,7 @@ export type GuiAppAction =
 
   // --- Metadata Updates ---
   | { type: 'SET_BOOKMARKS'; payload: { bookmarks: Bookmark[] } }
+  | { type: 'SET_ROOTS'; payload: { roots: RootData[] } }
 
   // --- Model Switcher Modal ---
   | { type: 'OPEN_MODEL_SWITCHER' }

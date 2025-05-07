@@ -99,6 +99,8 @@ export function guiAppReducer(
     // --- Metadata Updates ---
     case 'SET_BOOKMARKS':
       return { ...state, bookmarks: action.payload.bookmarks };
+    case 'SET_ROOTS':
+      return { ...state, roots: action.payload.roots };
 
     // --- Model Switcher Modal ---
     case 'OPEN_MODEL_SWITCHER':

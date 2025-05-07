@@ -25,7 +25,8 @@ import {
   getDefaultConfig,
   setActivePreset,
   getGraphTopology,
-  NodeStructure
+  NodeStructure,
+  listRoots
 } from './api';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { StatusBar } from './components/StatusBar';
@@ -174,11 +175,13 @@ function AppContent() {
       payload: { operation: 'Initializing' }
     });
     try {
-      const [fetchedBookmarks, presetConfig, defaults] = await Promise.all([
-        listBookmarks(),
-        getConfigPresets(), // Fetch presets
-        getDefaultConfig() // Fetch defaults
-      ]);
+      const [roots, fetchedBookmarks, presetConfig, defaults] =
+        await Promise.all([
+          listRoots(),
+          listBookmarks(),
+          getConfigPresets(), // Fetch presets
+          getDefaultConfig() // Fetch defaults
+        ]);
 
       // Set preset config and defaults first
       dispatch({
@@ -200,6 +203,12 @@ function AppContent() {
       dispatch({
         type: 'SET_BOOKMARKS',
         payload: { bookmarks: fetchedBookmarks }
+      });
+
+      // Set roots
+      dispatch({
+        type: 'SET_ROOTS',
+        payload: { roots }
       });
 
       // Set status to idle after loading config/bookmarks
@@ -792,7 +801,26 @@ function AppContent() {
         disabled:
           status.type === 'loading' || bookmark.nodeId === currentNode?.id,
         execute: async () => {
-          await navigateToNode(bookmark.nodeId); // Use helper
+          navigateToNode(bookmark.nodeId); // Use helper
+        }
+      });
+    });
+
+    state.roots.forEach(root => {
+      let systemPrompt =
+        root.config.systemPrompt?.replace(/[\n\r]+/g, ' ') ??
+        '(empty system prompt)';
+      if (systemPrompt && systemPrompt.length > 50) {
+        systemPrompt = systemPrompt.substring(0, 50) + '...';
+      }
+
+      cmds.push({
+        id: `navigate-root-${root.id}`,
+        title: `Go to model: ${root.config.provider}/${root.config.model} ${systemPrompt}`,
+        category: 'Roots',
+        disabled: status.type === 'loading' || root.id === currentRootId,
+        execute: async () => {
+          navigateToNode(root.id); // Use helper
         }
       });
     });
@@ -953,29 +981,31 @@ function AppContent() {
 
     return cmds;
   }, [
+    requestOnSubmit,
     currentNode,
     root,
-    messages, // Use messages instead of messages.length to fix linter warning
+    messages,
+    navigateToParent,
     status.type,
-    requestOnSubmit,
-    currentBookmark,
     bookmarks,
+    state.roots,
+    activePresetName,
+    presets,
+    graphTopology.length,
+    dispatch,
+    handleGenerate,
+    currentBookmark,
+    deleteBookmark,
+    saveBookmark,
+    navigateToNode,
+    currentRootId,
     children.length,
     siblings.length,
-    navigateToParent,
-    navigateToNode,
-    handleGenerate,
-    saveBookmark,
-    deleteBookmark,
-    deleteNode,
     deleteChildren,
     deleteSiblings,
-    presets,
-    activePresetName,
-    handleSetActivePreset,
-    graphTopology,
-    copyToClipboard, // Add the copyToClipboard function
-    dispatch // For direct dispatches like toggle/set role
+    deleteNode,
+    copyToClipboard,
+    handleSetActivePreset
   ]);
 
   // --- Keyboard shortcuts ---
