@@ -36,7 +36,7 @@ import { InputArea } from './components/InputArea';
 import { CommandPalette } from './components/CommandPalette';
 import { ModelSwitcherModal } from './components/ModelSwitcherModal.tsx';
 import HomeView from './components/HomeView';
-import type { Command, GenerateOptions, DisplayMessage } from './types';
+import type { Command, GenerateOptions } from './types';
 import type { NodeData, NodeId, Role } from '@ankhdt/loom-engine';
 import { ChildNavigator } from './components/ChildNavigator';
 
@@ -687,14 +687,6 @@ function AppContent() {
     [dispatch]
   );
 
-  // Handle copying a single message
-  const handleCopyMessage = useCallback(
-    (message: DisplayMessage) => {
-      copyToClipboard(message.content, 'Message content copied');
-    },
-    [copyToClipboard]
-  );
-
   // --- Command Palette ---
   const handleExecuteCommand = useCallback(
     async (command: Command) => {
@@ -1073,7 +1065,7 @@ function AppContent() {
               siblings={siblings}
               onNavigateToNode={navigateToNode} // Pass helper
               previewChild={previewChild}
-              onCopyMessage={handleCopyMessage}
+              onCopy={copyToClipboard}
             />
           </div>
         </Panel>

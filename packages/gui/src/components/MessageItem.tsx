@@ -4,8 +4,9 @@ import rehypeRaw from 'rehype-raw';
 import { NodeData } from '@ankhdt/loom-engine';
 import { type DisplayMessage } from '../types';
 import { useState, useEffect, forwardRef, ForwardedRef } from 'react';
-import DOMPurify from 'dompurify';
 import { Link } from 'react-router-dom';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
+import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
 // Threshold for collapsing messages (number of lines)
 const LINE_THRESHOLD = 30;
@@ -15,12 +16,12 @@ interface MessageItemProps {
   isLast: boolean;
   siblings?: NodeData[];
   isPreview?: boolean;
-  onCopyMessage?: (message: DisplayMessage) => void;
+  onCopy?: (content: string, notice: string) => void;
 }
 
 export const MessageItem = forwardRef(
   (
-    { message, siblings, isPreview, onCopyMessage }: MessageItemProps,
+    { message, siblings, isPreview, onCopy }: MessageItemProps,
     ref: ForwardedRef<HTMLDivElement>
   ) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
@@ -54,20 +55,57 @@ export const MessageItem = forwardRef(
     };
 
     const renderMarkdown = (raw: string) => {
-      const sanitized = DOMPurify.sanitize(raw, {
-        ALLOWED_TAGS: ['br']
-      });
       return (
         <div>
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
-            rehypePlugins={[rehypeRaw]} // Allows basic HTML like <br> often used by LLMs
-            // Optional: Customize components if needed later
-            // components={{
-            //   code({node, inline, className, children, ...props}) { ... }
-            // }}
+            rehypePlugins={[rehypeRaw]}
+            components={{
+              pre({ node: _node, ...props }) {
+                return <pre className="p-0 m-0 relative">{props.children}</pre>;
+              },
+              code(props) {
+                const {
+                  children,
+                  className,
+                  node: _node,
+                  ref: _ref,
+                  ...rest
+                } = props;
+                const match = /language-(\w+)/.exec(className || '');
+                const content = String(children).replace(/\n$/, '');
+                const lineCount = content.split('\n').length;
+                console.log(content);
+                return match || lineCount > 1 ? (
+                  <>
+                    <SyntaxHighlighter
+                      {...rest}
+                      PreTag={'div'}
+                      children={content}
+                      language={match?.[1]}
+                      style={atomDark}
+                    />
+                    {onCopy && (
+                      <button
+                        onClick={() =>
+                          onCopy(content, `Copied ${lineCount} lines`)
+                        }
+                        className="text-xs px-2 py-1 ml-2 btn opacity-50 hover:opacity-100 absolute right-2 bottom-2"
+                        title="Copy code content"
+                      >
+                        copy
+                      </button>
+                    )}
+                  </>
+                ) : (
+                  <code {...rest} className={className}>
+                    {children}
+                  </code>
+                );
+              }
+            }}
           >
-            {sanitized}
+            {raw}
           </ReactMarkdown>
         </div>
       );
@@ -114,6 +152,7 @@ export const MessageItem = forwardRef(
           prose-p:whitespace-pre-wrap
           prose-code:px-1
           prose-code:py-0.5
+          prose-code:m-0
           `}
         >
           {renderContent(message.role)}
@@ -148,9 +187,11 @@ export const MessageItem = forwardRef(
                 </Link>
               )}
             </div>
-            {onCopyMessage && (
+            {onCopy && (
               <button
-                onClick={() => onCopyMessage(message)}
+                onClick={() =>
+                  onCopy(message.content, 'Message content copied')
+                }
                 className="text-xs px-2 py-1 ml-2 btn opacity-50 hover:opacity-100"
                 title="Copy message content"
               >

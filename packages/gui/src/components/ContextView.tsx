@@ -10,7 +10,7 @@ interface ContextViewProps {
   siblings: NodeData[];
   onNavigateToNode: (nodeId: NodeId) => void;
   previewChild: NodeData | null;
-  onCopyMessage?: (message: DisplayMessage) => void;
+  onCopy?: (content: string, notice: string) => void;
 }
 
 export function ContextView({
@@ -18,7 +18,7 @@ export function ContextView({
   root,
   siblings,
   previewChild,
-  onCopyMessage
+  onCopy
 }: ContextViewProps) {
   // When the head (current node) changes--and on initial load--we want to scroll to it.
   const [lastScrolledToHead, setLastScrolledToHead] = useState<NodeId | null>(
@@ -110,7 +110,7 @@ export function ContextView({
             isLast={index === messages.length - 1 && !previewChild}
             siblings={index === messages.length - 1 ? siblings : undefined}
             ref={index === messages.length - 1 ? lastMessageRef : undefined}
-            onCopyMessage={onCopyMessage}
+            onCopy={onCopy}
           />
         ))}
 
