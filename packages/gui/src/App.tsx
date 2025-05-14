@@ -720,34 +720,29 @@ function AppContent() {
       {
         id: 'set-role-user',
         title: 'Set Input Role: User',
-        category: 'Input',
         execute: async () =>
           dispatch({ type: 'SET_INPUT_ROLE', payload: { role: 'user' } })
       },
       {
         id: 'set-role-assistant',
         title: 'Set Input Role: Assistant',
-        category: 'Input',
         execute: async () =>
           dispatch({ type: 'SET_INPUT_ROLE', payload: { role: 'assistant' } })
       },
       {
         id: 'toggle-generate-submit',
         title: `Toggle Generate on Submit (${requestOnSubmit ? 'ON' : 'OFF'})`,
-        category: 'Input',
         execute: async () => dispatch({ type: 'TOGGLE_REQUEST_ON_SUBMIT' })
       },
       {
         id: 'navigate-parent',
         title: 'Navigate to Parent',
-        category: 'Navigation',
         disabled: !currentNode?.parent_id || !root || !messages.length, // Disable if at root
         execute: navigateToParent // Use the helper
       },
       {
         id: 'generate',
         title: 'Generate Completion',
-        category: 'Generation',
         disabled: !currentNode || status.type === 'loading',
         execute: async () => {
           if (!currentNode) return;
@@ -762,7 +757,6 @@ function AppContent() {
         cmds.push({
           id: `delete-bookmark-${currentBookmark.title}`,
           title: `Remove Bookmark: ${currentBookmark.title}`,
-          category: 'Bookmarks',
           disabled: status.type === 'loading',
           execute: async () => {
             await deleteBookmark(currentBookmark.title); // Use helper
@@ -772,7 +766,6 @@ function AppContent() {
         cmds.push({
           id: 'create-bookmark',
           title: 'Save Bookmark',
-          category: 'Bookmarks',
           disabled: status.type === 'loading',
           execute: async () => {
             const title = prompt('Enter bookmark title:');
@@ -789,7 +782,6 @@ function AppContent() {
       cmds.push({
         id: `navigate-bookmark-${bookmark.title}`,
         title: `Go to: ${bookmark.title}`,
-        category: 'Bookmarks',
         disabled:
           status.type === 'loading' || bookmark.nodeId === currentNode?.id,
         execute: async () => {
@@ -799,17 +791,13 @@ function AppContent() {
     });
 
     state.roots.forEach(root => {
-      let systemPrompt =
-        root.config.systemPrompt?.replace(/[\n\r]+/g, ' ') ??
-        '(empty system prompt)';
-      if (systemPrompt && systemPrompt.length > 50) {
-        systemPrompt = systemPrompt.substring(0, 50) + '...';
-      }
+      const systemPrompt =
+        root.config.systemPrompt?.replace(/[\n\r]+/g, ' ') ?? '(empty)';
 
       cmds.push({
         id: `navigate-root-${root.id}`,
-        title: `Go to model: ${root.config.provider}/${root.config.model} ${systemPrompt}`,
-        category: 'Roots',
+        title: `Go to model: ${root.config.provider}/${root.config.model}`,
+        description: `System Prompt: ${systemPrompt}`,
         disabled: status.type === 'loading' || root.id === currentRootId,
         execute: async () => {
           navigateToNode(root.id); // Use helper
@@ -823,7 +811,7 @@ function AppContent() {
       cmds.push({
         id: 'delete-children',
         title: 'Delete All Children',
-        category: 'Node Management',
+        description: `Delete ${children.length} children`,
         disabled: !children.length || status.type === 'loading',
         execute: async () => {
           if (window.confirm('Delete all children of this node?')) {
@@ -837,7 +825,7 @@ function AppContent() {
       cmds.push({
         id: 'delete-siblings',
         title: 'Delete All Siblings (Except This)',
-        category: 'Node Management',
+        description: `Delete ${siblings.length} siblings`,
         disabled: !hasSiblings || status.type === 'loading',
         execute: async () => {
           if (
@@ -855,7 +843,6 @@ function AppContent() {
       cmds.push({
         id: 'delete-node',
         title: 'Delete This Node',
-        category: 'Node Management',
         disabled: nodeIsRoot || status.type === 'loading', // Cannot delete root or while loading
         execute: async () => {
           if (window.confirm('Delete this node and all its descendants?')) {
@@ -868,7 +855,6 @@ function AppContent() {
     cmds.push({
       id: 'switch-model',
       title: 'Switch Model / Conversation...',
-      category: 'Conversation',
       disabled: status.type === 'loading' || status.type === 'initializing',
       execute: async () => {
         dispatch({ type: 'OPEN_MODEL_SWITCHER' });
@@ -880,7 +866,6 @@ function AppContent() {
       cmds.push({
         id: 'copy-context-markdown',
         title: 'Copy Current Context (Markdown)',
-        category: 'Clipboard',
         disabled: !currentNode || messages.length === 0,
         execute: async () => {
           // Format messages into markdown
@@ -910,7 +895,6 @@ function AppContent() {
     cmds.push({
       id: 'activate-preset-default',
       title: `Activate Preset: Default Parameters ${activePresetName === null ? '✓' : ''}`,
-      category: 'Presets',
       disabled: status.type === 'loading' || activePresetName === null,
       execute: async () => {
         await handleSetActivePreset(null);
@@ -923,7 +907,6 @@ function AppContent() {
       cmds.push({
         id: `activate-preset-${name}`,
         title: `Activate Preset: ${name} ${isActive ? '✓' : ''}`,
-        category: 'Presets',
         disabled: status.type === 'loading' || isActive,
         execute: async () => {
           await handleSetActivePreset(name);
@@ -935,7 +918,6 @@ function AppContent() {
     cmds.push({
       id: 'graph-view-mode-single-root',
       title: 'Graph View: Single Root',
-      category: 'Graph View',
       disabled: graphTopology.length === 0,
       execute: async () => {
         dispatch({
@@ -948,7 +930,6 @@ function AppContent() {
     cmds.push({
       id: 'graph-view-mode-multi-root',
       title: 'Graph View: Multi Root',
-      category: 'Graph View',
       disabled: graphTopology.length === 0,
       execute: async () => {
         dispatch({
@@ -961,7 +942,6 @@ function AppContent() {
     cmds.push({
       id: 'graph-view-mode-compact',
       title: 'Graph View: Compact',
-      category: 'Graph View',
       disabled: graphTopology.length === 0,
       execute: async () => {
         dispatch({

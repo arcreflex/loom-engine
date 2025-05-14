@@ -24,7 +24,7 @@ export interface AppState {
 export type Command = {
   id: string;
   title: string;
-  category: string;
+  description?: string;
   execute: () => Promise<void>;
   disabled?: boolean;
 };

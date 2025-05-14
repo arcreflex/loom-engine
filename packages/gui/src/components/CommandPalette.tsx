@@ -30,7 +30,7 @@ export function CommandPalette({
   const filteredCommands = query
     ? fuzzysort
         .go(query, commands, {
-          keys: ['title', 'category'],
+          keys: ['title', 'description'],
           limit: 10,
           threshold: -10000 // Allow very low matches
         })
@@ -117,9 +117,11 @@ export function CommandPalette({
                   }}
                 >
                   <div className="font-medium">{command.title}</div>
-                  <div className="text-xs text-gray-400">
-                    {command.category}
-                  </div>
+                  {command.description && (
+                    <div className="text-xs text-gray-400 line-clamp-1">
+                      {command.description}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
