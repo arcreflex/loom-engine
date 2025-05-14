@@ -175,11 +175,12 @@ export async function listBookmarks(): Promise<Bookmark[]> {
 
 export async function saveBookmark(
   title: string,
-  nodeId: NodeId
+  nodeId: NodeId,
+  rootId: RootId
 ): Promise<Bookmark> {
   return fetchApi<Bookmark>('/api/bookmarks', {
     method: 'POST',
-    body: JSON.stringify({ title, nodeId })
+    body: JSON.stringify({ title, nodeId, rootId })
   });
 }
 

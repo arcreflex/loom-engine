@@ -1,6 +1,6 @@
 import fs from 'fs/promises';
 import path from 'path';
-import type { NodeId } from './types.ts';
+import type { NodeId, RootId } from './types.ts';
 import os from 'os';
 
 import * as toml from '@iarna/toml';
@@ -8,6 +8,7 @@ import { log } from './log.ts';
 
 export type Bookmark = {
   title: string;
+  rootId: RootId;
   nodeId: NodeId;
   createdAt: string;
   updatedAt: string;

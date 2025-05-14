@@ -8,7 +8,8 @@ import {
   resolveDataDir,
   NodeData,
   KNOWN_MODELS,
-  parseModelString
+  parseModelString,
+  RootId
 } from '@ankhdt/loom-engine';
 
 async function main() {
@@ -312,10 +313,12 @@ async function main() {
 
   app.post('/api/bookmarks', async (req, res) => {
     try {
-      const { title, nodeId } = req.body;
+      const { title, nodeId, rootId } = req.body;
 
-      if (!title || !nodeId) {
-        return res.status(400).json({ error: 'Title and nodeId are required' });
+      if (!title || !nodeId || !rootId) {
+        return res
+          .status(400)
+          .json({ error: 'Title, nodeId and rootId are required' });
       }
 
       const config = configStore.get();
@@ -328,6 +331,7 @@ async function main() {
       const bookmark = {
         title,
         nodeId: nodeId as NodeId,
+        rootId: rootId as RootId,
         createdAt: now,
         updatedAt: now
       };

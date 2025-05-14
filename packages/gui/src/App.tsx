@@ -473,10 +473,14 @@ function AppContent() {
         payload: { operation: 'Saving Bookmark' }
       });
       try {
-        if (!nodeIdFromUrl) {
+        if (!state.currentNode) {
           throw new Error('Cannot save bookmark: No current node ID in URL.');
         }
-        await apiSaveBookmark(title, nodeIdFromUrl as NodeId);
+        const rootId =
+          state.currentNode.parent_id === undefined
+            ? state.currentNode.id
+            : state.currentNode.root_id;
+        await apiSaveBookmark(title, state.currentNode.id, rootId);
         await fetchBookmarksAndUpdateState(); // Refresh bookmarks
         dispatch({ type: 'SET_STATUS_IDLE' });
       } catch (error) {
@@ -490,7 +494,7 @@ function AppContent() {
         });
       }
     },
-    [dispatch, fetchBookmarksAndUpdateState, nodeIdFromUrl, status.type]
+    [dispatch, fetchBookmarksAndUpdateState, state.currentNode, status.type]
   );
 
   const deleteBookmark = useCallback(
@@ -779,9 +783,13 @@ function AppContent() {
 
     // Add bookmark navigation commands
     bookmarks.forEach(bookmark => {
+      const rootId = bookmark.rootId;
+      const root = state.roots.find(r => r.id === rootId);
+      if (!root) return; // Skip if root not found
       cmds.push({
         id: `navigate-bookmark-${bookmark.title}`,
         title: `Go to: ${bookmark.title}`,
+        description: `${root.config.model}: ${root.config.systemPrompt ?? '(empty system prompt)'}`,
         disabled:
           status.type === 'loading' || bookmark.nodeId === currentNode?.id,
         execute: async () => {

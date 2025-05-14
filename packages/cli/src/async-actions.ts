@@ -108,7 +108,7 @@ export async function navigateToParent({
 }
 
 export async function save(
-  { state: { currentNodeId }, configStore }: AppContext,
+  { state: { currentNodeId, root }, configStore }: AppContext,
   args: { title: string }
 ) {
   const { title } = args;
@@ -127,6 +127,7 @@ export async function save(
       {
         title,
         nodeId: currentNodeId,
+        rootId: root.id,
         createdAt: now,
         updatedAt: now
       }
