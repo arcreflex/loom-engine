@@ -41,6 +41,12 @@ export const KNOWN_MODELS: {
     capabilities: { max_input_tokens: 200000, max_output_tokens: 64000 },
     cost: { input: 3, output: 15 }
   },
+  'anthropic/claude-sonnet-4-20250514': {
+    provider: 'anthropic',
+    model: 'claude-sonnet-4-20250514',
+    capabilities: { max_input_tokens: 200000, max_output_tokens: 64000 },
+    cost: { input: 3, output: 15 }
+  },
   'anthropic/claude-3-5-sonnet-20241022': {
     provider: 'anthropic',
     model: 'claude-3-5-sonnet-20241022',
@@ -65,7 +71,12 @@ export const KNOWN_MODELS: {
     capabilities: { max_input_tokens: 200000, max_output_tokens: 4096 },
     cost: { input: 15, output: 75 }
   },
-
+  'anthropic/claude-opus-4-20250514': {
+    provider: 'anthropic',
+    model: 'claude-opus-4-20250514',
+    capabilities: { max_input_tokens: 200000, max_output_tokens: 32000 },
+    cost: { input: 15, output: 75 }
+  },
   'openai/o3-2025-04-16': {
     provider: 'openai',
     model: 'o3-2025-04-16',
