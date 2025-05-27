@@ -41,7 +41,8 @@ export class AnthropicProvider implements IProvider {
     try {
       const anthropic = new Anthropic({
         apiKey: this.apiKey,
-        baseURL: this.baseURL
+        baseURL: this.baseURL,
+        timeout: 10 * 60 * 1000 // see https://github.com/anthropics/anthropic-sdk-typescript?tab=readme-ov-file#long-requests
       });
 
       // Map parameters to Anthropic's expected format
@@ -85,7 +86,7 @@ export class AnthropicProvider implements IProvider {
       const adjusted_max_tokens = Math.min(max_tokens, modelMaxTokens);
 
       // Create message with Anthropic API
-      const req = {
+      const req: Anthropic.MessageCreateParamsNonStreaming = {
         model: request.model,
         messages: anthropicMessages,
         temperature,
@@ -95,7 +96,7 @@ export class AnthropicProvider implements IProvider {
         stop_sequences,
         stream: false,
         system: request.systemMessage
-      } as const;
+      };
 
       this.logger.log('Anthropic request:\n' + JSON.stringify(req, null, 2));
 
@@ -105,7 +106,9 @@ export class AnthropicProvider implements IProvider {
         'Anthropic response:\n' + JSON.stringify(response, null, 2)
       );
 
-      const content = response.content.map(c => c.text).join('');
+      const content = response.content
+        .map(c => (c.type === 'text' ? c.text : JSON.stringify(c)))
+        .join('');
 
       // Map response to our expected format
       return {
