@@ -87,6 +87,20 @@ function AppContent() {
   // --- Async Action Helpers ---
   // These functions handle API calls and dispatch appropriate actions
 
+  // --- Fetch graph topology ---
+  const fetchTopology = useCallback(async () => {
+    try {
+      const topologyData = await getGraphTopology();
+      setGraphTopology(topologyData);
+    } catch (error) {
+      console.error('Failed to fetch graph topology:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTopology();
+  }, [fetchTopology]);
+
   const loadNodeData = useCallback(
     async (nodeId: NodeId) => {
       // Update current node ID in backend state first
@@ -104,6 +118,8 @@ function AppContent() {
         fetchedSiblings = await getSiblings(nodeId);
       }
 
+      await fetchTopology();
+
       dispatch({
         type: 'LOAD_NODE_DATA_SUCCESS',
         payload: {
@@ -115,7 +131,7 @@ function AppContent() {
         }
       });
     },
-    [dispatch]
+    [dispatch, fetchTopology]
   );
 
   const loadNodeDataWithStatusUpdates = useCallback(
@@ -246,26 +262,6 @@ function AppContent() {
     }
   }, [nodeIdFromUrl, loadNodeDataWithStatusUpdates, state.currentNode]);
 
-  // --- Fetch graph topology ---
-  const fetchTopology = useCallback(async () => {
-    try {
-      const topologyData = await getGraphTopology();
-      setGraphTopology(topologyData);
-    } catch (error) {
-      console.error('Failed to fetch graph topology:', error);
-    }
-  }, []);
-
-  // Initial fetch and polling
-  useEffect(() => {
-    fetchTopology();
-
-    // Set up polling to refresh the topology
-    const intervalId = setInterval(fetchTopology, 10000); // Refresh every 10 seconds
-
-    return () => clearInterval(intervalId); // Cleanup interval on unmount
-  }, [fetchTopology]);
-
   // Refresh topology when currentNodeId changes
   useEffect(() => {
     if (currentNode?.id) {
@@ -357,6 +353,11 @@ function AppContent() {
           console.log(`Navigating after generation: ${results[0].id}`);
           navigateToNode(results[0].id);
         } else if (results.length > 1) {
+          navigateToNode(nodeIdToGenerateFrom);
+          // Handle multiple results (e.g., show a list to choose from)
+          console.log(
+            `Multiple results found: ${results.map(r => r.id).join(', ')}`
+          );
           // No need to reload the current node when new children are added
           // Let the graph view update handle this or user can refresh manually
           dispatch({ type: 'SET_STATUS_IDLE' });
@@ -375,7 +376,7 @@ function AppContent() {
         });
       }
     },
-    [dispatch, navigateToNode, status.type, effectiveGenerationParams]
+    [status.type, dispatch, effectiveGenerationParams, navigateToNode]
   );
 
   const handleSendMessage = useCallback(
@@ -432,7 +433,7 @@ function AppContent() {
       });
 
       try {
-        const newNode = await appendMessage(currentNode.id, 'user', content);
+        const newNode = await appendMessage(currentNode.id, inputRole, content);
         console.log(`Navigating after paste: ${newNode.id}`);
         navigateToNode(newNode.id);
       } catch (error) {
@@ -448,7 +449,7 @@ function AppContent() {
         });
       }
     },
-    [currentNode, dispatch, navigateToNode, status.type]
+    [currentNode, dispatch, navigateToNode, status.type, inputRole]
   );
 
   // --- Bookmark Actions ---
@@ -1017,7 +1018,7 @@ function AppContent() {
   const isLoading = status.type === 'loading' || status.type === 'initializing';
 
   return (
-    <div className="flex flex-col h-screen bg-terminal-bg text-terminal-text font-mono">
+    <div className="flex flex-col h-screen bg-terminal-bg text-terminal-text">
       <StatusBar
         currentNodeId={currentNode?.id ?? null}
         siblings={siblings}

@@ -13,7 +13,7 @@ body {
 
 @layer base {
   body {
-    @apply bg-terminal-bg text-terminal-text font-mono overflow-hidden;
+    @apply bg-terminal-bg text-terminal-text overflow-hidden;
     /* Smooth font rendering */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -53,6 +53,10 @@ body {
   textarea:focus {
     @apply ring-1 ring-terminal-focus border-terminal-focus;
   }
+
+  code {
+    @apply font-mono;
+  }
 }
 
 @layer components {
@@ -69,7 +73,7 @@ body {
 
   .message-assistant {
     /* Assistant message: purple tint background, purple left border */
-    @apply bg-terminal-assistant/10 border-l-4 border-terminal-assistant rounded;
+    @apply border-l-4 border-terminal-assistant rounded;
   }
 
   /* Input Area container style */

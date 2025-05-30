@@ -21,7 +21,7 @@ interface MessageItemProps {
 
 export const MessageItem = forwardRef(
   (
-    { message, siblings, isPreview, onCopy }: MessageItemProps,
+    { message, siblings, isPreview, isLast, onCopy }: MessageItemProps,
     ref: ForwardedRef<HTMLDivElement>
   ) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
@@ -38,8 +38,8 @@ export const MessageItem = forwardRef(
 
     // Calculate line count and set initial collapsed state
     useEffect(() => {
-      setIsCollapsed(lineCount > LINE_THRESHOLD);
-    }, [lineCount]);
+      setIsCollapsed(!isLast && lineCount > LINE_THRESHOLD);
+    }, [lineCount, isLast]);
 
     // Handle navigation between siblings
     const previousSibling =
@@ -75,7 +75,6 @@ export const MessageItem = forwardRef(
                 const match = /language-(\w+)/.exec(className || '');
                 const content = String(children).replace(/\n$/, '');
                 const lineCount = content.split('\n').length;
-                console.log(content);
                 return match || lineCount > 1 ? (
                   <>
                     <SyntaxHighlighter

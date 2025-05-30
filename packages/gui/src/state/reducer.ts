@@ -4,6 +4,7 @@ export function guiAppReducer(
   state: GuiAppState,
   action: GuiAppAction
 ): GuiAppState {
+  console.log(action.type, action);
   switch (action.type) {
     // --- Status Management ---
     case 'SET_STATUS_LOADING':
