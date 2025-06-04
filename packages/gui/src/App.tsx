@@ -900,6 +900,21 @@ function AppContent() {
       });
     }
 
+    cmds.push({
+      id: 'copy-children',
+      title: 'Copy All Children',
+      disabled: !currentNode || children.length === 0,
+      execute: async () => {
+        let text = '';
+        for (let i = 0; i < children.length; i++) {
+          text += `======= completion ${i} =======\n`;
+          text += children[i].message.content + '\n';
+          text += `======= end completion ${i} =======\n\n`;
+        }
+        await copyToClipboard(text, 'Children copied to clipboard');
+      }
+    });
+
     // Add "Use Defaults" command
     cmds.push({
       id: 'activate-preset-default',
@@ -970,6 +985,7 @@ function AppContent() {
     status.type,
     bookmarks,
     state.roots,
+    children,
     activePresetName,
     presets,
     graphTopology.length,
@@ -980,7 +996,6 @@ function AppContent() {
     saveBookmark,
     navigateToNode,
     currentRootId,
-    children.length,
     siblings.length,
     deleteChildren,
     deleteSiblings,
