@@ -15,9 +15,6 @@ This monorepo contains the following key packages:
 *   **`packages/engine` (`@ankhdt/loom-engine`):**
     The core library. It provides the data structures (Nodes, Roots, Messages), LLM provider integrations (OpenAI, Anthropic, Google), and the logic for managing conversation trees (the `Forest`).
 
-*   **`packages/cli` (`@ankhdt/loom-cli`):**
-    A command-line interface (CLI) for interacting with the Loom Engine. Built with Ink (React for CLIs), it offers a terminal-based way to navigate and extend conversations.
-
 *   **`packages/gui` (`@ankhdt/loom-gui`):**
     A web-based graphical user interface (GUI) providing a richer, visual experience. It features a threaded conversation view, an interactive graph visualization of the conversation structure, and tools for managing different models and conversation parameters.
 
@@ -55,20 +52,6 @@ The Loom Engine stores its data and configuration in `~/.loom` by default.
 *   **Default Model:** You can also set a default model and other parameters in `config.toml`.
 
 ## Running the Applications
-
-### CLI
-From the root directory:
-```bash
-pnpm start -- --model <provider>/<model_name>
-# Example: pnpm start -- --model anthropic/claude-3-opus-20240229
-```
-This will start the CLI, creating a new conversation with the specified model if one doesn't exist, or loading the last used conversation.
-
-You can also run the CLI directly from its package directory:
-```bash
-cd packages/cli
-pnpm start -- --model <provider>/<model_name>
-```
 
 ### Web GUI
 The Web GUI consists of a frontend (Vite) and a backend (Express server).

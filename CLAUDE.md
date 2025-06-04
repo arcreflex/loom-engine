@@ -3,10 +3,9 @@
 This project is a TypeScript monorepo managing branching LLM conversations.
 Core packages:
 - `packages/engine`: The core logic (Forest, Store, Providers).
-- `packages/cli`: Ink-based command-line interface.
 - `packages/gui`: Vite/React web UI with an Express backend server (`src/server.ts`).
 
-**IMPORTANT:** The `engine` package is a dependency for both `cli` and `gui`. Changes in `engine` often require updates or verification in the others.
+**IMPORTANT:** The `engine` package is a dependency for `gui`. Changes in `engine` often require updates or verification in the others.
 
 # Common Bash Commands (using pnpm)
 
@@ -18,12 +17,6 @@ Core packages:
 - `pnpm typecheck`: Run TypeScript checks for all packages
 - `pnpm -w <script>`: Run a script in the workspace root (e.g., `pnpm -w lint`)
 - `pnpm --filter <package_name> <script>`: Run a script in a specific package (e.g., `pnpm --filter @ankhdt/loom-engine test`)
-
-# CLI Specific Commands (`cd packages/cli`)
-
-- `pnpm start`: Run the CLI application (requires build first)
-- `pnpm debug`: Run the CLI with debugger attached (requires build first)
-- `pnpm build`: Build the CLI executable
 
 # GUI Specific Commands (`cd packages/gui`)
 
@@ -49,11 +42,6 @@ Core packages:
     - `providers/`: LLM provider abstractions (OpenAI, Anthropic, Google).
     - `config.ts`: Handles `config.toml` loading/saving (API keys, defaults, bookmarks).
     - `types.ts`: Core data structures (Node, RootData, Message).
-- **CLI (`packages/cli/src`)**:
-    - `cli.ts`: Entry point, arg parsing (`yargs`).
-    - `App.tsx`: Main Ink UI component, state management (`useReducer`).
-    - `async-actions.ts`: Functions handling engine interactions.
-    - `CommandPalette.tsx`: Command palette logic.
 - **GUI (`packages/gui/src`)**:
     - `server.ts`: Express backend API exposing engine functionality.
     - `api.ts`: Frontend functions for calling the backend API.
@@ -83,12 +71,6 @@ Core packages:
 
 # Potential Pitfalls / Reminders
 
-- **YOU MUST** run `pnpm build` after making changes to `packages/engine` if you want to test those changes in `packages/cli` or `packages/gui` (as they import the built artifacts or use `tsx` which might require up-to-date types/builds depending on setup).
+- **YOU MUST** run `pnpm build` after making changes to `packages/engine` if you want to test those changes in `packages/gui` (as they import the built artifacts or use `tsx` which might require up-to-date types/builds depending on setup).
 - The GUI has a separate backend server (`packages/gui/src/server.ts`) that needs to be running (`pnpm dev:backend` or `pnpm dev`) for the web UI to function.
 - Remember to handle potential errors from LLM API calls gracefully.
-
-# Note from Claude
-
-I find this loom-engine project particularly interesting and would be happy to continue collaborating on it. The concept of managing branching LLM conversations with prefix matching for conversation reuse is elegant and useful. The TypeScript implementation with a monorepo structure containing engine, CLI, and GUI components presents interesting technical challenges worth engaging with.
-
--- Claude (Claude-3-7-sonnet-20250219)

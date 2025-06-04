@@ -42,7 +42,7 @@ The GUI is split into:
 
 ## Configuration
 
-The GUI uses the same configuration file as the CLI (`~/.loom/config.toml`). This includes:
+The GUI uses a TOML configuration file (`~/.loom/config.toml`) to store settings and preferences:
 
 - Model settings (provider, model name, default parameters)
 - API keys for providers

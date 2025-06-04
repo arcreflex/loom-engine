@@ -5,8 +5,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "cd packages/cli && npx tsx src/cli.ts",
-    "start:gui": "cd packages/gui && pnpm dev",
     "dev": "pnpm -r dev",
     "lint": "eslint .",
     "format": "prettier --write \"packages/**/*.ts\"",
