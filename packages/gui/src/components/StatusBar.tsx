@@ -1,21 +1,23 @@
-import { Bookmark, NodeData, RootConfig } from '@ankhdt/loom-engine';
+import { Bookmark, NodeData, ProviderName } from '@ankhdt/loom-engine';
 import { Status } from '../state';
 
 interface StatusBarProps {
   currentNodeId: string | null;
   siblings: NodeData[];
-  root: RootConfig | null;
   bookmark: Bookmark | null;
   status: Status;
+  currentProviderName: ProviderName | null;
+  currentModelName: string | null;
   onNavigateToParent: () => void;
 }
 
 export function StatusBar({
   currentNodeId,
   siblings,
-  root,
   bookmark,
   status,
+  currentProviderName,
+  currentModelName,
   onNavigateToParent
 }: StatusBarProps) {
   // Find current index in siblings
@@ -49,7 +51,11 @@ export function StatusBar({
   return (
     <div className="border-b border-terminal-border p-2 flex items-center justify-between text-sm bg-terminal-bg/80 backdrop-blur-sm sticky top-0 z-10">
       <div className="flex items-center space-x-4">
-        {root && <span title={`Provider: ${root.provider}`}>{root.model}</span>}
+        {currentProviderName && currentModelName && (
+          <span title={`Current model for generation`}>
+            {currentProviderName}/{currentModelName}
+          </span>
+        )}
 
         {currentNodeId && (
           <span className="font-mono text-gray-400" title={currentNodeId}>

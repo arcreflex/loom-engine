@@ -134,8 +134,7 @@ export function createMockStore() {
     createTestRoot: (
       id: string,
       config: RootConfig = {
-        model: 'claude-3-opus',
-        provider: 'anthropic'
+        systemPrompt: 'You are a helpful assistant'
       }
     ): RootData => {
       const rootId = mockRootId(id);

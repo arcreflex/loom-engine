@@ -36,8 +36,9 @@ import { InputArea } from './components/InputArea';
 import { CommandPalette } from './components/CommandPalette';
 import { ModelSwitcherModal } from './components/ModelSwitcherModal.tsx';
 import HomeView from './components/HomeView';
-import type { Command, GenerateOptions } from './types';
+import type { Command, DisplayMessage, GenerateOptions } from './types';
 import type { NodeData, NodeId, Role } from '@ankhdt/loom-engine';
+import { parseModelString, KNOWN_MODELS } from '@ankhdt/loom-engine/browser';
 import { ChildNavigator } from './components/ChildNavigator';
 
 // Import the new state management components
@@ -66,7 +67,9 @@ function AppContent() {
     isModelSwitcherOpen,
     presets,
     activePresetName,
-    defaultParameters
+    defaultParameters,
+    currentProviderName,
+    currentModelName
   } = state;
 
   const currentRootId =
@@ -78,6 +81,36 @@ function AppContent() {
   const [graphTopology, setGraphTopology] = useState<NodeStructure[]>([]);
 
   const isInitializedRef = useRef(false);
+
+  // Helper function to initialize model selection based on context
+  const initializeModelSelection = useCallback(
+    (messages: DisplayMessage[]) => {
+      // If we already have a current model selected, don't change it
+      if (currentProviderName && currentModelName) {
+        return;
+      }
+
+      // Try to find model info from the most recent assistant message
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+        if (
+          message.role === 'assistant' &&
+          message.sourceProvider &&
+          message.sourceModelName
+        ) {
+          dispatch({
+            type: 'SET_CURRENT_GENERATION_MODEL',
+            payload: {
+              providerName: message.sourceProvider,
+              modelName: message.sourceModelName
+            }
+          });
+          return;
+        }
+      }
+    },
+    [dispatch, currentProviderName, currentModelName]
+  );
 
   // Find the current bookmark for this node
   const currentBookmark = currentNode?.id
@@ -130,8 +163,13 @@ function AppContent() {
           siblings: fetchedSiblings
         }
       });
+
+      // Initialize model selection based on loaded data
+      if (defaultParameters) {
+        initializeModelSelection(pathData.messages);
+      }
     },
-    [dispatch, fetchTopology]
+    [dispatch, fetchTopology, initializeModelSelection, defaultParameters]
   );
 
   const loadNodeDataWithStatusUpdates = useCallback(
@@ -329,6 +367,17 @@ function AppContent() {
       options?: Partial<GenerateOptions>
     ) => {
       if (status.type === 'loading') return;
+
+      if (!currentProviderName || !currentModelName) {
+        dispatch({
+          type: 'SET_STATUS_ERROR',
+          payload: {
+            message: 'No model selected. Please select a model first.'
+          }
+        });
+        return;
+      }
+
       dispatch({
         type: 'SET_STATUS_LOADING',
         payload: { operation: 'Generating' }
@@ -346,6 +395,8 @@ function AppContent() {
 
         const results = await apiGenerateCompletion(
           nodeIdToGenerateFrom,
+          currentProviderName,
+          currentModelName,
           finalParams as GenerateOptions
         );
 
@@ -376,7 +427,14 @@ function AppContent() {
         });
       }
     },
-    [status.type, dispatch, effectiveGenerationParams, navigateToNode]
+    [
+      status.type,
+      dispatch,
+      effectiveGenerationParams,
+      navigateToNode,
+      currentProviderName,
+      currentModelName
+    ]
   );
 
   const handleSendMessage = useCallback(
@@ -525,20 +583,20 @@ function AppContent() {
     [dispatch, fetchBookmarksAndUpdateState, status.type]
   );
 
-  // --- Model Switching ---
-  const handleSwitchModel = useCallback(
-    async (modelString: string, systemPrompt?: string) => {
+  // --- New Conversation Creation ---
+  const handleCreateNewRoot = useCallback(
+    async (systemPrompt?: string) => {
       // We don't need to set loading state here, modal handles its own.
       // The navigateToNode call below will set the app loading state.
       try {
-        const newRoot = await switchRoot(modelString, systemPrompt);
+        const newRoot = await switchRoot(systemPrompt);
         // Close modal implicitly via successful state update triggering navigation
-        console.log(`Navigating after model switch: ${newRoot.id}`);
+        console.log(`Navigating after new root creation: ${newRoot.id}`);
         navigateToNode(newRoot.id);
         // Dispatch close *after* navigation is initiated to avoid UI flicker
         dispatch({ type: 'CLOSE_MODEL_SWITCHER' });
       } catch (error) {
-        console.error('Failed to switch root:', error);
+        console.error('Failed to create new root:', error);
         // Error is displayed within the modal, but we might want a global error too?
         // For now, the modal shows the error. Re-throw to potentially let modal handle it.
         dispatch({ type: 'CLOSE_MODEL_SWITCHER' }); // Close modal even on failure
@@ -546,7 +604,9 @@ function AppContent() {
           type: 'SET_STATUS_ERROR',
           payload: {
             message:
-              error instanceof Error ? error.message : 'Failed to switch model'
+              error instanceof Error
+                ? error.message
+                : 'Failed to create new conversation'
           }
         });
         // Re-throwing allows the modal's catch block to potentially handle UI feedback
@@ -790,7 +850,7 @@ function AppContent() {
       cmds.push({
         id: `navigate-bookmark-${bookmark.title}`,
         title: `Go to: ${bookmark.title}`,
-        description: `${root.config.model}: ${root.config.systemPrompt ?? '(empty system prompt)'}`,
+        description: `System Prompt: ${root.config.systemPrompt ?? '(empty system prompt)'}`,
         disabled:
           status.type === 'loading' || bookmark.nodeId === currentNode?.id,
         execute: async () => {
@@ -805,7 +865,7 @@ function AppContent() {
 
       cmds.push({
         id: `navigate-root-${root.id}`,
-        title: `Go to model: ${root.config.provider}/${root.config.model}`,
+        title: `Go to conversation`,
         description: `System Prompt: ${systemPrompt}`,
         disabled: status.type === 'loading' || root.id === currentRootId,
         execute: async () => {
@@ -860,15 +920,6 @@ function AppContent() {
         }
       });
     }
-
-    cmds.push({
-      id: 'switch-model',
-      title: 'Switch Model / Conversation...',
-      disabled: status.type === 'loading' || status.type === 'initializing',
-      execute: async () => {
-        dispatch({ type: 'OPEN_MODEL_SWITCHER' });
-      }
-    });
 
     // Add Copy commands
     if (messages.length > 0) {
@@ -938,6 +989,41 @@ function AppContent() {
       });
     });
 
+    // Add model selection commands
+    Object.entries(KNOWN_MODELS).forEach(([modelString, _config]) => {
+      try {
+        const { provider, model } = parseModelString(modelString);
+        const isCurrentModel =
+          currentProviderName === provider && currentModelName === model;
+        cmds.push({
+          id: `use-model-${modelString}`,
+          title: `Use Model: ${modelString} ${isCurrentModel ? '✓' : ''}`,
+          disabled: status.type === 'loading' || isCurrentModel,
+          execute: async () => {
+            dispatch({
+              type: 'SET_CURRENT_GENERATION_MODEL',
+              payload: { providerName: provider, modelName: model }
+            });
+          }
+        });
+      } catch (error) {
+        console.warn(
+          'Failed to parse model string for command:',
+          modelString,
+          error
+        );
+      }
+    });
+
+    cmds.push({
+      id: 'create-new-conversation',
+      title: 'Create New Conversation (System Prompt)...',
+      disabled: status.type === 'loading' || status.type === 'initializing',
+      execute: async () => {
+        dispatch({ type: 'OPEN_MODEL_SWITCHER' });
+      }
+    });
+
     // Commands to control graph view
     cmds.push({
       id: 'graph-view-mode-single-root',
@@ -1001,7 +1087,9 @@ function AppContent() {
     deleteSiblings,
     deleteNode,
     copyToClipboard,
-    handleSetActivePreset
+    handleSetActivePreset,
+    currentProviderName,
+    currentModelName
   ]);
 
   // --- Keyboard shortcuts ---
@@ -1037,9 +1125,10 @@ function AppContent() {
       <StatusBar
         currentNodeId={currentNode?.id ?? null}
         siblings={siblings}
-        root={root}
         bookmark={currentBookmark}
         status={status}
+        currentProviderName={currentProviderName}
+        currentModelName={currentModelName}
         onNavigateToParent={navigateToParent} // Pass helper
       />
 
@@ -1115,7 +1204,7 @@ function AppContent() {
       <ModelSwitcherModal
         isOpen={isModelSwitcherOpen}
         onClose={() => dispatch({ type: 'CLOSE_MODEL_SWITCHER' })}
-        onSwitch={handleSwitchModel}
+        onSwitch={handleCreateNewRoot}
       />
     </div>
   );

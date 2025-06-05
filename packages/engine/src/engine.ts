@@ -5,6 +5,7 @@ import type { ILoomStore } from './store/types.ts';
 import { Forest } from './forest.ts';
 import type {
   NodeId,
+  RootId,
   ProviderName,
   RootConfig,
   Message,
@@ -44,19 +45,26 @@ export class LoomEngine {
   }
 
   async generate(
-    config: RootConfig,
+    rootId: RootId,
+    providerName: ProviderName,
+    modelName: string,
     contextMessages: Message[],
     options: GenerateOptions
   ): Promise<NodeData[]> {
-    const root = await this.forest.getOrCreateRoot(config);
-    const provider = this.getProvider(root.config.provider);
+    const root = await this.forest.getRoot(rootId);
+    if (!root) {
+      throw new Error(`Root with ID ${rootId} not found`);
+    }
+
+    const provider = this.getProvider(providerName);
 
     const coalesced = coalesceMessages(contextMessages, '');
 
     const { max_tokens, temperature } = options;
     const parameters = {
       max_tokens,
-      temperature
+      temperature,
+      model: modelName
     };
 
     return Promise.all(
@@ -64,7 +72,7 @@ export class LoomEngine {
         const response = await provider.generate({
           systemMessage: root.config.systemPrompt,
           messages: coalesced,
-          model: root.config.model,
+          model: modelName,
           parameters
         });
         const responseNode = await this.forest.append(
@@ -73,6 +81,8 @@ export class LoomEngine {
           {
             source_info: {
               type: 'model',
+              provider: providerName,
+              model_name: modelName,
               parameters,
               finish_reason: response.finish_reason,
               usage: response.usage

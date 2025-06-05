@@ -8,7 +8,8 @@ import {
   Role,
   RootConfig,
   RootData,
-  RootId
+  RootId,
+  ProviderName
 } from '@ankhdt/loom-engine';
 import type { DisplayMessage, GenerateOptions } from './types';
 
@@ -110,11 +111,13 @@ export async function appendMessage(
 
 export async function generateCompletion(
   nodeId: NodeId,
+  providerName: ProviderName,
+  modelName: string,
   options: Partial<GenerateOptions>
 ): Promise<NodeData[]> {
   return fetchApi<NodeData[]>(`/api/nodes/${encode(nodeId)}/generate`, {
     method: 'POST',
-    body: JSON.stringify(options)
+    body: JSON.stringify({ providerName, modelName, ...options })
   });
 }
 
@@ -192,7 +195,9 @@ export async function deleteBookmark(
   });
 }
 
-export async function getDefaultConfig(): Promise<GenerateOptions> {
+export async function getDefaultConfig(): Promise<
+  GenerateOptions & { model?: string }
+> {
   const raw = await fetchApi<{
     model?: string;
     temperature: number;
@@ -203,7 +208,8 @@ export async function getDefaultConfig(): Promise<GenerateOptions> {
   return {
     n: raw.n,
     temperature: raw.temperature,
-    max_tokens: raw.maxTokens
+    max_tokens: raw.maxTokens,
+    model: raw.model
   };
 }
 
@@ -219,14 +225,11 @@ export function messagesToDisplayMessages(
   }));
 }
 
-export async function switchRoot(
-  modelString: string,
-  systemPrompt: string | undefined
-): Promise<RootData> {
+export async function switchRoot(systemPrompt?: string): Promise<RootData> {
   // Ensure return type is RootData
   return fetchApi<RootData>('/api/roots', {
     method: 'POST',
-    body: JSON.stringify({ modelString, systemPrompt })
+    body: JSON.stringify({ systemPrompt })
   });
 }
 

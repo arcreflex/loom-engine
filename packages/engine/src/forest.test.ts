@@ -35,15 +35,13 @@ describe('Forest', () => {
   describe('getOrCreateRoot', () => {
     it('should return existing root if it exists with identical config', async () => {
       // Setup
-      const config: RootConfig = {
-        provider: 'openai',
-        model: 'gpt-4'
-      };
+      const systemPrompt = 'You are a helpful assistant';
+      const config: RootConfig = { systemPrompt };
 
       const existingRoot = mockStoreWrapper.createTestRoot('root1', config);
 
       // Execute
-      const result = await forest.getOrCreateRoot(config);
+      const result = await forest.getOrCreateRoot(systemPrompt);
 
       // Verify
       assert.deepEqual(result, existingRoot);
@@ -59,16 +57,13 @@ describe('Forest', () => {
 
     it('should create and return a new root if none exists with identical config', async () => {
       // Setup
-      const config: RootConfig = {
-        provider: 'anthropic',
-        model: 'claude-3'
-      };
+      const systemPrompt = 'You are a creative writer';
 
       // Execute
-      const result = await forest.getOrCreateRoot(config);
+      const result = await forest.getOrCreateRoot(systemPrompt);
 
       // Verify
-      assert.equal(result.config, config);
+      assert.deepEqual(result.config, { systemPrompt });
       assert.equal(typeof result.id, 'string');
       assert.equal(
         mockStoreWrapper.mockStore.listRootInfos.mock.calls.length,
@@ -83,14 +78,22 @@ describe('Forest', () => {
         result
       );
     });
+
+    it('should handle undefined systemPrompt', async () => {
+      // Execute
+      const result = await forest.getOrCreateRoot(undefined);
+
+      // Verify
+      assert.deepEqual(result.config, { systemPrompt: undefined });
+      assert.equal(typeof result.id, 'string');
+    });
   });
 
   describe('getRoot', () => {
     it('should return root data if it exists', async () => {
       // Setup
       const config: RootConfig = {
-        provider: 'openai',
-        model: 'gpt-4'
+        systemPrompt: 'You are a helpful assistant'
       };
 
       const existingRoot = mockStoreWrapper.createTestRoot('root1', config);
@@ -171,8 +174,7 @@ describe('Forest', () => {
     it('should return all messages in path from root to specified node', async () => {
       // Setup
       const config: RootConfig = {
-        provider: 'openai',
-        model: 'gpt-4'
+        systemPrompt: 'You are a helpful assistant'
       };
 
       const root = mockStoreWrapper.createTestRoot('root1', config);
@@ -349,6 +351,8 @@ describe('Forest', () => {
       const metadata: Omit<NodeMetadata, 'timestamp' | 'original_root_id'> = {
         source_info: {
           type: 'model',
+          provider: 'openai',
+          model_name: 'gpt-4',
           parameters: { max_tokens: -1, temperature: 1 }
         },
         tags: ['greeting']
@@ -435,6 +439,8 @@ describe('Forest', () => {
       const result = await forest.append(parent.id, messagesToAppend, {
         source_info: {
           type: 'model',
+          provider: 'openai',
+          model_name: 'gpt-4',
           parameters: { max_tokens: -1, temperature: 1 }
         }
       });
@@ -462,6 +468,8 @@ describe('Forest', () => {
         existingMessage,
         {
           type: 'model',
+          provider: 'openai',
+          model_name: 'gpt-4',
           parameters: { max_tokens: -1, temperature: 1 }
         }
       );
@@ -574,6 +582,8 @@ describe('Forest', () => {
         createMessage('assistant', 'Response with some tags and custom data'),
         {
           type: 'model',
+          provider: 'openai',
+          model_name: 'gpt-4',
           parameters: { temperature: 0.7, max_tokens: 1 }
         }
       );
@@ -600,6 +610,8 @@ describe('Forest', () => {
       });
       assert.deepEqual(splitNode.metadata.source_info, {
         type: 'model',
+        provider: 'openai',
+        model_name: 'gpt-4',
         parameters: { temperature: 0.7, max_tokens: 1 }
       });
 
@@ -863,8 +875,7 @@ describe('Forest', () => {
     it('should handle deeply nested node path when getting messages', async () => {
       // Setup - create a very deep nesting of nodes (10 levels)
       const config: RootConfig = {
-        provider: 'openai',
-        model: 'gpt-4'
+        systemPrompt: 'You are a helpful assistant'
       };
 
       const root = mockStoreWrapper.createTestRoot('deep_root', config);
@@ -909,24 +920,16 @@ describe('Forest', () => {
       // This tests JSON.stringify comparison logic in getOrCreateRoot
 
       // Setup - create two configs that are identical in content but with different object references
-      const config1 = {
-        provider: 'openai' as const,
-        model: 'gpt-4',
-        parameters: { temperature: 0.7, max_tokens: 500 }
-      };
+      const systemPrompt1 = 'You are a helpful assistant with temperature 0.7';
 
-      // Create a separate but identical object
-      const config2 = {
-        provider: 'openai' as const,
-        model: 'gpt-4',
-        parameters: { temperature: 0.7, max_tokens: 500 }
-      };
+      // Create a separate but identical string
+      const systemPrompt2 = 'You are a helpful assistant with temperature 0.7';
 
       // Create a root with the first config
-      const root1 = await forest.getOrCreateRoot(config1);
+      const root1 = await forest.getOrCreateRoot(systemPrompt1);
 
       // Now try to get/create a root with the second config
-      const root2 = await forest.getOrCreateRoot(config2);
+      const root2 = await forest.getOrCreateRoot(systemPrompt2);
 
       // Verify - should return the same root, even though configs are different object references
       assert.equal(root1.id, root2.id);

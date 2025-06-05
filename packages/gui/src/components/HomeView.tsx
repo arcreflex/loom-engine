@@ -33,8 +33,16 @@ export default function HomeView() {
           listRoots(),
           getEntireGraph()
         ]);
-        setBookmarks(bms);
-        setRoots(rts);
+        setBookmarks(
+          bms.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+        );
+        setRoots(
+          rts.sort((a, b) =>
+            (a.config.systemPrompt ?? '').localeCompare(
+              b.config.systemPrompt ?? ''
+            )
+          )
+        );
         setTopology(topo);
       } catch (err) {
         setError(err instanceof Error ? err.message : String(err));

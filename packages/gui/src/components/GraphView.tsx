@@ -357,7 +357,7 @@ function GraphViewInner({
           <div className="text-terminal-focus text-xs">{bookmark.title}</div>
         )}
         <div className="text-gray-300 text-xs mb-2 line-clamp-2">
-          [{previewRoot.model}] {previewRoot.systemPrompt}
+          {previewRoot.systemPrompt || 'No system prompt'}
         </div>
         {renderedMessages[0]}
         {previewMessages.length > maxMessagesToShow && (

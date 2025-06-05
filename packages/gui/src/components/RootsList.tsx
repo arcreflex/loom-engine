@@ -15,9 +15,7 @@ export function RootsList({ roots }: { roots: RootData[] }) {
             to={`/nodes/${encodeURIComponent(rt.id)}`}
             className="block p-2 bg-terminal-bg/50 hover:bg-terminal-selection/30 rounded border border-terminal-border/50 hover:underline"
           >
-            <span className="font-semibold">
-              {rt.config.provider}/{rt.config.model}
-            </span>
+            <span className="font-semibold">Conversation</span>
             <span className="text-sm text-terminal-text/70 ml-2">
               {truncate(rt.config.systemPrompt, 80) || '(No system prompt)'}
             </span>

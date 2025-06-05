@@ -36,12 +36,6 @@ export interface Message {
  * Configuration for a conversation root.
  */
 export interface RootConfig {
-  /** The type of language model provider. */
-  provider: ProviderName;
-
-  /** The specific model to use, e.g., 'gpt-4', 'claude-3-opus-20240229'. */
-  model: string;
-
   /** Optional system prompt to initialize the conversation. */
   systemPrompt?: string;
 }
@@ -58,6 +52,7 @@ export interface RootData {
 
   /** The timestamp when this root was created (ISO 8601 format). */
   createdAt: string;
+  deleted?: boolean;
 
   config: RootConfig;
 }
@@ -65,6 +60,8 @@ export interface RootData {
 export type SourceInfo =
   | {
       type: 'model';
+      provider: ProviderName;
+      model_name: string;
       parameters: ProviderRequest['parameters'];
       finish_reason?: string | null;
       usage?: {

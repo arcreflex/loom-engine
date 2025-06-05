@@ -160,6 +160,9 @@ export const MessageItem = forwardRef(
         {!isPreview && (
           <div className="flex justify-between items-center">
             <div className="flex flex-row text-xs text-gray-500 mt-2">
+              {message.sourceModelName && (
+                <span className="mr-2">{message.sourceModelName}</span>
+              )}
               <span className="mr-4">
                 {message.timestamp && (
                   <Link

@@ -8,9 +8,10 @@ import {
   resolveDataDir,
   NodeData,
   KNOWN_MODELS,
-  parseModelString,
-  RootId
+  RootId,
+  type ProviderName
 } from '@ankhdt/loom-engine';
+import { DisplayMessage } from './types';
 
 async function main() {
   const app = express();
@@ -76,13 +77,26 @@ async function main() {
         to: nodeId as NodeId
       });
 
-      // Create DisplayMessages that include nodeIds and timestamps
-      const messagesWithIds = path.map(node => ({
-        role: node.message.role,
-        content: node.message.content,
-        nodeId: node.id,
-        timestamp: node.metadata.timestamp
-      }));
+      // Create DisplayMessages that include nodeIds, timestamps, and source info
+      const messagesWithIds = path.map(node => {
+        let sourceProvider: ProviderName | undefined;
+        let sourceModelName: string | undefined;
+        if (
+          node.message.role === 'assistant' &&
+          node.metadata.source_info.type === 'model'
+        ) {
+          sourceProvider = node.metadata.source_info.provider;
+          sourceModelName = node.metadata.source_info.model_name;
+        }
+        return {
+          role: node.message.role,
+          content: node.message.content,
+          nodeId: node.id,
+          timestamp: node.metadata.timestamp,
+          sourceProvider,
+          sourceModelName
+        } satisfies DisplayMessage;
+      });
 
       res.json({
         root: root.config,
@@ -150,33 +164,39 @@ async function main() {
   app.post('/api/nodes/:nodeId/generate', async (req, res) => {
     try {
       const { nodeId } = req.params;
-      const options: Partial<GenerateOptions> = req.body;
+      const { providerName, modelName, ...options } = req.body as {
+        providerName: ProviderName;
+        modelName: string;
+      } & Partial<GenerateOptions>;
       const defaults = configStore.get().defaults;
 
-      if (
-        !options.n ||
-        !options.max_tokens ||
-        options.temperature === undefined
-      ) {
-        // Use defaults if not provided
-        options.n = options.n || defaults.n;
-        options.max_tokens = options.max_tokens || defaults.maxTokens;
-        options.temperature =
-          options.temperature !== undefined
-            ? options.temperature
-            : defaults.temperature;
+      if (!providerName || !modelName) {
+        return res
+          .status(400)
+          .json({ error: 'providerName and modelName are required' });
       }
 
+      // Get the root_id for the current node to fetch its systemPrompt
+      const node = await engine.getForest().getNode(nodeId as NodeId);
+      if (!node) return res.status(404).json({ error: 'Node not found' });
+      const rootId = node.parent_id === undefined ? node.id : node.root_id;
+
       // Get message history up to this node
-      const { root, messages } = await engine.getMessages(nodeId as NodeId);
+      const { messages } = await engine.getMessages(nodeId as NodeId);
 
       // Generate responses
-      const newNodes = await engine.generate(root, messages, {
-        max_tokens: defaults.maxTokens,
-        temperature: defaults.temperature,
-        n: defaults.n,
-        ...options
-      });
+      const newNodes = await engine.generate(
+        rootId,
+        providerName,
+        modelName,
+        messages,
+        {
+          max_tokens: defaults.maxTokens,
+          temperature: defaults.temperature,
+          n: defaults.n,
+          ...options
+        }
+      );
 
       res.json(newNodes);
     } catch (error) {
@@ -272,32 +292,9 @@ async function main() {
 
   app.post('/api/roots', async (req, res) => {
     try {
-      const { modelString, systemPrompt } = req.body;
+      const { systemPrompt } = req.body;
 
-      if (!modelString || typeof modelString !== 'string') {
-        return res.status(400).json({ error: 'modelString is required' });
-      }
-      if (!(modelString in KNOWN_MODELS)) {
-        // Or handle unknown models differently if desired
-        // return res.status(400).json({ error: `Unknown model: ${modelString}` });
-        // For now, let's allow unknown models but log a warning
-        console.warn(`[server] Received unknown model string: ${modelString}`);
-      }
-
-      let provider, model;
-      try {
-        ({ provider, model } = parseModelString(modelString));
-      } catch (parseError) {
-        const message =
-          parseError instanceof Error ? parseError.message : String(parseError);
-        return res
-          .status(400)
-          .json({ error: `Invalid modelString format: ${message}` });
-      }
-
-      const rootConfig = { provider, model, systemPrompt }; // Reconstruct rootConfig
-
-      const root = await engine.getForest().getOrCreateRoot(rootConfig);
+      const root = await engine.getForest().getOrCreateRoot(systemPrompt);
       await configStore.update({ currentNodeId: root.id });
       res.json(root);
     } catch (error) {

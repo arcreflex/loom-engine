@@ -23,8 +23,9 @@ export class Forest {
     return this.queue.enqueue(fn);
   }
 
-  async getOrCreateRoot(config: RootConfig): Promise<RootData> {
+  async getOrCreateRoot(systemPrompt?: string): Promise<RootData> {
     return this.enqueue(async () => {
+      const config: RootConfig = { systemPrompt };
       const roots = await this.listRoots();
       const existingRoot = roots.find(
         root => JSON.stringify(root.config) === JSON.stringify(config)
@@ -55,7 +56,7 @@ export class Forest {
   }
 
   async listRoots(): Promise<RootData[]> {
-    return this.store.listRootInfos();
+    return (await this.store.listRootInfos()).filter(root => !root.deleted);
   }
 
   /**

@@ -30,6 +30,10 @@ export const initialState: GuiAppState = {
   paletteState: { status: 'closed' },
   isModelSwitcherOpen: false,
 
+  // Dynamic Model Selection
+  currentProviderName: null,
+  currentModelName: null,
+
   // Graph View
   graphViewState: {
     mode: 'single-root',

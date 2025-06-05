@@ -5,7 +5,8 @@ import type {
   NodeData,
   Role,
   Bookmark,
-  RootData
+  RootData,
+  ProviderName
 } from '@ankhdt/loom-engine';
 import type { DisplayMessage, GenerateOptions } from '../types';
 import type { PresetDefinition } from '../api';
@@ -82,6 +83,12 @@ export interface GuiAppState {
   /** Whether the model switcher modal is open */
   isModelSwitcherOpen: boolean;
 
+  // --- Dynamic Model Selection ---
+  /** Currently selected provider for generation */
+  currentProviderName: ProviderName | null;
+  /** Currently selected model for generation */
+  currentModelName: string | null;
+
   // --- Graph View ---
   /** The current layout mode for the graph view. */
   graphViewState: GraphViewState;
@@ -130,6 +137,12 @@ export type GuiAppAction =
   // --- Model Switcher Modal ---
   | { type: 'OPEN_MODEL_SWITCHER' }
   | { type: 'CLOSE_MODEL_SWITCHER' }
+
+  // --- Dynamic Model Selection ---
+  | {
+      type: 'SET_CURRENT_GENERATION_MODEL';
+      payload: { providerName: ProviderName; modelName: string };
+    }
 
   // --- Generation Presets ---
   | {

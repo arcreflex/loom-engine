@@ -291,6 +291,7 @@ export class FileSystemStore implements ILoomStore {
 
     // First, add root structures
     for (const root of roots) {
+      if (root.deleted) continue;
       allStructures.push({
         id: root.id,
         parent_id: null,

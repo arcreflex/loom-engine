@@ -1,8 +1,16 @@
-import { Message, NodeData, NodeId, RootConfig } from '@ankhdt/loom-engine';
+import {
+  Message,
+  NodeData,
+  NodeId,
+  RootConfig,
+  ProviderName
+} from '@ankhdt/loom-engine';
 
 export interface DisplayMessage extends Message {
   nodeId: NodeId;
   timestamp?: string; // Add timestamp property
+  sourceProvider?: ProviderName; // Provider used to generate this message (for assistant messages)
+  sourceModelName?: string; // Model used to generate this message (for assistant messages)
 }
 
 export interface GenerateOptions {

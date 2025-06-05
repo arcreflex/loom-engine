@@ -111,6 +111,14 @@ export function guiAppReducer(
       if (!state.isModelSwitcherOpen) return state;
       return { ...state, isModelSwitcherOpen: false };
 
+    // --- Dynamic Model Selection ---
+    case 'SET_CURRENT_GENERATION_MODEL':
+      return {
+        ...state,
+        currentProviderName: action.payload.providerName,
+        currentModelName: action.payload.modelName
+      };
+
     // --- Generation Presets ---
     case 'SET_PRESET_CONFIG':
       return {

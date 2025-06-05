@@ -94,9 +94,7 @@ export function HomePage() {
                   to={`/nodes/${encodeURIComponent(root.id)}`}
                   className="text-terminal-text hover:text-terminal-focus hover:underline transition-colors block p-2 bg-terminal-bg/50 hover:bg-terminal-selection/30 rounded border border-terminal-border/50"
                 >
-                  <span className="font-semibold">
-                    {root.config.provider}/{root.config.model}
-                  </span>
+                  <span className="font-semibold">Conversation</span>
                   <span className="text-sm text-terminal-text/70 ml-2">
                     {truncate(root.config.systemPrompt, 80) ||
                       '(No system prompt)'}

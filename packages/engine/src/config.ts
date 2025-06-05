@@ -100,6 +100,7 @@ const defaultConfig: Config = {
     }
   },
   defaults: {
+    model: 'openai/gpt-4o',
     temperature: 1,
     maxTokens: 1024,
     n: 5,

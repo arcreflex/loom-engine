@@ -3,7 +3,13 @@ import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { LoomEngine } from './engine.ts'; // Adjust path as needed
 import { createMockStore, mockProviders, mockRootId } from './test-helpers.ts'; // Import the helper
-import type { RootConfig, Message, NodeData, Node } from './types.ts'; // Adjust path as needed
+import type {
+  RootConfig,
+  ProviderName,
+  Message,
+  NodeData,
+  Node
+} from './types.ts'; // Adjust path as needed
 
 describe('LoomEngine', () => {
   let engine: LoomEngine;
@@ -32,8 +38,7 @@ describe('LoomEngine', () => {
   describe('getMessages', () => {
     it('should retrieve message path and root config from the store via Forest', async () => {
       const rootConfig: RootConfig = {
-        provider: 'openai',
-        model: 'gpt-4-turbo'
+        systemPrompt: 'You are a helpful assistant'
       };
       const root = createTestRoot('r1', rootConfig);
       const node1 = createTestNode('n1', root.id, null, {
@@ -143,36 +148,67 @@ describe('LoomEngine', () => {
       // Pre-conditions: maps are empty
 
       // Action
-      const rootConfig: RootConfig = { provider: 'openai', model: 'gpt-4' };
+      const systemPrompt = 'You are a poet';
+      const root = createTestRoot('r1', { systemPrompt });
+      const providerName: ProviderName = 'openai';
+      const modelName = 'gpt-4';
       const userMessages: Message[] = [
         { role: 'user', content: 'Write a poem' }
       ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
-      const result = await engine.generate(rootConfig, userMessages, options);
+      const result = await engine.generate(
+        root.id,
+        providerName,
+        modelName,
+        userMessages,
+        options
+      );
 
       // --- Assertions ---
       await assertGenerateResult(engine, {
         result,
-        expectedRootConfig: rootConfig,
+        expectedRootConfig: { systemPrompt },
         expectedMessages: [
           [...userMessages, { role: 'assistant', content: 'response 0' }]
         ]
       });
+
+      // Check source_info
+      assert.strictEqual(result[0].metadata.source_info.type, 'model');
+      if (result[0].metadata.source_info.type === 'model') {
+        assert.strictEqual(
+          result[0].metadata.source_info.provider,
+          providerName
+        );
+        assert.strictEqual(
+          result[0].metadata.source_info.model_name,
+          modelName
+        );
+      }
     });
 
     it('should handle n > 1 correctly', async () => {
-      const rootConfig: RootConfig = { provider: 'openai', model: 'gpt-4' };
+      const systemPrompt = 'You are a poet';
+      const root = createTestRoot('r2', { systemPrompt });
+      const providerName: ProviderName = 'openai';
+      const modelName = 'gpt-4';
       const userMessages: Message[] = [
         { role: 'user', content: 'Write a poem' }
       ];
       const optionsN2 = { n: 2, max_tokens: 100, temperature: 0.7 };
 
-      const result = await engine.generate(rootConfig, userMessages, optionsN2);
+      const result = await engine.generate(
+        root.id,
+        providerName,
+        modelName,
+        userMessages,
+        optionsN2
+      );
 
       // Assertions
       await assertGenerateResult(engine, {
         result,
-        expectedRootConfig: rootConfig,
+        expectedRootConfig: { systemPrompt },
         expectedMessages: [
           [...userMessages, { role: 'assistant', content: 'response 0' }],
           [...userMessages, { role: 'assistant', content: 'response 1' }]
@@ -181,13 +217,16 @@ describe('LoomEngine', () => {
     });
 
     it('should append correctly if user message prefix already exists', async () => {
-      const rootConfig: RootConfig = { provider: 'openai', model: 'gpt-4' };
+      const systemPrompt = 'You are a poet';
+      const rootConfig: RootConfig = { systemPrompt };
       const existingMessages: Message[] = [
         { role: 'user', content: 'Write a poem' },
         { role: 'assistant', content: 'A short poem.' }
       ];
 
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
+      const providerName: ProviderName = 'openai';
+      const modelName = 'gpt-4';
       const rootId = mockRootId('root1');
 
       const root = createTestRoot(rootId.toString(), rootConfig);
@@ -206,7 +245,9 @@ describe('LoomEngine', () => {
       const startNodeCount = mockStoreWrapper.nodes.size;
 
       const result = await engine.generate(
-        rootConfig,
+        root.id,
+        providerName,
+        modelName,
         existingMessages,
         options
       );
@@ -227,11 +268,10 @@ describe('LoomEngine', () => {
     });
 
     it('should coalesce messages before sending them to the provider', async () => {
-      const rootConfig: RootConfig = {
-        provider: 'openai',
-        model: 'gpt-4',
-        systemPrompt: 'system message'
-      };
+      const systemPrompt = 'system message';
+      const rootConfig: RootConfig = { systemPrompt };
+      const providerName: ProviderName = 'openai';
+      const modelName = 'gpt-4';
       const existingMessages: Message[] = [
         { role: 'user', content: 'Write a poem' },
         { role: 'assistant', content: 'The first line is' },
@@ -256,7 +296,9 @@ describe('LoomEngine', () => {
       const startNodeCount = mockStoreWrapper.nodes.size;
 
       const result = await engine.generate(
-        rootConfig,
+        root.id,
+        providerName,
+        modelName,
         existingMessages,
         options
       );
@@ -285,7 +327,8 @@ describe('LoomEngine', () => {
             model: 'gpt-4',
             parameters: {
               max_tokens: 100,
-              temperature: 0.7
+              temperature: 0.7,
+              model: 'gpt-4'
             }
           }
         ],
@@ -307,18 +350,23 @@ describe('LoomEngine', () => {
     });
 
     it('should throw an error for unsupported provider types', async () => {
+      const root = createTestRoot('r5', { systemPrompt: 'test' });
       const userMessages: Message[] = [
         { role: 'user', content: 'Write a poem' }
       ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
-
-      const unsupportedConfig: RootConfig = {
-        provider: 'unsupported' as any,
-        model: 'some-model'
-      };
+      const unsupportedProvider = 'unsupported' as any;
+      const modelName = 'some-model';
 
       await assert.rejects(
-        () => engine.generate(unsupportedConfig, userMessages, options),
+        () =>
+          engine.generate(
+            root.id,
+            unsupportedProvider,
+            modelName,
+            userMessages,
+            options
+          ),
         /Unsupported provider: unsupported/
       );
 
@@ -336,7 +384,9 @@ describe('LoomEngine', () => {
     });
 
     it('should propagate errors from provider.generate', async () => {
-      const rootConfig: RootConfig = { provider: 'openai', model: 'gpt-4' };
+      const root = createTestRoot('r6', { systemPrompt: 'test' });
+      const providerName: ProviderName = 'openai';
+      const modelName = 'gpt-4';
       const userMessages: Message[] = [
         { role: 'user', content: 'Write a poem' }
       ];
@@ -348,7 +398,14 @@ describe('LoomEngine', () => {
       );
 
       await assert.rejects(
-        () => engine.generate(rootConfig, userMessages, options),
+        () =>
+          engine.generate(
+            root.id,
+            providerName,
+            modelName,
+            userMessages,
+            options
+          ),
         providerError
       );
 
