@@ -4,17 +4,9 @@ import type { ProviderModelSpec } from './types.ts';
 export const KNOWN_MODELS: {
   [key: `${ProviderName}/${string}`]: ProviderModelSpec | undefined;
 } = {
-  'google/gemini-2.5-pro-preview-05-06': {
+  'google/gemini-2.5-pro-preview-06-05': {
     provider: 'google',
-    model: 'gemini-2.5-pro-preview-05-06',
-    docs_url:
-      'https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-pro',
-    capabilities: { max_input_tokens: 1048576, max_output_tokens: 65536 },
-    cost: { input: 1.25, output: 10 }
-  },
-  'google/gemini-2.5-pro-preview-03-25': {
-    provider: 'google',
-    model: 'gemini-2.5-pro-preview-03-25',
+    model: 'gemini-2.5-pro-preview-06-05',
     docs_url:
       'https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-pro',
     capabilities: { max_input_tokens: 1048576, max_output_tokens: 65536 },
