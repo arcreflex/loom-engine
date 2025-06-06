@@ -1,6 +1,6 @@
 // packages/gui/src/components/ContextView.tsx
-import { useRef, useEffect, useState } from 'react';
-import { MessageItem } from './MessageItem';
+import { useRef, useEffect, useState, useMemo } from 'react';
+import { CoalescedMessage, MessageItem } from './MessageItem';
 import { type DisplayMessage } from '../types';
 import { NodeData, NodeId, RootConfig } from '@ankhdt/loom-engine';
 
@@ -30,6 +30,30 @@ export function ContextView({
   const previewContainerRef = useRef<HTMLDivElement | null>(null); // Ref for the preview child
   const lastMessageRef = useRef<HTMLDivElement | null>(null); // Ref for the last actual message
   const [showScrollButton, setShowScrollButton] = useState(false);
+
+  const coalescedMessages = useMemo(() => {
+    const coalesced = [];
+    let current: CoalescedMessage | undefined;
+    for (const message of messages) {
+      if (current?.role === message.role) {
+        current.messages.push(message);
+      } else {
+        if (current) {
+          coalesced.push(current);
+        }
+        current = {
+          role: message.role,
+          messages: [message]
+        };
+      }
+    }
+
+    if (current) {
+      coalesced.push(current);
+    }
+
+    return coalesced;
+  }, [messages]);
 
   // Scroll handler to detect when user scrolls away from bottom
   const handleScroll = () => {
@@ -84,6 +108,8 @@ export function ContextView({
     // Depend on messages array length and previewChild identity
   }, [messages.length, previewChild, lastScrolledToHead, messages]);
 
+  const messagesToRender = coalescedMessages;
+
   return (
     // Add ref to the scrollable container
     <div
@@ -103,16 +129,25 @@ export function ContextView({
         )}
 
         {/* Regular messages */}
-        {messages.map((message, index) => (
-          <MessageItem
-            key={message.nodeId}
-            message={message}
-            isLast={index === messages.length - 1 && !previewChild}
-            siblings={index === messages.length - 1 ? siblings : undefined}
-            ref={index === messages.length - 1 ? lastMessageRef : undefined}
-            onCopy={onCopy}
-          />
-        ))}
+        {messagesToRender.map((message, index) => {
+          if (message.messages.length === 0) return null;
+          return (
+            <MessageItem
+              key={message.messages[0].nodeId}
+              message={message}
+              isLast={index === messagesToRender.length - 1 && !previewChild}
+              siblings={
+                index === messagesToRender.length - 1 ? siblings : undefined
+              }
+              ref={
+                index === messagesToRender.length - 1
+                  ? lastMessageRef
+                  : undefined
+              }
+              onCopy={onCopy}
+            />
+          );
+        })}
 
         {/* --- Child Preview --- */}
         {previewChild && (
@@ -122,7 +157,10 @@ export function ContextView({
           >
             <MessageItem
               key={`preview-${previewChild.id}`}
-              message={{ ...previewChild.message, nodeId: previewChild.id }}
+              message={{
+                role: previewChild.message.role,
+                messages: [{ ...previewChild.message, nodeId: previewChild.id }]
+              }}
               isLast={true}
               siblings={undefined}
               isPreview={true} // Add isPreview prop
@@ -131,11 +169,13 @@ export function ContextView({
         )}
 
         {/* Empty state */}
-        {messages.length === 0 && !root?.systemPrompt && !previewChild && (
-          <div className="text-center p-8 text-terminal-text/50">
-            No messages yet. Start a new conversation below.
-          </div>
-        )}
+        {messagesToRender.length === 0 &&
+          !root?.systemPrompt &&
+          !previewChild && (
+            <div className="text-center p-8 text-terminal-text/50">
+              No messages yet. Start a new conversation below.
+            </div>
+          )}
 
         {/* Scroll anchor */}
         <div ref={messagesEndRef} />
