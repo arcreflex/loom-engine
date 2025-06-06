@@ -38,5 +38,8 @@ export const initialState: GuiAppState = {
   graphViewState: {
     mode: 'single-root',
     previewNodeId: null
-  }
+  },
+
+  // Rendering Mode
+  renderingMode: 'markdown'
 };

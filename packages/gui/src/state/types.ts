@@ -92,6 +92,10 @@ export interface GuiAppState {
   // --- Graph View ---
   /** The current layout mode for the graph view. */
   graphViewState: GraphViewState;
+
+  // --- Rendering Mode ---
+  /** Whether to render messages as raw text or markdown */
+  renderingMode: 'markdown' | 'raw';
 }
 
 // Define the Action types
@@ -162,4 +166,7 @@ export type GuiAppAction =
       payload:
         | { nodeId: NodeId; messages: DisplayMessage[]; root: RootConfig }
         | { nodeId: null };
-    };
+    }
+
+  // --- Rendering Mode ---
+  | { type: 'TOGGLE_RENDERING_MODE' };

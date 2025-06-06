@@ -1049,6 +1049,15 @@ function AppContent() {
       }
     });
 
+    // Add rendering mode toggle command
+    cmds.push({
+      id: 'toggle-rendering-mode',
+      title: `Rendering Mode: ${state.renderingMode === 'markdown' ? 'Markdown' : 'Raw'} (Click to toggle)`,
+      execute: async () => {
+        dispatch({ type: 'TOGGLE_RENDERING_MODE' });
+      }
+    });
+
     cmds.push({
       id: 'graph-view-mode-compact',
       title: 'Graph View: Compact',
@@ -1089,7 +1098,8 @@ function AppContent() {
     copyToClipboard,
     handleSetActivePreset,
     currentProviderName,
-    currentModelName
+    currentModelName,
+    state.renderingMode
   ]);
 
   // --- Keyboard shortcuts ---

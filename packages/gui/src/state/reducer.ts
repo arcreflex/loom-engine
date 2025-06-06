@@ -161,6 +161,13 @@ export function guiAppReducer(
         };
       }
 
+    // --- Rendering Mode ---
+    case 'TOGGLE_RENDERING_MODE':
+      return {
+        ...state,
+        renderingMode: state.renderingMode === 'markdown' ? 'raw' : 'markdown'
+      };
+
     default:
       // Ensure all action types are handled (useful for type checking)
       action satisfies never;

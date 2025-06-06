@@ -10,6 +10,7 @@ import {
   ForwardedRef,
   useCallback
 } from 'react';
+import { useAppContext } from '../state';
 import { Link } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -36,6 +37,7 @@ export const MessageItem = forwardRef(
     ref: ForwardedRef<HTMLDivElement>
   ) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const { state } = useAppContext();
 
     const messageClass =
       message.role === 'user' ? 'message-user' : 'message-assistant';
@@ -66,23 +68,21 @@ export const MessageItem = forwardRef(
 
     return (
       <div ref={ref} className={`p-4 mb-4 ${messageClass} ${previewClass}`}>
-        <div
-          className={`
-          text-sm max-w-none
-          prose prose-terminal prose-sm prose-invert
-          prose-p:whitespace-pre-wrap
-          prose-code:px-1
-          prose-code:py-0.5
-          prose-code:m-0
-          `}
-        >
+        {state.renderingMode === 'raw' ? (
+          <RawContent
+            role={message.role}
+            content={combinedText}
+            isCollapsed={isCollapsed}
+            toggleCollapsed={toggleCollapsed}
+          />
+        ) : (
           <MarkdownContent
             content={combinedText}
             isCollapsed={isCollapsed}
             onCopy={onCopy}
             toggleCollapsed={toggleCollapsed}
           />
-        </div>
+        )}
 
         {!isPreview && (
           <div className="flex justify-between items-center">
@@ -150,7 +150,15 @@ const MarkdownContent = ({
 
   if (lineCount <= LINE_THRESHOLD || !isCollapsed) {
     return (
-      <div>
+      <div
+        className={`
+    text-sm max-w-none
+    prose prose-terminal prose-sm prose-invert
+    prose-p:whitespace-pre-wrap
+    prose-code:px-1
+    prose-code:py-0.5
+    prose-code:m-0`}
+      >
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           rehypePlugins={[rehypeRaw]}
@@ -222,6 +230,50 @@ const MarkdownContent = ({
         </span>
       </div>
       <div className="whitespace-pre-wrap">{lastLines}</div>
+    </>
+  );
+};
+
+const RawContent = ({
+  role,
+  content,
+  isCollapsed,
+  toggleCollapsed
+}: {
+  role: 'user' | 'assistant';
+  content: string;
+  isCollapsed: boolean;
+  toggleCollapsed: () => void;
+}) => {
+  const lines = content.split('\n');
+  const lineCount = lines.length;
+
+  const bgClass = role === 'user' ? 'bg-transparent' : '';
+
+  const preClass = `whitespace-pre-wrap font-mono text-sm ${bgClass}`;
+
+  if (lineCount <= LINE_THRESHOLD || !isCollapsed) {
+    return <pre className={preClass}>{content}</pre>;
+  }
+
+  // Show first 3 and last 3 lines when collapsed
+  const prefixLines = 3;
+  const suffixLines = 3;
+  const firstLines = lines.slice(0, prefixLines).join('\n');
+  const lastLines = lines.slice(-suffixLines).join('\n');
+
+  return (
+    <>
+      <pre className={preClass}>{firstLines}</pre>
+      <div
+        className="bg-terminal-bg/20 p-2 my-2 text-center rounded cursor-pointer hover:bg-terminal-bg/30 transition-colors"
+        onClick={toggleCollapsed}
+      >
+        <span className="text-xs font-semibold">
+          {lineCount - prefixLines - suffixLines} more lines - Click to expand
+        </span>
+      </div>
+      <pre className={preClass}>{lastLines}</pre>
     </>
   );
 };
