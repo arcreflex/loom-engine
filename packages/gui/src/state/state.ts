@@ -46,6 +46,8 @@ export const initialState: GuiAppState = {
   // Tools Management
   tools: {
     available: [],
+    groups: [],
+    ungroupedTools: [],
     active: []
   }
 };

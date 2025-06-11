@@ -17,4 +17,24 @@ export interface ToolDefinition {
   description: string;
   parameters: JSONSchema7 & { type: 'object'; [k: string]: unknown };
   handler: ToolHandler;
+  group?: string; // Optional group name (e.g., MCP server name)
+}
+
+/**
+ * Represents a group of related tools (e.g., from the same MCP server)
+ */
+export interface ToolGroup {
+  name: string;
+  description?: string;
+  tools: string[]; // Array of tool names in this group
+}
+
+/**
+ * Tool information for external consumption (without handler)
+ */
+export interface ToolInfo {
+  name: string;
+  description: string;
+  parameters: JSONSchema7 & { type: 'object'; [k: string]: unknown };
+  group?: string;
 }

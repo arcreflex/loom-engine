@@ -27,7 +27,8 @@ import {
   getGraphTopology,
   NodeStructure,
   listRoots,
-  listTools
+  listTools,
+  listToolGroups
 } from './api';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { StatusBar } from './components/StatusBar';
@@ -232,14 +233,21 @@ function AppContent() {
       payload: { operation: 'Initializing' }
     });
     try {
-      const [roots, fetchedBookmarks, presetConfig, defaults, availableTools] =
-        await Promise.all([
-          listRoots(),
-          listBookmarks(),
-          getConfigPresets(), // Fetch presets
-          getDefaultConfig(), // Fetch defaults
-          listTools() // Fetch available tools
-        ]);
+      const [
+        roots,
+        fetchedBookmarks,
+        presetConfig,
+        defaults,
+        availableTools,
+        toolGroups
+      ] = await Promise.all([
+        listRoots(),
+        listBookmarks(),
+        getConfigPresets(), // Fetch presets
+        getDefaultConfig(), // Fetch defaults
+        listTools(), // Fetch available tools
+        listToolGroups() // Fetch tool groups
+      ]);
 
       // Set preset config and defaults first
       dispatch({
@@ -273,6 +281,15 @@ function AppContent() {
       dispatch({
         type: 'SET_AVAILABLE_TOOLS',
         payload: { tools: availableTools }
+      });
+
+      // Set tool groups
+      dispatch({
+        type: 'SET_TOOL_GROUPS',
+        payload: {
+          groups: toolGroups.groups,
+          ungroupedTools: toolGroups.ungroupedTools
+        }
       });
 
       // Set status to idle after loading config/bookmarks
@@ -542,6 +559,16 @@ function AppContent() {
       dispatch({
         type: 'TOGGLE_TOOL_ACTIVE',
         payload: { toolName }
+      });
+    },
+    [dispatch]
+  );
+
+  const handleToggleToolGroup = useCallback(
+    (groupName: string) => {
+      dispatch({
+        type: 'TOGGLE_TOOL_GROUP_ACTIVE',
+        payload: { groupName }
       });
     },
     [dispatch]
@@ -1189,8 +1216,11 @@ function AppContent() {
               <div className="p-4 h-full overflow-y-auto border-t border-terminal-border">
                 <ToolsPanel
                   availableTools={tools.available}
+                  toolGroups={tools.groups}
+                  ungroupedTools={tools.ungroupedTools}
                   activeToolNames={tools.active}
                   onToggleTool={handleToggleTool}
+                  onToggleToolGroup={handleToggleToolGroup}
                 />
               </div>
             </Panel>

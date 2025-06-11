@@ -400,6 +400,20 @@ async function main() {
     }
   });
 
+  // Tool groups endpoint
+  app.get('/api/tools/groups', (_req, res) => {
+    try {
+      const groups = engine.toolRegistry.getGroups();
+      const ungroupedTools = engine.toolRegistry.getUngroupedTools();
+      res.json({
+        groups,
+        ungroupedTools
+      });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
   // Graph topology endpoint
   app.get('/api/graph/topology', async (_req, res) => {
     try {

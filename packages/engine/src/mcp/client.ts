@@ -117,7 +117,8 @@ async function discoverAndRegisterMcpTools(
         tool.description ||
           `Tool from MCP server: ${serverConfig.name || 'unknown'}`,
         parameters,
-        handler
+        handler,
+        serverConfig.name // Use server name as group
       );
 
       configStore.log(

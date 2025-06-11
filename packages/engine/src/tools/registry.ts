@@ -1,4 +1,9 @@
-import type { ToolDefinition, ToolHandler } from './types.ts';
+import type {
+  ToolDefinition,
+  ToolHandler,
+  ToolGroup,
+  ToolInfo
+} from './types.ts';
 import type { JSONSchema7 } from 'json-schema';
 
 export class ToolRegistry {
@@ -10,17 +15,19 @@ export class ToolRegistry {
    * @param description - A description of what the tool does.
    * @param parameters - The JSON schema for the tool's arguments.
    * @param handler - The function to execute for this tool.
+   * @param group - Optional group name for organizing related tools.
    */
   public register(
     name: string,
     description: string,
     parameters: JSONSchema7 & { type: 'object'; [k: string]: unknown },
-    handler: ToolHandler
+    handler: ToolHandler,
+    group?: string
   ): void {
     if (this.tools.has(name)) {
       console.warn(`Tool "${name}" is being overwritten.`);
     }
-    this.tools.set(name, { name, description, parameters, handler });
+    this.tools.set(name, { name, description, parameters, handler, group });
   }
 
   /**
@@ -36,10 +43,53 @@ export class ToolRegistry {
    * Lists all registered tools in a format suitable for an LLM provider.
    * @returns An array of tool definitions without their handlers.
    */
-  public list(): Omit<ToolDefinition, 'handler'>[] {
+  public list(): ToolInfo[] {
     return Array.from(this.tools.values()).map(
       ({ handler: _, ...rest }) => rest
     );
+  }
+
+  /**
+   * Gets all tool groups.
+   * @returns An array of tool groups with their associated tools.
+   */
+  public getGroups(): ToolGroup[] {
+    const groups = new Map<string, ToolGroup>();
+
+    for (const tool of this.tools.values()) {
+      if (tool.group) {
+        if (!groups.has(tool.group)) {
+          groups.set(tool.group, {
+            name: tool.group,
+            tools: []
+          });
+        }
+        groups.get(tool.group)!.tools.push(tool.name);
+      }
+    }
+
+    return Array.from(groups.values());
+  }
+
+  /**
+   * Gets all tools in a specific group.
+   * @param groupName - The name of the group.
+   * @returns An array of tool names in the group.
+   */
+  public getToolsInGroup(groupName: string): string[] {
+    return Array.from(this.tools.values())
+      .filter(tool => tool.group === groupName)
+      .map(tool => tool.name);
+  }
+
+  /**
+   * Gets all ungrouped tools.
+   * @returns An array of tool names that don't belong to any group.
+   */
+  public getUngroupedTools(): string[] {
+    return Array.from(this.tools.values())
+      .filter(tool => !tool.group)
+      .map(tool => tool.name);
   }
 
   /**

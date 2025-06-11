@@ -291,14 +291,16 @@ export class LoomEngine {
         required: ['message']
       },
       async (args: { message?: string }) =>
-        JSON.stringify({ echo: args.message ?? 'No message provided' })
+        JSON.stringify({ echo: args.message ?? 'No message provided' }),
+      'Built-in' // Group built-in tools together
     );
 
     this.toolRegistry.register(
       'current_date',
       'Returns the current date and time.',
       { type: 'object', properties: {} },
-      async () => JSON.stringify({ date: new Date().toISOString() })
+      async () => JSON.stringify({ date: new Date().toISOString() }),
+      'Built-in' // Group built-in tools together
     );
 
     // Discover and register tools from configured MCP servers

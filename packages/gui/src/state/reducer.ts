@@ -177,12 +177,44 @@ export function guiAppReducer(
           available: action.payload.tools
         }
       };
+    case 'SET_TOOL_GROUPS':
+      return {
+        ...state,
+        tools: {
+          ...state.tools,
+          groups: action.payload.groups,
+          ungroupedTools: action.payload.ungroupedTools
+        }
+      };
     case 'TOGGLE_TOOL_ACTIVE': {
       const toolName = action.payload.toolName;
       const isCurrentlyActive = state.tools.active.includes(toolName);
       const newActiveTools = isCurrentlyActive
         ? state.tools.active.filter(name => name !== toolName)
         : [...state.tools.active, toolName];
+
+      return {
+        ...state,
+        tools: {
+          ...state.tools,
+          active: newActiveTools
+        }
+      };
+    }
+    case 'TOGGLE_TOOL_GROUP_ACTIVE': {
+      const groupName = action.payload.groupName;
+      const group = state.tools.groups.find(g => g.name === groupName);
+      if (!group) return state;
+
+      // Check if all tools in the group are currently active
+      const allToolsActive = group.tools.every(toolName =>
+        state.tools.active.includes(toolName)
+      );
+
+      // If all are active, deactivate all; if not all are active, activate all
+      const newActiveTools = allToolsActive
+        ? state.tools.active.filter(toolName => !group.tools.includes(toolName))
+        : [...new Set([...state.tools.active, ...group.tools])];
 
       return {
         ...state,

@@ -105,7 +105,16 @@ export interface GuiAppState {
       name: string;
       description: string;
       parameters: object;
+      group?: string;
     }>;
+    /** Tool groups available */
+    groups: Array<{
+      name: string;
+      description?: string;
+      tools: string[];
+    }>;
+    /** Ungrouped tools */
+    ungroupedTools: string[];
     /** Names of tools currently enabled by the user */
     active: string[];
   };
@@ -192,7 +201,20 @@ export type GuiAppAction =
           name: string;
           description: string;
           parameters: object;
+          group?: string;
         }>;
       };
     }
-  | { type: 'TOGGLE_TOOL_ACTIVE'; payload: { toolName: string } };
+  | {
+      type: 'SET_TOOL_GROUPS';
+      payload: {
+        groups: Array<{
+          name: string;
+          description?: string;
+          tools: string[];
+        }>;
+        ungroupedTools: string[];
+      };
+    }
+  | { type: 'TOGGLE_TOOL_ACTIVE'; payload: { toolName: string } }
+  | { type: 'TOGGLE_TOOL_GROUP_ACTIVE'; payload: { groupName: string } };
