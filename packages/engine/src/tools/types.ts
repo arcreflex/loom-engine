@@ -10,10 +10,11 @@ export type ToolHandler = (args: object) => Promise<string>;
 /**
  * Defines a tool, including its schema and handler.
  * This structure is compatible with the MCP `Tool` object and provider-native tool definitions.
+ * Tool parameters must always be object schemas.
  */
 export interface ToolDefinition {
   name: string;
   description: string;
-  parameters: JSONSchema7;
+  parameters: JSONSchema7 & { type: 'object'; [k: string]: unknown };
   handler: ToolHandler;
 }

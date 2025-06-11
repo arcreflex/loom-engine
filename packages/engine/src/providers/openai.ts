@@ -116,6 +116,9 @@ export class OpenAIProvider implements IProvider {
         stop
       } = request.parameters;
 
+      // Get tool parameters from request
+      const { tools, tool_choice } = request;
+
       if (top_p !== undefined && typeof top_p !== 'number') {
         throw new Error('top_p must be a number');
       }
@@ -150,6 +153,8 @@ export class OpenAIProvider implements IProvider {
         frequency_penalty,
         presence_penalty,
         stop,
+        tools,
+        tool_choice: tool_choice,
         stream: false
       } as const;
 
@@ -157,22 +162,30 @@ export class OpenAIProvider implements IProvider {
       const response = await openai.chat.completions.create(req);
       this.logger.log('OpenAI response:\n' + JSON.stringify(response, null, 2));
 
-      const content = response.choices.length
-        ? response.choices[0].message.content
-        : undefined;
+      const choice = response.choices[0];
+      const responseMessage = choice.message;
 
       // Map response to our expected format
       return {
         message: {
           role: 'assistant',
-          content: content || ''
+          content: responseMessage.content,
+          // Map the tool_calls from OpenAI's response back to our format
+          tool_calls: responseMessage.tool_calls?.map(tc => ({
+            id: tc.id,
+            type: tc.type,
+            function: {
+              name: tc.function.name,
+              arguments: tc.function.arguments
+            }
+          }))
         },
         usage: {
           input_tokens: response.usage?.prompt_tokens,
           output_tokens: response.usage?.completion_tokens,
           raw: response.usage
         },
-        finish_reason: response.choices[0].finish_reason || null,
+        finish_reason: choice.finish_reason || null,
         rawResponse: response
       };
     } catch (error) {

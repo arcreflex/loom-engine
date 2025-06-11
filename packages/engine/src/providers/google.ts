@@ -43,21 +43,60 @@ export class GoogleProvider implements IProvider {
 
       // Add conversation history
       for (const msg of request.messages) {
-        // Skip tool messages as Google doesn't support them directly
         if (msg.role === 'tool') {
+          // For tool messages, create a model message with function response
+          if (msg.content != null && msg.tool_call_id) {
+            messages.push({
+              role: 'model',
+              parts: [
+                {
+                  functionResponse: {
+                    name: msg.tool_call_id, // Use tool_call_id as function name reference
+                    response: JSON.parse(msg.content)
+                  }
+                }
+              ]
+            });
+          }
           continue;
         }
 
-        // Skip messages with null content
-        if (msg.content == null) {
-          continue;
-        }
+        if (msg.role === 'assistant') {
+          // Handle assistant messages with tool calls
+          const parts: Content['parts'] = [];
 
-        const role: 'user' | 'model' = msg.role === 'user' ? 'user' : 'model';
-        messages.push({
-          role,
-          parts: [{ text: msg.content }]
-        });
+          if (msg.content != null) {
+            parts.push({ text: msg.content });
+          }
+
+          if (msg.tool_calls) {
+            for (const tc of msg.tool_calls) {
+              parts.push({
+                functionCall: {
+                  name: tc.function.name,
+                  args: JSON.parse(tc.function.arguments)
+                }
+              });
+            }
+          }
+
+          if (parts.length > 0) {
+            messages.push({
+              role: 'model',
+              parts
+            });
+          }
+        } else if (msg.role === 'user') {
+          // Skip messages with null content
+          if (msg.content == null) {
+            continue;
+          }
+
+          messages.push({
+            role: 'user',
+            parts: [{ text: msg.content }]
+          });
+        }
       }
 
       // Extract specific parameters for Gemini
@@ -67,6 +106,9 @@ export class GoogleProvider implements IProvider {
         top_p,
         top_k
       } = request.parameters;
+
+      // Get tool parameters from request
+      const { tools, tool_choice } = request;
 
       if (top_p !== undefined && typeof top_p !== 'number') {
         throw new Error('top_p must be a number');
@@ -84,16 +126,44 @@ export class GoogleProvider implements IProvider {
           topP: top_p,
           topK: top_k,
           systemInstruction: request.systemMessage
-        }
+        },
+        // Google uses 'tools' and 'toolConfig' for tool configuration
+        tools: tools?.map(tool => ({
+          functionDeclarations: [tool.function]
+        })),
+        toolConfig: tool_choice
+          ? {
+              functionCallingConfig: {
+                mode:
+                  tool_choice === 'auto'
+                    ? 'AUTO'
+                    : tool_choice === 'none'
+                      ? 'NONE'
+                      : 'ANY' // For specific tool selection
+              }
+            }
+          : undefined
       };
       this.logger.log('Google request:\n' + JSON.stringify(req, null, 2));
       const response = await this.ai.models.generateContent(req);
       this.logger.log('Google response:\n' + JSON.stringify(response, null, 2));
 
+      // Extract text and function calls from response
+      const textContent = response.text;
+      const functionCalls = response.functionCalls?.map(fc => ({
+        id: fc.id || '',
+        type: 'function' as const,
+        function: {
+          name: fc.name || '', // Ensure name is not undefined
+          arguments: JSON.stringify(fc.args)
+        }
+      }));
+
       return {
         message: {
           role: 'assistant',
-          content: response.text ?? ''
+          content: textContent || null,
+          tool_calls: functionCalls?.length ? functionCalls : undefined
         },
         usage: {
           input_tokens: response.usageMetadata?.promptTokenCount,

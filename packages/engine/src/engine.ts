@@ -130,14 +130,23 @@ export class LoomEngine {
 
       const toolsForProvider = this.toolRegistry
         .list()
-        .filter(t => activeTools.includes(t.name));
+        .filter(t => activeTools.includes(t.name))
+        .map(t => ({
+          type: 'function' as const,
+          function: {
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters
+          }
+        }));
 
       const response = await provider.generate({
         systemMessage: root.config.systemPrompt,
         messages: coalesced,
         model: modelName,
         parameters,
-        tools: toolsForProvider
+        tools: toolsForProvider.length > 0 ? toolsForProvider : undefined,
+        tool_choice: toolsForProvider.length > 0 ? 'auto' : undefined
       });
 
       const assistantMessage = response.message;

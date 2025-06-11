@@ -50,26 +50,70 @@ export class AnthropicProvider implements IProvider {
       for (let i = 0; i < request.messages.length; i++) {
         const msg = request.messages[i];
 
-        // Skip tool messages as Anthropic doesn't support them directly
         if (msg.role === 'tool') {
+          // For tool messages, create a user message with tool result content
+          if (msg.content != null && msg.tool_call_id) {
+            anthropicMessages.push({
+              role: 'user',
+              content: [
+                {
+                  type: 'tool_result',
+                  tool_use_id: msg.tool_call_id,
+                  content: msg.content
+                }
+              ]
+            });
+          }
           continue;
         }
 
-        // Skip messages with null content
-        if (msg.content == null) {
-          continue;
-        }
+        if (msg.role === 'assistant') {
+          // Handle assistant messages with tool calls
+          const content: Anthropic.MessageParam['content'] = [];
 
-        let content = msg.content;
-        if (i === request.messages.length - 1) {
-          // last message isn't allowed to end with whitespace
-          content = content.replace(/[\s\n]+$/, '');
-        }
+          if (msg.content != null) {
+            let textContent = msg.content;
+            if (i === request.messages.length - 1) {
+              // last message isn't allowed to end with whitespace
+              textContent = textContent.replace(/[\s\n]+$/, '');
+            }
+            content.push({ type: 'text', text: textContent });
+          }
 
-        anthropicMessages.push({
-          role: msg.role as 'user' | 'assistant',
-          content
-        });
+          if (msg.tool_calls) {
+            for (const tc of msg.tool_calls) {
+              content.push({
+                type: 'tool_use',
+                id: tc.id,
+                name: tc.function.name,
+                input: JSON.parse(tc.function.arguments)
+              });
+            }
+          }
+
+          if (content.length > 0) {
+            anthropicMessages.push({
+              role: 'assistant',
+              content
+            });
+          }
+        } else if (msg.role === 'user') {
+          // Skip messages with null content
+          if (msg.content == null) {
+            continue;
+          }
+
+          let content = msg.content;
+          if (i === request.messages.length - 1) {
+            // last message isn't allowed to end with whitespace
+            content = content.replace(/[\s\n]+$/, '');
+          }
+
+          anthropicMessages.push({
+            role: 'user',
+            content
+          });
+        }
       }
 
       // Extract specific parameters for Anthropic, with defaults
@@ -80,6 +124,9 @@ export class AnthropicProvider implements IProvider {
         top_k,
         stop_sequences
       } = request.parameters;
+
+      // Get tool parameters from request
+      const { tools, tool_choice } = request;
 
       if (top_p !== undefined && typeof top_p !== 'number') {
         throw new Error('top_p must be a number');
@@ -106,6 +153,23 @@ export class AnthropicProvider implements IProvider {
         top_p,
         top_k,
         stop_sequences,
+        tools: tools?.map(tool => ({
+          type: 'custom',
+          name: tool.function.name,
+          description: tool.function.description,
+          input_schema: tool.function.parameters
+        })),
+        tool_choice:
+          tool_choice === 'auto'
+            ? ({ type: 'auto' } as Anthropic.ToolChoice)
+            : tool_choice === 'none'
+              ? ({ type: 'none' } as Anthropic.ToolChoice)
+              : tool_choice
+                ? ({
+                    type: 'tool',
+                    name: tool_choice.function.name
+                  } as Anthropic.ToolChoice)
+                : undefined,
         stream: false,
         system: request.systemMessage
       };
@@ -118,15 +182,29 @@ export class AnthropicProvider implements IProvider {
         'Anthropic response:\n' + JSON.stringify(response, null, 2)
       );
 
-      const content = response.content
-        .map(c => (c.type === 'text' ? c.text : JSON.stringify(c)))
+      // Extract text content and tool calls from response
+      const textContent = response.content
+        .filter(c => c.type === 'text')
+        .map(c => c.text)
         .join('');
+
+      const toolCalls = response.content
+        .filter(c => c.type === 'tool_use')
+        .map(c => ({
+          id: c.id,
+          type: 'function' as const,
+          function: {
+            name: c.name,
+            arguments: JSON.stringify(c.input)
+          }
+        }));
 
       // Map response to our expected format
       return {
         message: {
           role: 'assistant',
-          content: content
+          content: textContent || null,
+          tool_calls: toolCalls.length > 0 ? toolCalls : undefined
         },
         usage: {
           input_tokens: response.usage?.input_tokens,

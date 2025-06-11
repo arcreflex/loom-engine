@@ -1,4 +1,17 @@
 import type { Message, ProviderName } from '../types.ts';
+import type { JSONSchema7 } from 'json-schema';
+
+/**
+ * Tool definition formatted for provider APIs.
+ */
+export interface ToolDefinitionForProvider {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: JSONSchema7 & { type: 'object'; [k: string]: unknown };
+  };
+}
 
 /**
  * Request to a language model provider.
@@ -17,11 +30,13 @@ export interface ProviderRequest {
   };
 
   /** Optional tools available for the model to call. */
-  tools?: {
-    name: string;
-    description: string;
-    parameters: object;
-  }[];
+  tools?: ToolDefinitionForProvider[];
+
+  /** Optional tool choice directive for the model. */
+  tool_choice?:
+    | 'auto'
+    | 'none'
+    | { type: 'function'; function: { name: string } };
 }
 
 /**

@@ -14,7 +14,7 @@ export class ToolRegistry {
   public register(
     name: string,
     description: string,
-    parameters: JSONSchema7,
+    parameters: JSONSchema7 & { type: 'object'; [k: string]: unknown },
     handler: ToolHandler
   ): void {
     if (this.tools.has(name)) {

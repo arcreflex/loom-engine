@@ -499,11 +499,11 @@ describe('LoomEngine', () => {
         'Final response content matches'
       );
 
-      // Verify that 3 nodes were created: user, tool (with result), assistant (final)
+      // Verify that 4 nodes were created: user, assistant (tool call), tool (result), assistant (final)
       assert.strictEqual(
         mockStoreWrapper.nodes.size,
-        3,
-        'Three nodes created in sequence'
+        4,
+        'Four nodes created in sequence'
       );
 
       // Verify the sequence of node types
@@ -521,27 +521,47 @@ describe('LoomEngine', () => {
 
       assert.strictEqual(
         nodeArray[1].message.role,
+        'assistant',
+        'Second node is assistant tool call'
+      );
+      assert.deepStrictEqual(
+        nodeArray[1].message.tool_calls,
+        [
+          {
+            id: 'call_123',
+            type: 'function',
+            function: {
+              name: 'echo',
+              arguments: '{"message": "Hello World"}'
+            }
+          }
+        ],
+        'Assistant tool call matches'
+      );
+
+      assert.strictEqual(
+        nodeArray[2].message.role,
         'tool',
-        'Second node is tool result'
+        'Third node is tool result'
       );
       assert.strictEqual(
-        nodeArray[1].message.tool_call_id,
+        nodeArray[2].message.tool_call_id,
         'call_123',
         'Tool result has correct call ID'
       );
       assert.strictEqual(
-        nodeArray[1].message.content,
+        nodeArray[2].message.content,
         '{"echo":"Hello World"}',
         'Tool result content matches'
       );
 
       assert.strictEqual(
-        nodeArray[2].message.role,
+        nodeArray[3].message.role,
         'assistant',
-        'Third node is final assistant response'
+        'Fourth node is final assistant response'
       );
       assert.strictEqual(
-        nodeArray[2].message.content,
+        nodeArray[3].message.content,
         'I echoed your message successfully!',
         'Final assistant content matches'
       );
