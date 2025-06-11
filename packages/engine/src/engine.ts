@@ -14,6 +14,8 @@ import type {
 import { AnthropicProvider } from './providers/anthropic.ts';
 import { GoogleProvider } from './providers/google.ts';
 import { ToolRegistry } from './tools/registry.ts';
+import type { ConfigStore } from './config.ts';
+import { discoverMcpTools } from './mcp/client.ts';
 
 export interface GenerateOptions {
   n: number;
@@ -26,24 +28,33 @@ export type ProgressCallback = (node: NodeData) => void;
 export class LoomEngine {
   private forest: Forest;
   private store: ILoomStore;
+  private configStore?: ConfigStore;
   public readonly toolRegistry: ToolRegistry;
 
-  private constructor(store: ILoomStore) {
+  private constructor(store: ILoomStore, configStore?: ConfigStore) {
     this.store = store;
     this.forest = new Forest(this.store);
     this.toolRegistry = new ToolRegistry();
-    this.registerBuiltinTools();
+    this.configStore = configStore;
   }
 
-  static async create(storeOrPath: ILoomStore | string) {
+  static async create(
+    storeOrPath: ILoomStore | string,
+    configStore?: ConfigStore
+  ) {
     let store;
     if (typeof storeOrPath === 'string') {
       store = await FileSystemStore.create(storeOrPath);
     } else {
       store = storeOrPath;
     }
-    const engine = new LoomEngine(store);
+    const engine = new LoomEngine(store, configStore);
+    await engine.initializeTools();
     return engine;
+  }
+
+  getConfigStore() {
+    return this.configStore;
   }
 
   getForest(): Forest {
@@ -267,7 +278,8 @@ export class LoomEngine {
     this.store.log(x);
   }
 
-  private registerBuiltinTools(): void {
+  private async initializeTools(): Promise<void> {
+    // Register built-in tools first as fallback
     this.toolRegistry.register(
       'echo',
       'Echoes the input back to the user.',
@@ -288,5 +300,10 @@ export class LoomEngine {
       { type: 'object', properties: {} },
       async () => JSON.stringify({ date: new Date().toISOString() })
     );
+
+    // Discover and register tools from configured MCP servers
+    if (this.configStore) {
+      await discoverMcpTools(this.toolRegistry, this.configStore);
+    }
   }
 }

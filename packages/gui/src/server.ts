@@ -25,7 +25,7 @@ async function main() {
 
   // Create engine and config store
   const configStore = await ConfigStore.create(dataDir);
-  const engine = await LoomEngine.create(dataDir);
+  const engine = await LoomEngine.create(dataDir, configStore);
 
   console.log(`Initialized LoomEngine with data directory: ${dataDir}`);
 

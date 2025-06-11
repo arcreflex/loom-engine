@@ -48,7 +48,10 @@ export class ToolRegistry {
    * @param args - The arguments for the tool.
    * @returns The result of the tool's execution.
    */
-  public async execute(name: string, args: object): Promise<string> {
+  public async execute(
+    name: string,
+    args: Record<string, unknown>
+  ): Promise<string> {
     const tool = this.tools.get(name);
     if (!tool) {
       throw new Error(`Tool "${name}" not found.`);

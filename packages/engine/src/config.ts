@@ -5,6 +5,7 @@ import os from 'os';
 
 import * as toml from '@iarna/toml';
 import { log } from './log.ts';
+import type { McpServerConfig } from './mcp/client.ts';
 
 export type Bookmark = {
   title: string;
@@ -43,6 +44,7 @@ export interface Config {
   activePresetName?: string; // Remove null, handle in application logic
   currentNodeId?: NodeId;
   bookmarks?: Bookmark[];
+  mcp_servers?: McpServerConfig[];
 }
 
 type RecursivePartial<T> = {
@@ -51,13 +53,15 @@ type RecursivePartial<T> = {
 
 // strip brands off of nominally typed strings and handle nulls
 type ToPlainJson<T> = {
-  [K in keyof T]: T[K] extends object
-    ? T[K] extends null
-      ? null
-      : ToPlainJson<T[K]>
-    : T[K] extends string | Date
-      ? string
-      : T[K];
+  [K in keyof T]: T[K] extends (infer U)[]
+    ? ToPlainJson<U>[]
+    : T[K] extends object
+      ? T[K] extends null
+        ? null
+        : ToPlainJson<T[K]>
+      : T[K] extends string | Date
+        ? string
+        : T[K];
 };
 
 /**
@@ -130,6 +134,14 @@ export class ConfigStore {
 
   get(): Config {
     return merge(this.base, this.main);
+  }
+
+  getDataDir() {
+    return this.dataDir;
+  }
+
+  log(message: string): void {
+    log(this.dataDir, message);
   }
 
   async update(updates: Partial<Config>): Promise<boolean> {

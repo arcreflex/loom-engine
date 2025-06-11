@@ -5,7 +5,7 @@ import type { JSONSchema7 } from 'json-schema';
  * @param args - The arguments for the tool, validated against its schema.
  * @returns A promise that resolves to a string (typically JSON) representing the tool's output.
  */
-export type ToolHandler = (args: object) => Promise<string>;
+export type ToolHandler = (args: Record<string, unknown>) => Promise<string>;
 
 /**
  * Defines a tool, including its schema and handler.
