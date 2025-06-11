@@ -55,10 +55,55 @@ export class OpenAIProvider implements IProvider {
 
       // Add conversation history
       for (const msg of request.messages) {
-        messages.push({
-          role: msg.role,
-          content: msg.content
-        });
+        if (msg.role === 'tool') {
+          // Tool messages require tool_call_id and content
+          if (!msg.tool_call_id || msg.content == null) {
+            continue; // Skip tool messages without tool_call_id or content
+          }
+          messages.push({
+            role: 'tool',
+            content: msg.content,
+            tool_call_id: msg.tool_call_id
+          });
+        } else if (msg.role === 'assistant') {
+          // Assistant messages can have tool_calls and/or content
+          const assistantMessage: OpenAI.ChatCompletionAssistantMessageParam = {
+            role: 'assistant'
+          };
+
+          // Add content if it exists
+          if (msg.content != null) {
+            assistantMessage.content = msg.content;
+          }
+
+          // Add tool_calls if they exist
+          if (msg.tool_calls) {
+            assistantMessage.tool_calls = msg.tool_calls.map(tc => ({
+              id: tc.id,
+              type: tc.type,
+              function: {
+                name: tc.function.name,
+                arguments: tc.function.arguments
+              }
+            }));
+          }
+
+          // Skip if neither content nor tool_calls exist
+          if (msg.content == null && !msg.tool_calls) {
+            continue;
+          }
+
+          messages.push(assistantMessage);
+        } else {
+          // User messages require content
+          if (msg.content == null) {
+            continue;
+          }
+          messages.push({
+            role: 'user',
+            content: msg.content
+          });
+        }
       }
 
       // Extract specific parameters for OpenAI, with defaults

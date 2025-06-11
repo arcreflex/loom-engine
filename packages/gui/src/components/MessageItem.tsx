@@ -27,7 +27,7 @@ interface MessageItemProps {
 }
 
 export type CoalescedMessage = {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool';
   messages: DisplayMessage[];
 };
 
@@ -240,7 +240,7 @@ const RawContent = ({
   isCollapsed,
   toggleCollapsed
 }: {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'tool';
   content: string;
   isCollapsed: boolean;
   toggleCollapsed: () => void;

@@ -60,7 +60,7 @@ export function ChildNavigator({
                 {child.message.role === 'user' ? 'User: ' : ''}
               </span>
               <span className="text-terminal-text/90">
-                {child.message.content.replace(/\n/g, ' ')}
+                {child.message.content?.replace(/\n/g, ' ') || '(no content)'}
               </span>
             </button>
           );

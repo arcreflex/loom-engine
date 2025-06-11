@@ -657,7 +657,7 @@ describe('Forest', () => {
       // Execute & Verify - position too high
       await assert.rejects(
         async () =>
-          await forest.splitNode(node.id, node.message.content.length),
+          await forest.splitNode(node.id, node.message.content!.length),
         {
           name: 'Error',
           message: /Invalid message index for split/
@@ -693,7 +693,7 @@ describe('Forest', () => {
         // Now split the new node near the end
         const result2 = await forest.splitNode(
           splitNode1.id,
-          splitNode1.message.content.length - 2
+          splitNode1.message.content!.length - 2
         );
 
         // Get the final node

@@ -49,13 +49,25 @@ export class AnthropicProvider implements IProvider {
       const anthropicMessages: Anthropic.MessageParam[] = [];
       for (let i = 0; i < request.messages.length; i++) {
         const msg = request.messages[i];
+
+        // Skip tool messages as Anthropic doesn't support them directly
+        if (msg.role === 'tool') {
+          continue;
+        }
+
+        // Skip messages with null content
+        if (msg.content == null) {
+          continue;
+        }
+
         let content = msg.content;
         if (i === request.messages.length - 1) {
           // last message isn't allowed to end with whitespace
           content = content.replace(/[\s\n]+$/, '');
         }
+
         anthropicMessages.push({
-          role: msg.role,
+          role: msg.role as 'user' | 'assistant',
           content
         });
       }

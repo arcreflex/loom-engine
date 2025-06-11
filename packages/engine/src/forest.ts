@@ -180,7 +180,9 @@ export class Forest {
         throw new Error(`Parent node not found: ${parentId}`);
       }
 
-      messages = messages.filter(m => m.content.length > 0);
+      messages = messages.filter(
+        m => (m.content != null && m.content.length > 0) || m.tool_calls?.length
+      );
 
       if (!messages.length) {
         return parentNode;
@@ -200,7 +202,9 @@ export class Forest {
         const matchingChild = children.find(
           child =>
             child.message.role === currentMessage.role &&
-            child.message.content === currentMessage.content
+            child.message.content === currentMessage.content &&
+            JSON.stringify(child.message.tool_calls) ===
+              JSON.stringify(currentMessage.tool_calls)
         );
 
         if (matchingChild) {
@@ -271,7 +275,10 @@ export class Forest {
         throw new Error(`Cannot split root node: ${nodeId}`);
       }
 
-      // Validate the message index
+      // Validate the message has content and position is valid
+      if (node.message.content == null) {
+        throw new Error(`Cannot split node with null content: ${nodeId}`);
+      }
       if (position <= 0 || position >= node.message.content.length) {
         throw new Error(
           `Invalid message index for split: ${position}. Must be between 1 and ${node.message.content.length - 1}`

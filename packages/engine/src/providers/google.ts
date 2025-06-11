@@ -43,6 +43,16 @@ export class GoogleProvider implements IProvider {
 
       // Add conversation history
       for (const msg of request.messages) {
+        // Skip tool messages as Google doesn't support them directly
+        if (msg.role === 'tool') {
+          continue;
+        }
+
+        // Skip messages with null content
+        if (msg.content == null) {
+          continue;
+        }
+
         const role: 'user' | 'model' = msg.role === 'user' ? 'user' : 'model';
         messages.push({
           role,

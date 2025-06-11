@@ -329,7 +329,8 @@ describe('LoomEngine', () => {
               max_tokens: 100,
               temperature: 0.7,
               model: 'gpt-4'
-            }
+            },
+            tools: undefined
           }
         ],
         'Provider called with coalesced messages'
@@ -415,6 +416,323 @@ describe('LoomEngine', () => {
         mockProviderInstance.generate.mock.callCount(),
         1,
         'Provider was called once'
+      );
+    });
+
+    it('should execute a tool call and return a final response', async () => {
+      const root = createTestRoot('r7', {
+        systemPrompt: 'You are a helpful assistant'
+      });
+      const providerName: ProviderName = 'openai';
+      const modelName = 'gpt-4';
+      const userMessages: Message[] = [
+        { role: 'user', content: 'Echo "Hello World"' }
+      ];
+      const options = { n: 1, max_tokens: 100, temperature: 0.7 };
+      const activeTools = ['echo'];
+
+      // Reset mock and setup new implementation
+      mockProviderInstance.generate.mock.resetCalls();
+
+      let callCount = 0;
+      mockProviderInstance.generate.mock.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          // First call: return tool call
+          return {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_123',
+                  type: 'function',
+                  function: {
+                    name: 'echo',
+                    arguments: '{"message": "Hello World"}'
+                  }
+                }
+              ]
+            },
+            finish_reason: 'tool_calls',
+            usage: { input_tokens: 10, output_tokens: 5 }
+          };
+        } else {
+          // Second call: return final response
+          return {
+            message: {
+              role: 'assistant',
+              content: 'I echoed your message successfully!'
+            },
+            finish_reason: 'stop',
+            usage: { input_tokens: 15, output_tokens: 8 }
+          };
+        }
+      });
+
+      const result = await engine.generate(
+        root.id,
+        providerName,
+        modelName,
+        userMessages,
+        options,
+        activeTools
+      );
+
+      // Verify the sequence of calls
+      assert.strictEqual(
+        mockProviderInstance.generate.mock.callCount(),
+        2,
+        'Provider called twice (tool call + final response)'
+      );
+
+      // Check that we get exactly one final assistant node
+      assert.strictEqual(result.length, 1, 'One final assistant node returned');
+      assert.strictEqual(
+        result[0].message.role,
+        'assistant',
+        'Final node is assistant'
+      );
+      assert.strictEqual(
+        result[0].message.content,
+        'I echoed your message successfully!',
+        'Final response content matches'
+      );
+
+      // Verify that 3 nodes were created: user, tool (with result), assistant (final)
+      assert.strictEqual(
+        mockStoreWrapper.nodes.size,
+        3,
+        'Three nodes created in sequence'
+      );
+
+      // Verify the sequence of node types
+      const nodeArray = Array.from(mockStoreWrapper.nodes.values());
+      assert.strictEqual(
+        nodeArray[0].message.role,
+        'user',
+        'First node is user message'
+      );
+      assert.strictEqual(
+        nodeArray[0].message.content,
+        'Echo "Hello World"',
+        'User message content matches'
+      );
+
+      assert.strictEqual(
+        nodeArray[1].message.role,
+        'tool',
+        'Second node is tool result'
+      );
+      assert.strictEqual(
+        nodeArray[1].message.tool_call_id,
+        'call_123',
+        'Tool result has correct call ID'
+      );
+      assert.strictEqual(
+        nodeArray[1].message.content,
+        '{"echo":"Hello World"}',
+        'Tool result content matches'
+      );
+
+      assert.strictEqual(
+        nodeArray[2].message.role,
+        'assistant',
+        'Third node is final assistant response'
+      );
+      assert.strictEqual(
+        nodeArray[2].message.content,
+        'I echoed your message successfully!',
+        'Final assistant content matches'
+      );
+    });
+
+    it('should call onProgress callback for each node created during n>1 generation', async () => {
+      const root = createTestRoot('r8', { systemPrompt: 'You are a poet' });
+      const providerName: ProviderName = 'openai';
+      const modelName = 'gpt-4';
+      const userMessages: Message[] = [
+        { role: 'user', content: 'Write a poem' }
+      ];
+      const options = { n: 2, max_tokens: 100, temperature: 0.7 };
+
+      const progressNodes: NodeData[] = [];
+      const onProgress = mock.fn((node: NodeData) => {
+        progressNodes.push(node);
+      });
+
+      const result = await engine.generate(
+        root.id,
+        providerName,
+        modelName,
+        userMessages,
+        options,
+        undefined, // no active tools
+        onProgress
+      );
+
+      // Verify onProgress was called for each generated node
+      assert.strictEqual(
+        onProgress.mock.callCount(),
+        2,
+        'onProgress called twice for n=2'
+      );
+      assert.strictEqual(
+        progressNodes.length,
+        2,
+        'Two progress nodes captured'
+      );
+
+      // Verify that the progress nodes match the final result
+      assert.deepEqual(
+        progressNodes,
+        result,
+        'Progress nodes match final result'
+      );
+
+      // Verify all progress nodes are assistant messages
+      progressNodes.forEach((node, i) => {
+        assert.strictEqual(
+          node.message.role,
+          'assistant',
+          `Progress node ${i} is assistant`
+        );
+        assert.strictEqual(
+          node.message.content,
+          `response ${i}`,
+          `Progress node ${i} has correct content`
+        );
+      });
+    });
+
+    it('should call onProgress callback for tool-calling sequence', async () => {
+      const root = createTestRoot('r9', {
+        systemPrompt: 'You are a helpful assistant'
+      });
+      const providerName: ProviderName = 'openai';
+      const modelName = 'gpt-4';
+      const userMessages: Message[] = [
+        { role: 'user', content: 'Echo "Hello Progress"' }
+      ];
+      const options = { n: 1, max_tokens: 100, temperature: 0.7 };
+      const activeTools = ['echo'];
+
+      const progressNodes: NodeData[] = [];
+      const onProgress = mock.fn((node: NodeData) => {
+        progressNodes.push(node);
+      });
+
+      // Reset mock and setup tool-calling sequence
+      mockProviderInstance.generate.mock.resetCalls();
+
+      let callCount = 0;
+      mockProviderInstance.generate.mock.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          // First call: return tool call
+          return {
+            message: {
+              role: 'assistant',
+              content: null,
+              tool_calls: [
+                {
+                  id: 'call_456',
+                  type: 'function',
+                  function: {
+                    name: 'echo',
+                    arguments: '{"message": "Hello Progress"}'
+                  }
+                }
+              ]
+            },
+            finish_reason: 'tool_calls',
+            usage: { input_tokens: 10, output_tokens: 5 }
+          };
+        } else {
+          // Second call: return final response
+          return {
+            message: {
+              role: 'assistant',
+              content: 'Progress tracking works!'
+            },
+            finish_reason: 'stop',
+            usage: { input_tokens: 15, output_tokens: 8 }
+          };
+        }
+      });
+
+      const result = await engine.generate(
+        root.id,
+        providerName,
+        modelName,
+        userMessages,
+        options,
+        activeTools,
+        onProgress
+      );
+
+      // Verify onProgress was called for user, tool result, and final assistant
+      assert.strictEqual(
+        onProgress.mock.callCount(),
+        3,
+        'onProgress called two times during tool-calling'
+      );
+      assert.strictEqual(
+        progressNodes.length,
+        3,
+        'Three progress nodes captured'
+      );
+
+      // Check the sequence of progress nodes
+      assert.strictEqual(
+        progressNodes[0].message.role,
+        'assistant',
+        'First progress node is tool call'
+      );
+      assert.strictEqual(
+        progressNodes[0].message.content,
+        null,
+        'Content of tool call is null'
+      );
+      assert.strictEqual(
+        progressNodes[0].message.tool_calls?.length,
+        1,
+        'Tool call exists'
+      );
+
+      assert.strictEqual(
+        progressNodes[1].message.role,
+        'tool',
+        'Second progress node is tool result'
+      );
+      assert.strictEqual(
+        progressNodes[1].message.tool_call_id,
+        'call_456',
+        'Tool result has correct call ID'
+      );
+      assert.strictEqual(
+        progressNodes[1].message.content,
+        '{"echo":"Hello Progress"}',
+        'Tool result content correct'
+      );
+
+      assert.strictEqual(
+        progressNodes[2].message.role,
+        'assistant',
+        'Third progress node is final assistant'
+      );
+      assert.strictEqual(
+        progressNodes[2].message.content,
+        'Progress tracking works!',
+        'Final assistant content correct'
+      );
+
+      // Verify final result matches the last progress node
+      assert.strictEqual(result.length, 1, 'One final result');
+      assert.deepEqual(
+        result[0],
+        progressNodes[2],
+        'Final result matches last progress node'
       );
     });
   });

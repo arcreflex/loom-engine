@@ -23,7 +23,10 @@ export function coalesceMessages(
     }
 
     // If the roles match, combine the content with the separator
-    prevMsg.content += separator + currentMsg.content;
+    // Handle null content by treating it as empty string
+    const prevContent = prevMsg.content ?? '';
+    const currentContent = currentMsg.content ?? '';
+    prevMsg.content = prevContent + separator + currentContent;
     return result;
   }, []);
 }

@@ -15,6 +15,13 @@ export interface ProviderRequest {
     temperature: number;
     [key: string]: unknown; // Allow any other parameters
   };
+
+  /** Optional tools available for the model to call. */
+  tools?: {
+    name: string;
+    description: string;
+    parameters: object;
+  }[];
 }
 
 /**

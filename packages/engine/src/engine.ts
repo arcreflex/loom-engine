@@ -13,6 +13,7 @@ import type {
 } from './types.ts';
 import { AnthropicProvider } from './providers/anthropic.ts';
 import { GoogleProvider } from './providers/google.ts';
+import { ToolRegistry } from './tools/registry.ts';
 
 export interface GenerateOptions {
   n: number;
@@ -20,13 +21,18 @@ export interface GenerateOptions {
   temperature: number;
 }
 
+export type ProgressCallback = (node: NodeData) => void;
+
 export class LoomEngine {
   private forest: Forest;
   private store: ILoomStore;
+  public readonly toolRegistry: ToolRegistry;
 
   private constructor(store: ILoomStore) {
     this.store = store;
     this.forest = new Forest(this.store);
+    this.toolRegistry = new ToolRegistry();
+    this.registerBuiltinTools();
   }
 
   static async create(storeOrPath: ILoomStore | string) {
@@ -49,7 +55,9 @@ export class LoomEngine {
     providerName: ProviderName,
     modelName: string,
     contextMessages: Message[],
-    options: GenerateOptions
+    options: GenerateOptions,
+    activeTools?: string[],
+    onProgress?: ProgressCallback
   ): Promise<NodeData[]> {
     const root = await this.forest.getRoot(rootId);
     if (!root) {
@@ -57,46 +65,173 @@ export class LoomEngine {
     }
 
     const provider = this.getProvider(providerName);
-
-    const coalesced = coalesceMessages(contextMessages, '');
-
-    const { max_tokens, temperature } = options;
     const parameters = {
-      max_tokens,
-      temperature,
+      max_tokens: options.max_tokens,
+      temperature: options.temperature,
       model: modelName
     };
 
-    return Promise.all(
-      Array.from({ length: options.n }).map(async () => {
-        const response = await provider.generate({
-          systemMessage: root.config.systemPrompt,
-          messages: coalesced,
-          model: modelName,
-          parameters
-        });
-        const responseNode = await this.forest.append(
+    // If no tools are active, use the original n > 1 logic
+    if (!activeTools || activeTools.length === 0) {
+      const coalesced = coalesceMessages(contextMessages, '');
+
+      return Promise.all(
+        Array.from({ length: options.n }).map(async () => {
+          const response = await provider.generate({
+            systemMessage: root.config.systemPrompt,
+            messages: coalesced,
+            model: modelName,
+            parameters,
+            tools: undefined
+          });
+          const responseNode = await this.forest.append(
+            root.id,
+            [...contextMessages, response.message],
+            {
+              source_info: {
+                type: 'model',
+                provider: providerName,
+                model_name: modelName,
+                parameters,
+                finish_reason: response.finish_reason,
+                usage: response.usage
+              }
+            }
+          );
+          if (!responseNode.parent_id) {
+            throw new Error(
+              'Expected result of appending >0 nodes to be a non-root node.'
+            );
+          }
+
+          // Call progress callback for the newly created node
+          if (onProgress) {
+            onProgress(responseNode);
+          }
+
+          return responseNode;
+        })
+      );
+    }
+
+    // Tool-calling logic (only supports n=1)
+    if (options.n > 1) {
+      throw new Error('Tool calling currently only supports n=1');
+    }
+
+    // The conversation history for this turn
+    const currentMessages = [...contextMessages];
+    const finalAssistantNodes: NodeData[] = [];
+
+    // Start the tool-calling loop
+    for (let i = 0; i < 5; i++) {
+      // Limit to 5 iterations to prevent infinite loops
+      const coalesced = coalesceMessages(currentMessages, '');
+
+      const toolsForProvider = this.toolRegistry
+        .list()
+        .filter(t => activeTools.includes(t.name));
+
+      const response = await provider.generate({
+        systemMessage: root.config.systemPrompt,
+        messages: coalesced,
+        model: modelName,
+        parameters,
+        tools: toolsForProvider
+      });
+
+      const assistantMessage = response.message;
+
+      // Append the assistant's response (which may or may not have tool calls)
+      const assistantNode = await this.forest.append(
+        root.id,
+        [...currentMessages, assistantMessage],
+        {
+          source_info: {
+            type: 'model',
+            provider: providerName,
+            model_name: modelName,
+            parameters,
+            finish_reason: response.finish_reason,
+            usage: response.usage
+          }
+        }
+      );
+
+      // Call progress callback for the newly created assistant node
+      if (onProgress) {
+        onProgress(assistantNode as NodeData);
+      }
+
+      // Update the message history with the assistant's turn
+      currentMessages.push(assistantMessage);
+
+      if (
+        !assistantMessage.tool_calls ||
+        assistantMessage.tool_calls.length === 0
+      ) {
+        // If no tool calls, this is the final response.
+        finalAssistantNodes.push(assistantNode as NodeData);
+        break; // Exit the loop
+      }
+
+      // --- If there are tool calls, execute them ---
+      const toolResults = await Promise.all(
+        assistantMessage.tool_calls.map(async toolCall => {
+          try {
+            const result = await this.toolRegistry.execute(
+              toolCall.function.name,
+              JSON.parse(toolCall.function.arguments)
+            );
+            return {
+              tool_call_id: toolCall.id,
+              role: 'tool' as const,
+              content: result
+            };
+          } catch (error) {
+            return {
+              tool_call_id: toolCall.id,
+              role: 'tool' as const,
+              content: JSON.stringify({ error: String(error) })
+            };
+          }
+        })
+      );
+
+      // Append each tool result as a new node and update message history
+      for (const toolResultMessage of toolResults) {
+        const toolCall = assistantMessage.tool_calls!.find(
+          tc => tc.id === toolResultMessage.tool_call_id
+        )!;
+        const toolNode = await this.forest.append(
           root.id,
-          [...contextMessages, response.message],
+          [...currentMessages, toolResultMessage],
           {
             source_info: {
-              type: 'model',
-              provider: providerName,
-              model_name: modelName,
-              parameters,
-              finish_reason: response.finish_reason,
-              usage: response.usage
+              type: 'tool_result',
+              tool_name: toolCall.function.name
             }
           }
         );
-        if (!responseNode.parent_id) {
-          throw new Error(
-            'Expected result of appending >0 nodes to be a non-root node.'
-          );
+
+        // Call progress callback for the newly created tool result node
+        if (onProgress) {
+          onProgress(toolNode as NodeData);
         }
-        return responseNode;
-      })
-    );
+
+        currentMessages.push(toolResultMessage);
+      }
+
+      // Continue the loop to send the tool results back to the model
+    }
+
+    if (finalAssistantNodes.length === 0) {
+      throw new Error(
+        'Model did not produce a final response after tool calls.'
+      );
+    }
+
+    return finalAssistantNodes;
   }
 
   async getMessages(
@@ -121,5 +256,28 @@ export class LoomEngine {
 
   log(x: unknown) {
     this.store.log(x);
+  }
+
+  private registerBuiltinTools(): void {
+    this.toolRegistry.register(
+      'echo',
+      'Echoes the input back to the user.',
+      {
+        type: 'object',
+        properties: {
+          message: { type: 'string', description: 'The message to echo.' }
+        },
+        required: ['message']
+      },
+      async (args: { message?: string }) =>
+        JSON.stringify({ echo: args.message ?? 'No message provided' })
+    );
+
+    this.toolRegistry.register(
+      'current_date',
+      'Returns the current date and time.',
+      { type: 'object', properties: {} },
+      async () => JSON.stringify({ date: new Date().toISOString() })
+    );
   }
 }

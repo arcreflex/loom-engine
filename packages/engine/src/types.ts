@@ -13,7 +13,7 @@ export type RootId = NodeId & { readonly __rootIdBrand: unique symbol };
 /**
  * Represents the role of a message in a conversation.
  */
-export type Role = 'user' | 'assistant';
+export type Role = 'user' | 'assistant' | 'tool';
 
 export type ProviderName = 'openai' | 'anthropic' | 'google';
 
@@ -24,12 +24,21 @@ export interface Message {
   /** The role of the entity sending the message. */
   role: Role;
 
-  /** The content of the message. */
-  content: string;
+  /** The content of the message. Can be null for an assistant message that only contains tool calls. */
+  content: string | null;
 
-  // Potential future fields:
-  // tool_call_id?: string;
-  // tool_calls?: any[];
+  /** For an 'assistant' role message, a list of tool calls the model wants to make. */
+  tool_calls?: {
+    id: string; // A unique ID for this specific tool call.
+    type: 'function'; // The type of tool call, always 'function' for now.
+    function: {
+      name: string; // The name of the function to be called.
+      arguments: string; // A JSON string of arguments for the function.
+    };
+  }[];
+
+  /** For a 'tool' role message, the ID of the tool_call that this is the result for. */
+  tool_call_id?: string;
 }
 
 /**
@@ -75,6 +84,10 @@ export type SourceInfo =
     }
   | {
       type: 'user';
+    }
+  | {
+      type: 'tool_result';
+      tool_name: string; // The name of the tool that was executed.
     };
 
 /**
