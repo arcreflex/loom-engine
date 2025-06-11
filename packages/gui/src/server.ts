@@ -91,6 +91,8 @@ async function main() {
         return {
           role: node.message.role,
           content: node.message.content,
+          tool_calls: node.message.tool_calls,
+          tool_call_id: node.message.tool_call_id,
           nodeId: node.id,
           timestamp: node.metadata.timestamp,
           sourceProvider,
@@ -164,9 +166,10 @@ async function main() {
   app.post('/api/nodes/:nodeId/generate', async (req, res) => {
     try {
       const { nodeId } = req.params;
-      const { providerName, modelName, ...options } = req.body as {
+      const { providerName, modelName, activeTools, ...options } = req.body as {
         providerName: ProviderName;
         modelName: string;
+        activeTools?: string[];
       } & Partial<GenerateOptions>;
       const defaults = configStore.get().defaults;
 
@@ -195,7 +198,8 @@ async function main() {
           temperature: defaults.temperature,
           n: defaults.n,
           ...options
-        }
+        },
+        activeTools // Pass activeTools to engine.generate
       );
 
       res.json(newNodes);
@@ -383,6 +387,16 @@ async function main() {
       res.json(modelStrings);
     } catch (_error) {
       res.status(500).json({ error: 'Failed to retrieve known models' });
+    }
+  });
+
+  // Tools endpoint
+  app.get('/api/tools', (_req, res) => {
+    try {
+      const tools = engine.toolRegistry.list(); // Returns definitions without handlers
+      res.json(tools);
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
     }
   });
 

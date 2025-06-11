@@ -26,7 +26,8 @@ import {
   setActivePreset,
   getGraphTopology,
   NodeStructure,
-  listRoots
+  listRoots,
+  listTools
 } from './api';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { StatusBar } from './components/StatusBar';
@@ -40,6 +41,7 @@ import type { Command, DisplayMessage, GenerateOptions } from './types';
 import type { NodeData, NodeId, Role } from '@ankhdt/loom-engine';
 import { parseModelString, KNOWN_MODELS } from '@ankhdt/loom-engine/browser';
 import { ChildNavigator } from './components/ChildNavigator';
+import { ToolsPanel } from './components/ToolsPanel';
 
 // Import the new state management components
 import { AppProvider, useAppContext } from './state';
@@ -69,7 +71,8 @@ function AppContent() {
     activePresetName,
     defaultParameters,
     currentProviderName,
-    currentModelName
+    currentModelName,
+    tools
   } = state;
 
   const currentRootId =
@@ -229,12 +232,13 @@ function AppContent() {
       payload: { operation: 'Initializing' }
     });
     try {
-      const [roots, fetchedBookmarks, presetConfig, defaults] =
+      const [roots, fetchedBookmarks, presetConfig, defaults, availableTools] =
         await Promise.all([
           listRoots(),
           listBookmarks(),
           getConfigPresets(), // Fetch presets
-          getDefaultConfig() // Fetch defaults
+          getDefaultConfig(), // Fetch defaults
+          listTools() // Fetch available tools
         ]);
 
       // Set preset config and defaults first
@@ -263,6 +267,12 @@ function AppContent() {
       dispatch({
         type: 'SET_ROOTS',
         payload: { roots }
+      });
+
+      // Set available tools
+      dispatch({
+        type: 'SET_AVAILABLE_TOOLS',
+        payload: { tools: availableTools }
       });
 
       // Set status to idle after loading config/bookmarks
@@ -397,7 +407,8 @@ function AppContent() {
           nodeIdToGenerateFrom,
           currentProviderName,
           currentModelName,
-          finalParams as GenerateOptions
+          finalParams as GenerateOptions,
+          tools.active // Pass active tools
         );
 
         if (results.length === 1) {
@@ -433,7 +444,8 @@ function AppContent() {
       effectiveGenerationParams,
       navigateToNode,
       currentProviderName,
-      currentModelName
+      currentModelName,
+      tools.active
     ]
   );
 
@@ -523,6 +535,17 @@ function AppContent() {
       // Optionally dispatch an error, but maybe less critical here
     }
   }, [dispatch]);
+
+  // --- Tool Management ---
+  const handleToggleTool = useCallback(
+    (toolName: string) => {
+      dispatch({
+        type: 'TOGGLE_TOOL_ACTIVE',
+        payload: { toolName }
+      });
+    },
+    [dispatch]
+  );
 
   const saveBookmark = useCallback(
     async (title: string) => {
@@ -1145,18 +1168,33 @@ function AppContent() {
       {/* Panel Group takes up remaining flexible space */}
       <PanelGroup direction="horizontal" className="flex-1">
         <Panel defaultSize={40} minSize={20}>
-          <div className="h-full border-l border-terminal-border">
-            <GraphView
-              state={state.graphViewState}
-              topology={graphTopology}
-              bookmarks={bookmarks}
-              currentPath={state.messages.map(m => m.nodeId)}
-              currentNodeId={currentNode?.id ?? null}
-              currentRootId={currentRootId ?? null}
-              onNodeClick={navigateToNode}
-              onNodeHover={previewNode}
-            />
-          </div>
+          <PanelGroup
+            direction="vertical"
+            className="h-full border-l border-terminal-border"
+          >
+            <Panel defaultSize={70} minSize={30}>
+              <GraphView
+                state={state.graphViewState}
+                topology={graphTopology}
+                bookmarks={bookmarks}
+                currentPath={state.messages.map(m => m.nodeId)}
+                currentNodeId={currentNode?.id ?? null}
+                currentRootId={currentRootId ?? null}
+                onNodeClick={navigateToNode}
+                onNodeHover={previewNode}
+              />
+            </Panel>
+            <PanelResizeHandle className="h-2 bg-terminal-border hover:bg-terminal-focus transition-colors" />
+            <Panel defaultSize={30} minSize={15}>
+              <div className="p-4 h-full overflow-y-auto border-t border-terminal-border">
+                <ToolsPanel
+                  availableTools={tools.available}
+                  activeToolNames={tools.active}
+                  onToggleTool={handleToggleTool}
+                />
+              </div>
+            </Panel>
+          </PanelGroup>
         </Panel>
         <PanelResizeHandle className="w-2 bg-terminal-border hover:bg-terminal-focus transition-colors" />
         <Panel defaultSize={60} minSize={30}>

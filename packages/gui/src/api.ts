@@ -113,11 +113,12 @@ export async function generateCompletion(
   nodeId: NodeId,
   providerName: ProviderName,
   modelName: string,
-  options: Partial<GenerateOptions>
+  options: Partial<GenerateOptions>,
+  activeTools?: string[]
 ): Promise<NodeData[]> {
   return fetchApi<NodeData[]>(`/api/nodes/${encode(nodeId)}/generate`, {
     method: 'POST',
-    body: JSON.stringify({ providerName, modelName, ...options })
+    body: JSON.stringify({ providerName, modelName, activeTools, ...options })
   });
 }
 
@@ -235,6 +236,22 @@ export async function switchRoot(systemPrompt?: string): Promise<RootData> {
 
 export async function listModels(): Promise<string[]> {
   return fetchApi<string[]>('/api/models');
+}
+
+export async function listTools(): Promise<
+  Array<{
+    name: string;
+    description: string;
+    parameters: object;
+  }>
+> {
+  return fetchApi<
+    Array<{
+      name: string;
+      description: string;
+      parameters: object;
+    }>
+  >('/api/tools');
 }
 
 /**

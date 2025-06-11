@@ -96,6 +96,19 @@ export interface GuiAppState {
   // --- Rendering Mode ---
   /** Whether to render messages as raw text or markdown */
   renderingMode: 'markdown' | 'raw';
+
+  // --- Tools Management ---
+  /** Tool management state */
+  tools: {
+    /** All tools available from the registry */
+    available: Array<{
+      name: string;
+      description: string;
+      parameters: object;
+    }>;
+    /** Names of tools currently enabled by the user */
+    active: string[];
+  };
 }
 
 // Define the Action types
@@ -169,4 +182,17 @@ export type GuiAppAction =
     }
 
   // --- Rendering Mode ---
-  | { type: 'TOGGLE_RENDERING_MODE' };
+  | { type: 'TOGGLE_RENDERING_MODE' }
+
+  // --- Tools Management ---
+  | {
+      type: 'SET_AVAILABLE_TOOLS';
+      payload: {
+        tools: Array<{
+          name: string;
+          description: string;
+          parameters: object;
+        }>;
+      };
+    }
+  | { type: 'TOGGLE_TOOL_ACTIVE'; payload: { toolName: string } };

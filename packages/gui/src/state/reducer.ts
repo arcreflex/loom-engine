@@ -168,6 +168,31 @@ export function guiAppReducer(
         renderingMode: state.renderingMode === 'markdown' ? 'raw' : 'markdown'
       };
 
+    // --- Tools Management ---
+    case 'SET_AVAILABLE_TOOLS':
+      return {
+        ...state,
+        tools: {
+          ...state.tools,
+          available: action.payload.tools
+        }
+      };
+    case 'TOGGLE_TOOL_ACTIVE': {
+      const toolName = action.payload.toolName;
+      const isCurrentlyActive = state.tools.active.includes(toolName);
+      const newActiveTools = isCurrentlyActive
+        ? state.tools.active.filter(name => name !== toolName)
+        : [...state.tools.active, toolName];
+
+      return {
+        ...state,
+        tools: {
+          ...state.tools,
+          active: newActiveTools
+        }
+      };
+    }
+
     default:
       // Ensure all action types are handled (useful for type checking)
       action satisfies never;

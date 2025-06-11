@@ -40,7 +40,11 @@ export const MessageItem = forwardRef(
     const { state } = useAppContext();
 
     const messageClass =
-      message.role === 'user' ? 'message-user' : 'message-assistant';
+      message.role === 'user'
+        ? 'message-user'
+        : message.role === 'tool'
+          ? '' // No border for tool results - they'll be full width
+          : 'message-assistant';
     const previewClass = isPreview ? 'opacity-70 border-l-terminal-border' : '';
 
     const end = message.messages[message.messages.length - 1];
@@ -66,23 +70,75 @@ export const MessageItem = forwardRef(
       setIsCollapsed(!isCollapsed);
     }, [isCollapsed, setIsCollapsed]);
 
+    // Check if any message has tool calls or is a tool result
+    const hasToolCalls = message.messages.some(
+      msg => msg.tool_calls && msg.tool_calls.length > 0
+    );
+    const isToolResult = message.role === 'tool';
+
     return (
       <div ref={ref} className={`p-4 mb-4 ${messageClass} ${previewClass}`}>
-        {state.renderingMode === 'raw' ? (
-          <RawContent
-            role={message.role}
+        {/* Render tool calls for assistant messages */}
+        {hasToolCalls &&
+          message.messages.map(
+            (msg, index) =>
+              msg.tool_calls &&
+              msg.tool_calls.length > 0 && (
+                <div key={`${msg.nodeId}-tools-${index}`} className="mb-4">
+                  {msg.tool_calls.map((toolCall, toolIndex) => (
+                    <div
+                      key={`${toolCall.id}-${toolIndex}`}
+                      className="bg-gray-800/50 p-2 rounded mb-2"
+                    >
+                      <div className="flex items-center mb-2">
+                        <div className="text-xs font-mono text-gray-400">
+                          🔧 Tool Call
+                        </div>
+                        <div className="ml-2 text-xs text-gray-300">
+                          {toolCall.function.name}
+                        </div>
+                      </div>
+                      {toolCall.function.arguments && (
+                        <pre className="text-xs text-gray-300 bg-gray-900/50 p-2 rounded">
+                          {JSON.stringify(
+                            JSON.parse(toolCall.function.arguments),
+                            null,
+                            2
+                          )}
+                        </pre>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )
+          )}
+
+        {/* Render tool result for tool messages */}
+        {isToolResult && (
+          <ToolResultDisplay
             content={combinedText}
-            isCollapsed={isCollapsed}
-            toggleCollapsed={toggleCollapsed}
-          />
-        ) : (
-          <MarkdownContent
-            content={combinedText}
-            isCollapsed={isCollapsed}
-            onCopy={onCopy}
-            toggleCollapsed={toggleCollapsed}
+            toolCallId={message.messages[0]?.tool_call_id}
           />
         )}
+
+        {/* Render normal content if present and not a tool result */}
+        {combinedText &&
+          !isToolResult &&
+          (state.renderingMode === 'raw' ? (
+            <RawContent
+              role={message.role}
+              content={combinedText}
+              isCollapsed={isCollapsed}
+              toggleCollapsed={toggleCollapsed}
+            />
+          ) : (
+            <MarkdownContent
+              content={combinedText}
+              isCollapsed={isCollapsed}
+              onCopy={onCopy}
+              toggleCollapsed={toggleCollapsed}
+            />
+          ))}
 
         {!isPreview && (
           <div className="flex justify-between items-center">
@@ -133,6 +189,36 @@ export const MessageItem = forwardRef(
     );
   }
 );
+
+const ToolResultDisplay = ({
+  content,
+  toolCallId
+}: {
+  content: string;
+  toolCallId?: string;
+}) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  return (
+    <div className="mb-4">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="flex items-center text-sm text-green-400 hover:text-green-300 w-full text-left"
+      >
+        <span className="mr-2">{isExpanded ? '▼' : '▶'}</span>
+        <span className="font-mono">✅ Tool Result</span>
+        {toolCallId && (
+          <span className="ml-2 text-xs text-gray-500">ID: {toolCallId}</span>
+        )}
+      </button>
+      {isExpanded && content && (
+        <pre className="text-xs text-gray-300 bg-gray-800/50 p-2 rounded whitespace-pre-wrap mt-2">
+          {content}
+        </pre>
+      )}
+    </div>
+  );
+};
 
 const MarkdownContent = ({
   content,

@@ -41,5 +41,11 @@ export const initialState: GuiAppState = {
   },
 
   // Rendering Mode
-  renderingMode: 'markdown'
+  renderingMode: 'markdown',
+
+  // Tools Management
+  tools: {
+    available: [],
+    active: []
+  }
 };
