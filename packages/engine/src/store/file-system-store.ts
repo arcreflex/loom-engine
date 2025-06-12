@@ -43,6 +43,7 @@ type FileNodeId = NodeId & `${RootId}/node-${number}`;
 export class FileSystemStore implements ILoomStore {
   private basePath: string = '';
   private rootsFilePath: string = '';
+  private nodeStructuresCache: NodeStructure[] | null = null;
 
   private idCaches: {
     root: IdCache<RootId>;
@@ -110,6 +111,9 @@ export class FileSystemStore implements ILoomStore {
 
     // Write node data
     await fs.writeFile(nodePath, JSON.stringify(nodeData, null, 2));
+
+    // Invalidate cache
+    this.nodeStructuresCache = null;
   }
 
   private rootDirPath(rootId: RootId) {
@@ -187,6 +191,9 @@ export class FileSystemStore implements ILoomStore {
 
     const nodePath = this.nodeFilePath(node.root_id, nodeId);
     await fs.unlink(nodePath);
+
+    // Invalidate cache
+    this.nodeStructuresCache = null;
   }
 
   /**
@@ -251,6 +258,9 @@ export class FileSystemStore implements ILoomStore {
     }
 
     await fs.writeFile(this.rootsFilePath, JSON.stringify(roots, null, 2));
+
+    // Invalidate cache
+    this.nodeStructuresCache = null;
   }
 
   /**
@@ -286,6 +296,11 @@ export class FileSystemStore implements ILoomStore {
    * @returns An array of NodeStructure objects
    */
   async listAllNodeStructures(): Promise<NodeStructure[]> {
+    // Return cached result if available
+    if (this.nodeStructuresCache !== null) {
+      return this.nodeStructuresCache;
+    }
+
     const roots = await this.listRootInfos();
     const allStructures: NodeStructure[] = [];
 
@@ -337,6 +352,8 @@ export class FileSystemStore implements ILoomStore {
       }
     }
 
+    // Cache the result before returning
+    this.nodeStructuresCache = allStructures;
     return allStructures;
   }
 }
