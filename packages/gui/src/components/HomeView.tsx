@@ -1,53 +1,37 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PanelGroup, Panel, PanelResizeHandle } from 'react-resizable-panels';
-import {
-  getEntireGraph,
-  getPath,
-  listBookmarks,
-  listRoots,
-  NodeStructure
-} from '../api';
+import { getEntireGraph, getPath, NodeStructure } from '../api';
 import { GraphView, type GraphViewState } from './GraphView';
 import { HomeSidebar } from './HomeSidebar';
-import type { Bookmark, NodeId, RootData } from '@ankhdt/loom-engine';
+import { useAppStore } from '../state';
+import type { NodeId } from '@ankhdt/loom-engine';
 
 export default function HomeView() {
   const navigate = useNavigate();
 
-  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
-  const [roots, setRoots] = useState<RootData[]>([]);
+  // Get data from Zustand store
+  const { bookmarks, roots, status } = useAppStore(state => ({
+    bookmarks: state.bookmarks,
+    roots: state.roots,
+    status: state.status
+  }));
+
+  // Local state for HomeView-specific data
   const [topology, setTopology] = useState<NodeStructure[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [graphState, setGraphState] = useState<GraphViewState>({
     mode: 'multi-root',
     previewNodeId: null
   });
 
+  // Load data
   useEffect(() => {
     (async () => {
       try {
-        const [bms, rts, topo] = await Promise.all([
-          listBookmarks(),
-          listRoots(),
-          getEntireGraph()
-        ]);
-        setBookmarks(
-          bms.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        );
-        setRoots(
-          rts.sort((a, b) =>
-            (a.config.systemPrompt ?? '').localeCompare(
-              b.config.systemPrompt ?? ''
-            )
-          )
-        );
+        const topo = await getEntireGraph();
         setTopology(topo);
       } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
-      } finally {
-        setLoading(false);
+        console.error('Failed to load graph topology:', err);
       }
     })();
   }, []);
@@ -76,6 +60,20 @@ export default function HomeView() {
     [graphState.previewNodeId]
   );
 
+  // Derived state for display
+  const loading = status.type === 'loading' || status.type === 'initializing';
+  const error = status.type === 'error' ? status.message : null;
+
+  // Sort data for display
+  const sortedBookmarks = bookmarks
+    .slice()
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const sortedRoots = roots
+    .slice()
+    .sort((a, b) =>
+      (a.config.systemPrompt ?? '').localeCompare(b.config.systemPrompt ?? '')
+    );
+
   return (
     <PanelGroup direction="horizontal" className="h-screen">
       <Panel
@@ -84,8 +82,8 @@ export default function HomeView() {
         className="border-r border-terminal-border/50 bg-terminal-bg/70"
       >
         <HomeSidebar
-          bookmarks={bookmarks}
-          roots={roots}
+          bookmarks={sortedBookmarks}
+          roots={sortedRoots}
           loading={loading}
           error={error}
         />
@@ -100,7 +98,7 @@ export default function HomeView() {
           <GraphView
             state={graphState}
             topology={topology}
-            bookmarks={bookmarks}
+            bookmarks={sortedBookmarks}
             currentNodeId={null}
             currentPath={[]}
             currentRootId={null}

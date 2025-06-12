@@ -16,9 +16,9 @@ import { GraphViewState } from '../components/GraphView';
  * Defines the possible operational statuses of the GUI application.
  */
 export type Status =
-  | { type: 'initializing' } // Added distinct state for initial load
+  | { type: 'initializing' }
   | { type: 'idle' }
-  | { type: 'loading'; operation?: string } // Optional description of what's loading
+  | { type: 'loading'; operation?: string }
   | { type: 'error'; message: string };
 
 /**
@@ -34,188 +34,152 @@ export type PaletteStatus =
     };
 
 /**
+ * Defines actions available in the Zustand store
+ */
+export interface GuiAppActions {
+  // Status management
+  setStatus: (status: Status) => void;
+  setStatusLoading: (operation?: string) => void;
+  setStatusIdle: () => void;
+  setStatusError: (message: string) => void;
+
+  // Core navigation and data loading
+  navigateToNode: (nodeId: NodeId) => Promise<void>;
+  loadNodeData: (nodeId: NodeId) => Promise<void>;
+  refreshTopology: () => Promise<void>;
+
+  // Data initialization
+  fetchInitialData: () => Promise<void>;
+
+  // UI state management
+  setInputRole: (role: Role) => void;
+  toggleRequestOnSubmit: () => void;
+  setPreviewChild: (nodeData: NodeData | null) => void;
+
+  // Message and generation actions
+  handleSendMessage: (
+    role: Role,
+    content: string,
+    generateAfter: boolean
+  ) => Promise<void>;
+  handleGenerate: (
+    nodeId: NodeId,
+    options?: Partial<GenerateOptions>
+  ) => Promise<void>;
+  handleLargePasteSubmit: (content: string) => Promise<void>;
+
+  // Bookmark management
+  saveBookmark: (title: string) => Promise<void>;
+  deleteBookmark: (title: string) => Promise<void>;
+  refreshBookmarks: () => Promise<void>;
+
+  // Node management
+  deleteNode: (nodeId: NodeId) => Promise<void>;
+  deleteChildren: (nodeId: NodeId) => Promise<void>;
+  deleteSiblings: (nodeId: NodeId) => Promise<void>;
+
+  // Editing
+  handleEditSave: (nodeId: NodeId, newContent: string) => Promise<void>;
+  handleSystemPromptSave: (newPrompt: string) => Promise<void>;
+
+  // Model and preset management
+  setCurrentModel: (providerName: ProviderName, modelName: string) => void;
+  setActivePreset: (name: string | null) => Promise<void>;
+
+  // Command palette
+  openPalette: () => void;
+  closePalette: () => void;
+  updatePaletteQuery: (query: string) => void;
+  setPaletteSelectedIndex: (index: number) => void;
+
+  // Modal management
+  openModelSwitcher: () => void;
+  closeModelSwitcher: () => void;
+
+  // Graph view
+  setGraphViewMode: (mode: GraphViewState['mode']) => void;
+  setGraphHoverPreview: (
+    nodeId: NodeId | null,
+    messages?: DisplayMessage[],
+    root?: RootConfig
+  ) => void;
+
+  // Rendering mode
+  toggleRenderingMode: () => void;
+
+  // Tool management
+  toggleTool: (toolName: string) => void;
+  toggleToolGroup: (groupName: string) => void;
+  setActiveTools: (toolNames: string[]) => void;
+
+  // Root/conversation management
+  createNewRoot: (systemPrompt?: string) => Promise<void>;
+  navigateToParent: () => Promise<void>;
+
+  // Helper methods (internal)
+  initializeModelSelection: (messages: DisplayMessage[]) => void;
+  setDefaultToolsFromSourceInfo: (node: Node) => void;
+}
+
+/**
  * Represents the complete state of the Loom GUI application.
  */
 export interface GuiAppState {
-  // --- Core Data (Reflects the current view of the Loom) ---
-
+  // Core Data
   currentNode: Node | null;
-  /** Configuration of the root node for the current conversation. */
   root: RootConfig | null;
-  /** The list of messages forming the path to the currentNodeId. */
   messages: DisplayMessage[];
-  /** The direct children of the currentNodeId. */
   children: NodeData[];
-  /** The siblings of the currentNodeId (including itself). */
   siblings: NodeData[];
 
-  // --- UI Interaction State ---
-  /** The role ('user' or 'assistant') for the next message input. */
+  // UI Interaction State
   inputRole: Role;
-  /** Whether an LLM request should be automatically sent after submitting input. */
   requestOnSubmit: boolean;
-  /** The child node currently being previewed in the context view (if any). */
   previewChild: NodeData | null;
 
-  // --- Application Status ---
-  /** The current operational status (e.g., loading, idle, error). */
+  // Application Status
   status: Status;
 
-  // --- Metadata ---
-  /** The list of saved bookmarks. */
+  // Metadata
   bookmarks: Bookmark[];
-
-  /** The list of root nodes (conversations) available in the application. */
   roots: RootData[];
 
-  // --- Generation Presets ---
-  /** Available generation parameter presets */
+  // Generation Presets
   presets: { [name: string]: PresetDefinition };
-  /** Currently active preset name (null means use defaults) */
   activePresetName: string | null;
-  /** Default generation parameters */
   defaultParameters: GenerateOptions | null;
 
-  // --- Component State ---
-  /** The state of the command palette component. */
+  // Component State
   paletteState: PaletteStatus;
-
-  /** Whether the model switcher modal is open */
   isModelSwitcherOpen: boolean;
 
-  // --- Dynamic Model Selection ---
-  /** Currently selected provider for generation */
+  // Dynamic Model Selection
   currentProviderName: ProviderName | null;
-  /** Currently selected model for generation */
   currentModelName: string | null;
 
-  // --- Graph View ---
-  /** The current layout mode for the graph view. */
+  // Graph View
   graphViewState: GraphViewState;
 
-  // --- Rendering Mode ---
-  /** Whether to render messages as raw text or markdown */
+  // Rendering Mode
   renderingMode: 'markdown' | 'raw';
 
-  // --- Tools Management ---
-  /** Tool management state */
+  // Tools Management
   tools: {
-    /** All tools available from the registry */
     available: Array<{
       name: string;
       description: string;
       parameters: object;
       group?: string;
     }>;
-    /** Tool groups available */
     groups: Array<{
       name: string;
       description?: string;
       tools: string[];
     }>;
-    /** Ungrouped tools */
     ungroupedTools: string[];
-    /** Names of tools currently enabled by the user */
     active: string[];
   };
+
+  // Actions
+  actions: GuiAppActions;
 }
-
-// Define the Action types
-export type GuiAppAction =
-  // --- Status Management ---
-  | { type: 'SET_STATUS_LOADING'; payload?: { operation?: string } }
-  | { type: 'SET_STATUS_IDLE' }
-  | { type: 'SET_STATUS_ERROR'; payload: { message: string } }
-
-  // --- Initialization & Data Loading Results ---
-  | {
-      type: 'INITIALIZE_SUCCESS';
-      payload: { initialNodeId: NodeId | null; bookmarks: Bookmark[] };
-    }
-  | {
-      type: 'LOAD_NODE_DATA_SUCCESS';
-      payload: {
-        node: Node;
-        root: RootConfig;
-        messages: DisplayMessage[];
-        children: NodeData[];
-        siblings: NodeData[];
-      };
-    }
-
-  // --- UI Input State ---
-  | { type: 'SET_INPUT_ROLE'; payload: { role: Role } }
-  | { type: 'TOGGLE_REQUEST_ON_SUBMIT' }
-
-  // --- UI Interaction State ---
-  | { type: 'SET_PREVIEW_CHILD'; payload: { nodeData: NodeData | null } }
-
-  // --- Command Palette ---
-  | { type: 'PALETTE_OPEN' }
-  | { type: 'PALETTE_CLOSE' }
-  | { type: 'PALETTE_UPDATE_QUERY'; payload: { query: string } }
-  | { type: 'PALETTE_SET_SELECTED_INDEX'; payload: { index: number } }
-
-  // --- Metadata Updates ---
-  | { type: 'SET_BOOKMARKS'; payload: { bookmarks: Bookmark[] } }
-  | { type: 'SET_ROOTS'; payload: { roots: RootData[] } }
-
-  // --- Model Switcher Modal ---
-  | { type: 'OPEN_MODEL_SWITCHER' }
-  | { type: 'CLOSE_MODEL_SWITCHER' }
-
-  // --- Dynamic Model Selection ---
-  | {
-      type: 'SET_CURRENT_GENERATION_MODEL';
-      payload: { providerName: ProviderName; modelName: string };
-    }
-
-  // --- Generation Presets ---
-  | {
-      type: 'SET_PRESET_CONFIG';
-      payload: {
-        presets: { [name: string]: PresetDefinition };
-        activePresetName: string | null;
-      };
-    }
-  | { type: 'SET_DEFAULT_PARAMETERS'; payload: { parameters: GenerateOptions } }
-  | { type: 'SET_ACTIVE_PRESET_NAME'; payload: { name: string | null } }
-
-  // --- Graph View ---
-  | { type: 'SET_GRAPH_VIEW_MODE'; payload: { mode: GraphViewState['mode'] } }
-  | {
-      type: 'SET_GRAPH_HOVER_PREVIEW';
-      payload:
-        | { nodeId: NodeId; messages: DisplayMessage[]; root: RootConfig }
-        | { nodeId: null };
-    }
-
-  // --- Rendering Mode ---
-  | { type: 'TOGGLE_RENDERING_MODE' }
-
-  // --- Tools Management ---
-  | {
-      type: 'SET_AVAILABLE_TOOLS';
-      payload: {
-        tools: Array<{
-          name: string;
-          description: string;
-          parameters: object;
-          group?: string;
-        }>;
-      };
-    }
-  | {
-      type: 'SET_TOOL_GROUPS';
-      payload: {
-        groups: Array<{
-          name: string;
-          description?: string;
-          tools: string[];
-        }>;
-        ungroupedTools: string[];
-      };
-    }
-  | { type: 'TOGGLE_TOOL_ACTIVE'; payload: { toolName: string } }
-  | { type: 'TOGGLE_TOOL_GROUP_ACTIVE'; payload: { groupName: string } }
-  | { type: 'SET_TOOLS_ACTIVE'; payload: { toolNames: string[] } };

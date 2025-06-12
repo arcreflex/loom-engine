@@ -1,5 +1,7 @@
-export * from './types';
-export * from './state';
-export * from './reducer';
-export * from './context';
-export * from './hooks';
+export { useAppStore } from './app-store';
+export type {
+  GuiAppState,
+  GuiAppActions,
+  Status,
+  PaletteStatus
+} from './types';

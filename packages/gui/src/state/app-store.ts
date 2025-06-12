@@ -1,0 +1,696 @@
+import { create } from 'zustand';
+import type { GuiAppState, Status } from './types';
+import type {
+  NodeId,
+  Role,
+  Node,
+  NodeData,
+  ProviderName
+} from '@ankhdt/loom-engine';
+import type { DisplayMessage, GenerateOptions } from '../types';
+import {
+  setState as setAppState,
+  getPath,
+  getNode,
+  getChildren,
+  getSiblings,
+  appendMessage,
+  generateCompletion as apiGenerateCompletion,
+  deleteNode as apiDeleteNode,
+  deleteChildren as apiDeleteChildren,
+  deleteSiblings as apiDeleteSiblings,
+  listBookmarks,
+  saveBookmark as apiSaveBookmark,
+  deleteBookmark as apiDeleteBookmark,
+  switchRoot,
+  getConfigPresets,
+  getDefaultConfig,
+  setActivePreset as apiSetActivePreset,
+  getGraphTopology,
+  listRoots,
+  listTools,
+  listToolGroups,
+  editNodeContent
+} from '../api';
+
+// Define the initial state
+const initialState: Omit<GuiAppState, 'actions'> = {
+  // Core Data
+  currentNode: null,
+  root: null,
+  messages: [],
+  children: [],
+  siblings: [],
+
+  // UI Interaction State
+  inputRole: 'user' as Role,
+  requestOnSubmit: true,
+  previewChild: null,
+
+  // Application Status
+  status: { type: 'initializing' },
+
+  // Metadata
+  bookmarks: [],
+  roots: [],
+
+  // Generation Presets
+  presets: {},
+  activePresetName: null,
+  defaultParameters: null,
+
+  // Component State
+  paletteState: { status: 'closed' },
+  isModelSwitcherOpen: false,
+
+  // Dynamic Model Selection
+  currentProviderName: null,
+  currentModelName: null,
+
+  // Graph View
+  graphViewState: {
+    mode: 'single-root',
+    previewNodeId: null
+  },
+
+  // Rendering Mode
+  renderingMode: 'markdown',
+
+  // Tools Management
+  tools: {
+    available: [],
+    groups: [],
+    ungroupedTools: [],
+    active: []
+  }
+};
+
+// Create the store
+export const useAppStore = create<GuiAppState>((set, get) => ({
+  ...initialState,
+
+  actions: {
+    // Status management
+    setStatus: (status: Status) => set({ status }),
+
+    setStatusLoading: (operation?: string) => {
+      const currentStatus = get().status;
+      if (currentStatus.type === 'error') return;
+      set({ status: { type: 'loading', operation } });
+    },
+
+    setStatusIdle: () => {
+      const currentStatus = get().status;
+      if (currentStatus.type === 'loading' || currentStatus.type === 'error') {
+        set({ status: { type: 'idle' } });
+      }
+    },
+
+    setStatusError: (message: string) => {
+      set({ status: { type: 'error', message } });
+    },
+
+    // Core navigation and data loading
+    navigateToNode: async (nodeId: NodeId) => {
+      const { status, currentNode } = get();
+      if (status.type === 'loading' || currentNode?.id === nodeId) return;
+
+      get().actions.setStatusLoading('Navigating');
+      try {
+        await get().actions.loadNodeData(nodeId);
+        get().actions.setStatusIdle();
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error ? error.message : 'Failed to navigate to node'
+        );
+      }
+    },
+
+    loadNodeData: async (nodeId: NodeId) => {
+      // Update current node ID in backend state first
+      await setAppState(nodeId);
+
+      // Fetch all necessary data in parallel
+      const [pathData, fetchedChildren, node] = await Promise.all([
+        getPath(nodeId),
+        getChildren(nodeId),
+        getNode(nodeId)
+      ]);
+
+      let fetchedSiblings: NodeData[] = [];
+      if (node.parent_id) {
+        fetchedSiblings = await getSiblings(nodeId);
+      }
+
+      set({
+        currentNode: node,
+        root: pathData.root,
+        messages: pathData.messages,
+        children: fetchedChildren,
+        siblings: fetchedSiblings,
+        previewChild: null // Reset preview on nav
+      });
+
+      // Refresh topology in the background
+      get().actions.refreshTopology();
+
+      // Initialize model selection based on loaded data
+      const { defaultParameters } = get();
+      if (defaultParameters) {
+        get().actions.initializeModelSelection(pathData.messages);
+      }
+
+      // Set default tool selection based on the current node's source info
+      get().actions.setDefaultToolsFromSourceInfo(node);
+    },
+
+    refreshTopology: async () => {
+      try {
+        await getGraphTopology();
+        // Note: The topology is used by components directly via their own API calls
+        // This method exists for consistency and future caching opportunities
+      } catch (error) {
+        console.error('Failed to refresh topology:', error);
+      }
+    },
+
+    // Data initialization
+    fetchInitialData: async () => {
+      get().actions.setStatusLoading('Initializing');
+      try {
+        const [
+          roots,
+          fetchedBookmarks,
+          presetConfig,
+          defaults,
+          availableTools,
+          toolGroups
+        ] = await Promise.all([
+          listRoots(),
+          listBookmarks(),
+          getConfigPresets(),
+          getDefaultConfig(),
+          listTools(),
+          listToolGroups()
+        ]);
+
+        set({
+          roots,
+          bookmarks: fetchedBookmarks,
+          presets: presetConfig.presets,
+          activePresetName: presetConfig.activePresetName,
+          defaultParameters: defaults,
+          tools: {
+            available: availableTools,
+            groups: toolGroups.groups,
+            ungroupedTools: toolGroups.ungroupedTools,
+            active: []
+          }
+        });
+
+        get().actions.setStatusIdle();
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error ? error.message : 'Failed to initialize'
+        );
+      }
+    },
+
+    // UI state management
+    setInputRole: (role: Role) => set({ inputRole: role }),
+
+    toggleRequestOnSubmit: () =>
+      set(state => ({
+        requestOnSubmit: !state.requestOnSubmit
+      })),
+
+    setPreviewChild: (nodeData: NodeData | null) =>
+      set({
+        previewChild: nodeData
+      }),
+
+    // Message and generation actions
+    handleSendMessage: async (
+      role: Role,
+      content: string,
+      generateAfter: boolean
+    ) => {
+      const { currentNode, status } = get();
+      if (!currentNode || status.type === 'loading') return;
+
+      get().actions.setStatusLoading('Sending');
+      try {
+        let messageNodeId = currentNode.id;
+        let newNode: NodeData | undefined;
+
+        // Only append if content is non-empty
+        if (content.trim() !== '') {
+          newNode = await appendMessage(currentNode.id, role, content);
+          messageNodeId = newNode.id;
+        }
+
+        if (generateAfter) {
+          if (newNode) {
+            // Preview the node we just sent
+            get().actions.setPreviewChild(newNode);
+          }
+          await get().actions.handleGenerate(messageNodeId);
+        } else {
+          await get().actions.navigateToNode(messageNodeId);
+        }
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error ? error.message : 'Failed to send message'
+        );
+      }
+    },
+
+    handleGenerate: async (
+      nodeId: NodeId,
+      options?: Partial<GenerateOptions>
+    ) => {
+      const {
+        status,
+        currentProviderName,
+        currentModelName,
+        defaultParameters,
+        presets,
+        activePresetName,
+        tools
+      } = get();
+      if (status.type === 'loading') return;
+
+      if (!currentProviderName || !currentModelName) {
+        get().actions.setStatusError(
+          'No model selected. Please select a model first.'
+        );
+        return;
+      }
+
+      get().actions.setStatusLoading('Generating');
+      try {
+        // Calculate effective generation parameters
+        let effectiveParams = defaultParameters || {};
+        if (activePresetName && presets[activePresetName]) {
+          effectiveParams = {
+            ...effectiveParams,
+            ...presets[activePresetName]
+          };
+        }
+
+        const finalParams: GenerateOptions = {
+          n: 1,
+          temperature: 1.0,
+          max_tokens: 1024,
+          ...effectiveParams,
+          ...(options || {})
+        };
+
+        const results = await apiGenerateCompletion(
+          nodeId,
+          currentProviderName,
+          currentModelName,
+          finalParams,
+          tools.active
+        );
+
+        if (results.length === 1) {
+          await get().actions.navigateToNode(results[0].id);
+        } else if (results.length > 1) {
+          await get().actions.navigateToNode(nodeId);
+          console.log(
+            `Multiple results found: ${results.map(r => r.id).join(', ')}`
+          );
+          get().actions.setStatusIdle();
+        } else {
+          get().actions.setStatusIdle();
+        }
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error ? error.message : 'Generation failed'
+        );
+      }
+    },
+
+    handleLargePasteSubmit: async (content: string) => {
+      const { currentNode, status, inputRole } = get();
+      if (!currentNode || status.type === 'loading') return;
+
+      get().actions.setStatusLoading('Submitting Pasted Content');
+      try {
+        const newNode = await appendMessage(currentNode.id, inputRole, content);
+        await get().actions.navigateToNode(newNode.id);
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error
+            ? error.message
+            : 'Failed to handle pasted content'
+        );
+      }
+    },
+
+    // Bookmark management
+    saveBookmark: async (title: string) => {
+      const { currentNode, status } = get();
+      if (!title || status.type === 'loading' || !currentNode) return;
+
+      get().actions.setStatusLoading('Saving Bookmark');
+      try {
+        const rootId =
+          currentNode.parent_id === undefined
+            ? currentNode.id
+            : currentNode.root_id;
+        await apiSaveBookmark(title, currentNode.id, rootId);
+        await get().actions.refreshBookmarks();
+        get().actions.setStatusIdle();
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error ? error.message : 'Failed to save bookmark'
+        );
+      }
+    },
+
+    deleteBookmark: async (title: string) => {
+      const { status } = get();
+      if (status.type === 'loading') return;
+
+      get().actions.setStatusLoading('Deleting Bookmark');
+      try {
+        await apiDeleteBookmark(title);
+        await get().actions.refreshBookmarks();
+        get().actions.setStatusIdle();
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error ? error.message : 'Failed to delete bookmark'
+        );
+      }
+    },
+
+    refreshBookmarks: async () => {
+      try {
+        const bookmarks = await listBookmarks();
+        set({ bookmarks });
+      } catch (error) {
+        console.error('Failed to refresh bookmarks:', error);
+      }
+    },
+
+    // Node management
+    deleteNode: async (nodeId: NodeId) => {
+      const { status } = get();
+      if (status.type === 'loading') return;
+
+      get().actions.setStatusLoading('Deleting Node');
+      try {
+        const node = (await getNode(nodeId)) as NodeData;
+        const parentId = node?.parent_id;
+
+        if (parentId) {
+          await apiDeleteNode(nodeId);
+          await get().actions.navigateToNode(parentId);
+        } else {
+          console.error('Attempted to delete node without parent ID:', nodeId);
+          get().actions.setStatusIdle();
+        }
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error ? error.message : 'Failed to delete node'
+        );
+      }
+    },
+
+    deleteChildren: async (nodeId: NodeId) => {
+      const { status } = get();
+      if (status.type === 'loading') return;
+
+      get().actions.setStatusLoading('Deleting Children');
+      try {
+        await apiDeleteChildren(nodeId);
+        await get().actions.loadNodeData(nodeId);
+        get().actions.setStatusIdle();
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error ? error.message : 'Failed to delete children'
+        );
+      }
+    },
+
+    deleteSiblings: async (nodeId: NodeId) => {
+      const { status } = get();
+      if (status.type === 'loading') return;
+
+      get().actions.setStatusLoading('Deleting Siblings');
+      try {
+        await apiDeleteSiblings(nodeId);
+        await get().actions.loadNodeData(nodeId);
+        get().actions.setStatusIdle();
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error ? error.message : 'Failed to delete siblings'
+        );
+      }
+    },
+
+    // Editing
+    handleEditSave: async (nodeId: NodeId, newContent: string) => {
+      const { status } = get();
+      if (status.type === 'loading') return;
+
+      get().actions.setStatusLoading('Saving Edit');
+      try {
+        const newNode = await editNodeContent(nodeId, newContent);
+        await get().actions.navigateToNode(newNode.id);
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error ? error.message : 'Failed to save edit'
+        );
+      }
+    },
+
+    handleSystemPromptSave: async (newPrompt: string) => {
+      await get().actions.createNewRoot(newPrompt);
+    },
+
+    // Model and preset management
+    setCurrentModel: (providerName: ProviderName, modelName: string) => {
+      set({
+        currentProviderName: providerName,
+        currentModelName: modelName
+      });
+    },
+
+    setActivePreset: async (name: string | null) => {
+      get().actions.setStatusLoading('Setting Preset');
+      try {
+        await apiSetActivePreset(name);
+        set({ activePresetName: name });
+        get().actions.setStatusIdle();
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error ? error.message : 'Failed to set preset'
+        );
+      }
+    },
+
+    // Command palette
+    openPalette: () =>
+      set({
+        paletteState: { status: 'open', query: '', selectedIndex: 0 }
+      }),
+
+    closePalette: () =>
+      set({
+        paletteState: { status: 'closed' }
+      }),
+
+    updatePaletteQuery: (query: string) => {
+      const { paletteState } = get();
+      if (paletteState.status === 'open') {
+        set({
+          paletteState: { ...paletteState, query, selectedIndex: 0 }
+        });
+      }
+    },
+
+    setPaletteSelectedIndex: (index: number) => {
+      const { paletteState } = get();
+      if (paletteState.status === 'open') {
+        set({
+          paletteState: { ...paletteState, selectedIndex: index }
+        });
+      }
+    },
+
+    // Modal management
+    openModelSwitcher: () => set({ isModelSwitcherOpen: true }),
+    closeModelSwitcher: () => set({ isModelSwitcherOpen: false }),
+
+    // Graph view
+    setGraphViewMode: mode =>
+      set(state => ({
+        graphViewState: { ...state.graphViewState, mode }
+      })),
+
+    setGraphHoverPreview: (nodeId, messages, root) => {
+      if (nodeId === null) {
+        set(state => ({
+          graphViewState: {
+            mode: state.graphViewState.mode,
+            previewNodeId: null
+          }
+        }));
+      } else if (messages && root) {
+        set(state => ({
+          graphViewState: {
+            mode: state.graphViewState.mode,
+            previewNodeId: nodeId,
+            previewMessages: messages,
+            previewRoot: root
+          }
+        }));
+      }
+    },
+
+    // Rendering mode
+    toggleRenderingMode: () =>
+      set(state => ({
+        renderingMode: state.renderingMode === 'markdown' ? 'raw' : 'markdown'
+      })),
+
+    // Tool management
+    toggleTool: (toolName: string) => {
+      set(state => {
+        const active = state.tools.active;
+        const newActive = active.includes(toolName)
+          ? active.filter(name => name !== toolName)
+          : [...active, toolName];
+        return {
+          tools: { ...state.tools, active: newActive }
+        };
+      });
+    },
+
+    toggleToolGroup: (groupName: string) => {
+      set(state => {
+        const group = state.tools.groups.find(g => g.name === groupName);
+        if (!group) return state;
+
+        const groupTools = group.tools;
+        const active = state.tools.active;
+        const allGroupToolsActive = groupTools.every(tool =>
+          active.includes(tool)
+        );
+
+        let newActive: string[];
+        if (allGroupToolsActive) {
+          // Deactivate all tools in the group
+          newActive = active.filter(tool => !groupTools.includes(tool));
+        } else {
+          // Activate all tools in the group
+          newActive = [...new Set([...active, ...groupTools])];
+        }
+
+        return {
+          tools: { ...state.tools, active: newActive }
+        };
+      });
+    },
+
+    setActiveTools: (toolNames: string[]) => {
+      set(state => ({
+        tools: { ...state.tools, active: toolNames }
+      }));
+    },
+
+    // Root/conversation management
+    createNewRoot: async (systemPrompt?: string) => {
+      try {
+        const newRoot = await switchRoot(systemPrompt);
+        await get().actions.navigateToNode(newRoot.id);
+        get().actions.closeModelSwitcher();
+      } catch (error) {
+        get().actions.closeModelSwitcher();
+        get().actions.setStatusError(
+          error instanceof Error
+            ? error.message
+            : 'Failed to create new conversation'
+        );
+      }
+    },
+
+    navigateToParent: async () => {
+      const { currentNode, status } = get();
+      if (!currentNode || status.type === 'loading') return;
+
+      get().actions.setStatusLoading('Navigating Parent');
+      try {
+        if (currentNode.parent_id) {
+          await get().actions.navigateToNode(currentNode.parent_id);
+        } else {
+          get().actions.setStatusIdle();
+        }
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error ? error.message : 'Failed to navigate parent'
+        );
+      }
+    },
+
+    // Helper methods (internal)
+    initializeModelSelection: (messages: DisplayMessage[]) => {
+      const { currentProviderName, currentModelName } = get();
+
+      // If we already have a current model selected, don't change it
+      if (currentProviderName && currentModelName) {
+        return;
+      }
+
+      // Try to find model info from the most recent assistant message
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+        if (
+          message.role === 'assistant' &&
+          message.sourceProvider &&
+          message.sourceModelName
+        ) {
+          get().actions.setCurrentModel(
+            message.sourceProvider,
+            message.sourceModelName
+          );
+          return;
+        }
+      }
+    },
+
+    setDefaultToolsFromSourceInfo: (node: Node) => {
+      const { tools } = get();
+
+      // Only handle NodeData (not RootData) and only model nodes with tool information
+      if (
+        'metadata' in node &&
+        node.metadata.source_info.type === 'model' &&
+        node.metadata.source_info.tools &&
+        node.metadata.source_info.tools.length > 0
+      ) {
+        // Extract tool names from the source info
+        const toolNames = node.metadata.source_info.tools.map(
+          tool => tool.function.name
+        );
+
+        // Filter to only include tools that are currently available
+        const availableToolNames = tools.available.map(tool => tool.name);
+        const validToolNames = toolNames.filter(name =>
+          availableToolNames.includes(name)
+        );
+
+        // Only update if there are valid tools to set
+        if (validToolNames.length > 0) {
+          get().actions.setActiveTools(validToolNames);
+        }
+      } else {
+        // For root nodes, non-model nodes, or nodes without tools, clear active tools
+        get().actions.setActiveTools([]);
+      }
+    }
+  }
+}));

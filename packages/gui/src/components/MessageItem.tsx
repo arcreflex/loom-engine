@@ -10,7 +10,7 @@ import {
   ForwardedRef,
   useCallback
 } from 'react';
-import { useAppContext } from '../state';
+import { useAppStore } from '../state';
 import { Link } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -49,7 +49,7 @@ export const MessageItem = forwardRef(
   ) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
-    const { state } = useAppContext();
+    const renderingMode = useAppStore(state => state.renderingMode);
 
     const messageClass =
       message.role === 'user'
@@ -132,7 +132,7 @@ export const MessageItem = forwardRef(
         {combinedText &&
           !isToolResult &&
           (!isEditing ? (
-            state.renderingMode === 'raw' ? (
+            renderingMode === 'raw' ? (
               <RawContent
                 role={message.role}
                 content={combinedText}
