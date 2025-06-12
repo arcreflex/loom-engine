@@ -437,6 +437,72 @@ export class Forest {
   }
 
   /**
+   * Edits the content of a node.
+   * If the node has no children, it's edited in-place.
+   * If the node has children, this creates a new branch by finding the
+   * longest common prefix, splitting the original node, and appending the
+   * new content.
+   * @param nodeId The ID of the node to edit.
+   * @param newContent The new text content for the message.
+   * @returns The final node representing the result of the edit.
+   */
+  async editNodeContent(nodeId: NodeId, newContent: string): Promise<NodeData> {
+    return this.enqueue(async () => {
+      const nodeToEdit = await this.store.loadNode(nodeId);
+      if (!nodeToEdit || !nodeToEdit.parent_id) {
+        throw new Error(`Node not found or is a root: ${nodeId}`);
+      }
+
+      const originalContent = nodeToEdit.message.content || '';
+
+      // Simple case: No children. Edit in place.
+      if (nodeToEdit.child_ids.length === 0) {
+        nodeToEdit.message.content = newContent;
+        // Mark this edit's source.
+        nodeToEdit.metadata.source_info = { type: 'user' };
+        await this.store.saveNode(nodeToEdit);
+        return nodeToEdit as NodeData;
+      }
+
+      // Complex case: Node has children. Create a new branch.
+      // 1. Find the longest common prefix.
+      let lcpLength = 0;
+      while (
+        lcpLength < originalContent.length &&
+        lcpLength < newContent.length &&
+        originalContent[lcpLength] === newContent[lcpLength]
+      ) {
+        lcpLength++;
+      }
+
+      let baseNode = nodeToEdit;
+
+      // 2. If the original node needs to be split (i.e., the edit doesn't share the full original content as a prefix).
+      if (lcpLength < originalContent.length) {
+        // splitNode returns the truncated original node.
+        baseNode = await this.splitNode(nodeId, lcpLength);
+      }
+
+      // 3. Append the remainder of the new content.
+      const newSuffix = newContent.slice(lcpLength);
+      if (newSuffix.length > 0) {
+        const newMessage: Message = {
+          role: baseNode.message.role,
+          content: newSuffix
+        };
+        // `append` will create a new node for the suffix.
+        return (await this.append(baseNode.id, [newMessage], {
+          source_info: { type: 'user' }
+        })) as NodeData;
+      } else {
+        // If there's no new suffix, the new content was a prefix of the old.
+        // The (potentially split) baseNode is our final destination.
+        return baseNode as NodeData;
+      }
+    });
+  }
+
+  /**
    * Gets the structural information of all nodes across all roots.
    * @returns An array of node structures suitable for graph visualization
    */

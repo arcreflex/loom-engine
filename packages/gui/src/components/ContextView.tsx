@@ -3,6 +3,7 @@ import { useRef, useEffect, useState, useMemo } from 'react';
 import { CoalescedMessage, MessageItem } from './MessageItem';
 import { type DisplayMessage } from '../types';
 import { NodeData, NodeId, RootConfig } from '@ankhdt/loom-engine';
+import TextareaAutosize from 'react-textarea-autosize';
 
 interface ContextViewProps {
   messages: DisplayMessage[];
@@ -11,6 +12,8 @@ interface ContextViewProps {
   onNavigateToNode: (nodeId: NodeId) => void;
   previewChild: NodeData | null;
   onCopy?: (content: string, notice: string) => void;
+  onEditSave: (nodeId: NodeId, content: string) => Promise<void>;
+  onSystemPromptSave: (newPrompt: string) => Promise<void>;
 }
 
 export function ContextView({
@@ -18,12 +21,36 @@ export function ContextView({
   root,
   siblings,
   previewChild,
-  onCopy
+  onCopy,
+  onEditSave,
+  onSystemPromptSave
 }: ContextViewProps) {
   // When the head (current node) changes--and on initial load--we want to scroll to it.
   const [lastScrolledToHead, setLastScrolledToHead] = useState<NodeId | null>(
     null
   );
+
+  const [isEditingPrompt, setIsEditingPrompt] = useState(false);
+  const [promptText, setPromptText] = useState(root?.systemPrompt || '');
+
+  // Update promptText when root changes
+  useEffect(() => {
+    setPromptText(root?.systemPrompt || '');
+  }, [root?.systemPrompt]);
+
+  const handleSystemPromptSave = async () => {
+    try {
+      await onSystemPromptSave(promptText);
+      setIsEditingPrompt(false);
+    } catch (error) {
+      console.error('Failed to save system prompt:', error);
+    }
+  };
+
+  const handleSystemPromptCancel = () => {
+    setIsEditingPrompt(false);
+    setPromptText(root?.systemPrompt || '');
+  };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null); // Ref for the scroll container
@@ -119,12 +146,50 @@ export function ContextView({
     >
       <div className="max-w-4xl mx-auto w-full">
         {/* System message */}
-        {root?.systemPrompt && (
+        {(root?.systemPrompt || isEditingPrompt) && (
           <div className="system-prompt">
-            <div className="font-bold mb-2 text-terminal-text/80">
-              System Prompt
+            <div className="flex justify-between items-center mb-2">
+              <div className="font-bold text-terminal-text/80">
+                System Prompt
+              </div>
+              {!isEditingPrompt && (
+                <button
+                  onClick={() => setIsEditingPrompt(true)}
+                  className="text-xs px-2 py-1 btn opacity-50 hover:opacity-100"
+                  title="Edit system prompt"
+                >
+                  edit
+                </button>
+              )}
             </div>
-            <div className="whitespace-pre-wrap">{root.systemPrompt}</div>
+            {!isEditingPrompt ? (
+              <div className="whitespace-pre-wrap">{root?.systemPrompt}</div>
+            ) : (
+              <div className="space-y-2">
+                <TextareaAutosize
+                  value={promptText}
+                  onChange={e => setPromptText(e.target.value)}
+                  className="w-full p-2 text-sm bg-gray-800 border border-gray-600 rounded resize-none focus:outline-none focus:border-blue-500"
+                  placeholder="Enter system prompt..."
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleSystemPromptSave}
+                    disabled={promptText === (root?.systemPrompt || '')}
+                    className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Save
+                  </button>
+                  <button
+                    onClick={handleSystemPromptCancel}
+                    className="px-3 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -145,6 +210,7 @@ export function ContextView({
                   : undefined
               }
               onCopy={onCopy}
+              onEditSave={onEditSave}
             />
           );
         })}
@@ -164,6 +230,7 @@ export function ContextView({
               isLast={true}
               siblings={undefined}
               isPreview={true} // Add isPreview prop
+              onEditSave={async () => {}} // No-op for preview
             />
           </div>
         )}

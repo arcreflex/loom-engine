@@ -132,6 +132,16 @@ export async function splitNode(
   });
 }
 
+export async function editNodeContent(
+  nodeId: NodeId,
+  content: string
+): Promise<NodeData> {
+  return fetchApi<NodeData>(`/api/nodes/${encode(nodeId)}/content`, {
+    method: 'PUT',
+    body: JSON.stringify({ content })
+  });
+}
+
 export async function deleteNode(
   nodeId: NodeId
 ): Promise<{ success: boolean }> {

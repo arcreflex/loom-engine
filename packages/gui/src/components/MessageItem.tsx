@@ -1,7 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
-import { NodeData } from '@ankhdt/loom-engine';
+import { NodeData, NodeId } from '@ankhdt/loom-engine';
 import { type DisplayMessage } from '../types';
 import {
   useState,
@@ -14,6 +14,7 @@ import { useAppContext } from '../state';
 import { Link } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import TextareaAutosize from 'react-textarea-autosize';
 
 // Threshold for collapsing messages (number of lines)
 const LINE_THRESHOLD = 30;
@@ -24,6 +25,7 @@ interface MessageItemProps {
   siblings?: NodeData[];
   isPreview?: boolean;
   onCopy?: (content: string, notice: string) => void;
+  onEditSave: (nodeId: NodeId, content: string) => Promise<void>;
 }
 
 export type CoalescedMessage = {
@@ -35,10 +37,18 @@ type ToolCallInfo = NonNullable<DisplayMessage['tool_calls']>[number];
 
 export const MessageItem = forwardRef(
   (
-    { message, siblings, isPreview, isLast, onCopy }: MessageItemProps,
+    {
+      message,
+      siblings,
+      isPreview,
+      isLast,
+      onCopy,
+      onEditSave
+    }: MessageItemProps,
     ref: ForwardedRef<HTMLDivElement>
   ) => {
     const [isCollapsed, setIsCollapsed] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
     const { state } = useAppContext();
 
     const messageClass =
@@ -54,6 +64,7 @@ export const MessageItem = forwardRef(
     const currentIndex = siblings?.findIndex(s => s.id === end.nodeId) ?? -1;
 
     const combinedText = message.messages.map(msg => msg.content).join('');
+    const [editText, setEditText] = useState(combinedText);
     const lineCount = combinedText.split('\n').length;
 
     // Calculate line count and set initial collapsed state
@@ -72,6 +83,20 @@ export const MessageItem = forwardRef(
     const toggleCollapsed = useCallback(() => {
       setIsCollapsed(!isCollapsed);
     }, [isCollapsed, setIsCollapsed]);
+
+    const handleEditSave = useCallback(async () => {
+      try {
+        await onEditSave(end.nodeId, editText);
+        setIsEditing(false);
+      } catch (error) {
+        console.error('Failed to save edit:', error);
+      }
+    }, [end.nodeId, editText, onEditSave]);
+
+    const handleEditCancel = useCallback(() => {
+      setIsEditing(false);
+      setEditText(combinedText);
+    }, [combinedText]);
 
     // Check if any message has tool calls or is a tool result
     const hasToolCalls = message.messages.some(
@@ -106,20 +131,47 @@ export const MessageItem = forwardRef(
         {/* Render normal content if present and not a tool result */}
         {combinedText &&
           !isToolResult &&
-          (state.renderingMode === 'raw' ? (
-            <RawContent
-              role={message.role}
-              content={combinedText}
-              isCollapsed={isCollapsed}
-              toggleCollapsed={toggleCollapsed}
-            />
+          (!isEditing ? (
+            state.renderingMode === 'raw' ? (
+              <RawContent
+                role={message.role}
+                content={combinedText}
+                isCollapsed={isCollapsed}
+                toggleCollapsed={toggleCollapsed}
+              />
+            ) : (
+              <MarkdownContent
+                content={combinedText}
+                isCollapsed={isCollapsed}
+                onCopy={onCopy}
+                toggleCollapsed={toggleCollapsed}
+              />
+            )
           ) : (
-            <MarkdownContent
-              content={combinedText}
-              isCollapsed={isCollapsed}
-              onCopy={onCopy}
-              toggleCollapsed={toggleCollapsed}
-            />
+            <div className="space-y-2">
+              <TextareaAutosize
+                value={editText}
+                onChange={e => setEditText(e.target.value)}
+                className="w-full p-2 text-sm bg-gray-800 border border-gray-600 rounded resize-none focus:outline-none focus:border-blue-500"
+                placeholder="Edit message content..."
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleEditSave}
+                  disabled={editText === combinedText}
+                  className="px-3 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Save
+                </button>
+                <button
+                  onClick={handleEditCancel}
+                  className="px-3 py-1 text-xs bg-gray-600 text-white rounded hover:bg-gray-700"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           ))}
 
         {!isPreview && (
@@ -154,17 +206,28 @@ export const MessageItem = forwardRef(
                 </Link>
               )}
             </div>
-            {onCopy && (
-              <button
-                onClick={() => {
-                  onCopy(combinedText, 'Message content copied');
-                }}
-                className="text-xs px-2 py-1 ml-2 btn opacity-50 hover:opacity-100"
-                title="Copy message content"
-              >
-                copy
-              </button>
-            )}
+            <div className="flex gap-1">
+              {!isEditing && !isPreview && combinedText && !isToolResult && (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="text-xs px-2 py-1 btn opacity-50 hover:opacity-100"
+                  title="Edit message content"
+                >
+                  edit
+                </button>
+              )}
+              {onCopy && (
+                <button
+                  onClick={() => {
+                    onCopy(combinedText, 'Message content copied');
+                  }}
+                  className="text-xs px-2 py-1 btn opacity-50 hover:opacity-100"
+                  title="Copy message content"
+                >
+                  copy
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>

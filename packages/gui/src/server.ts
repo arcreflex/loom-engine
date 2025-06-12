@@ -227,6 +227,22 @@ async function main() {
     }
   });
 
+  app.put('/api/nodes/:nodeId/content', async (req, res) => {
+    try {
+      const { nodeId } = req.params;
+      const { content } = req.body;
+
+      if (typeof content !== 'string') {
+        return res.status(400).json({ error: 'Content must be a string' });
+      }
+
+      const newNode = await engine.editNode(nodeId as NodeId, content);
+      res.json(newNode);
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
   app.delete('/api/nodes/:nodeId', async (req, res) => {
     try {
       const { nodeId } = req.params;

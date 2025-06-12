@@ -14,7 +14,7 @@ import type {
 import { AnthropicProvider } from './providers/anthropic.ts';
 import { GoogleProvider } from './providers/google.ts';
 import { ToolRegistry } from './tools/registry.ts';
-import type { ConfigStore } from './config.ts';
+import type { ConfigStore, Bookmark } from './config.ts';
 import { discoverMcpTools } from './mcp/client.ts';
 
 export interface GenerateOptions {
@@ -267,6 +267,30 @@ export class LoomEngine {
   ): Promise<{ root: RootConfig; messages: Message[] }> {
     const { root, messages } = await this.forest.getMessages(nodeId);
     return { root: root.config, messages };
+  }
+
+  async editNode(nodeId: NodeId, newContent: string): Promise<NodeData> {
+    const newNode = await this.forest.editNodeContent(nodeId, newContent);
+
+    // If the edit resulted in a new node, move any existing bookmark.
+    if (newNode.id !== nodeId && this.configStore) {
+      const config = this.configStore.get();
+      const bookmarks = config.bookmarks || [];
+      const bookmarkIndex = bookmarks.findIndex(b => b.nodeId === nodeId);
+
+      if (bookmarkIndex > -1) {
+        const oldBookmark = bookmarks[bookmarkIndex];
+        const newBookmark: Bookmark = {
+          ...oldBookmark,
+          nodeId: newNode.id,
+          updatedAt: new Date().toISOString()
+        };
+        bookmarks[bookmarkIndex] = newBookmark;
+        await this.configStore.update({ bookmarks });
+      }
+    }
+
+    return newNode;
   }
 
   private getProvider(provider: ProviderName) {

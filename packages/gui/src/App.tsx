@@ -28,7 +28,8 @@ import {
   NodeStructure,
   listRoots,
   listTools,
-  listToolGroups
+  listToolGroups,
+  editNodeContent
 } from './api';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { StatusBar } from './components/StatusBar';
@@ -739,6 +740,40 @@ function AppContent() {
     [dispatch]
   );
 
+  // --- Message and System Prompt Editing ---
+  const handleEditSave = useCallback(
+    async (nodeId: NodeId, newContent: string) => {
+      if (status.type === 'loading') return;
+      dispatch({
+        type: 'SET_STATUS_LOADING',
+        payload: { operation: 'Saving Edit' }
+      });
+      try {
+        const newNode = await editNodeContent(nodeId, newContent);
+        navigateToNode(newNode.id); // This will update state and set status to idle
+      } catch (error) {
+        console.error('Failed to save edit:', error);
+        dispatch({
+          type: 'SET_STATUS_ERROR',
+          payload: {
+            message:
+              error instanceof Error ? error.message : 'Failed to save edit'
+          }
+        });
+      }
+    },
+    [dispatch, navigateToNode, status.type]
+  );
+
+  const handleSystemPromptSave = useCallback(
+    async (newPrompt: string) => {
+      // Reuses the "new conversation" logic, which is what we want
+      // when editing the prompt of a conversation that already has messages.
+      await handleCreateNewRoot(newPrompt);
+    },
+    [handleCreateNewRoot]
+  );
+
   // --- Node Deletion Actions ---
   const deleteNode = useCallback(
     async (nodeId: NodeId) => {
@@ -1285,6 +1320,8 @@ function AppContent() {
               onNavigateToNode={navigateToNode} // Pass helper
               previewChild={previewChild}
               onCopy={copyToClipboard}
+              onEditSave={handleEditSave}
+              onSystemPromptSave={handleSystemPromptSave}
             />
           </div>
         </Panel>
