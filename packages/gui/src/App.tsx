@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useMemo } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { StatusBar } from './components/StatusBar';
 import { CommandPalette } from './components/CommandPalette';
 import { ModelSwitcherModal } from './components/ModelSwitcherModal.tsx';
@@ -11,6 +11,8 @@ import { useAppStore } from './state';
 
 // Main App Component - Unified Shell
 function App() {
+  const navigate = useNavigate();
+
   const {
     status,
     paletteState,
@@ -132,7 +134,7 @@ function App() {
         disabled:
           status.type === 'loading' || bookmark.nodeId === currentNode?.id,
         execute: async () => {
-          await actions.navigateToNode(bookmark.nodeId);
+          navigate(`/nodes/${encodeURIComponent(bookmark.nodeId)}`);
         }
       });
     });
@@ -147,7 +149,7 @@ function App() {
         description: `System Prompt: ${systemPrompt}`,
         disabled: status.type === 'loading' || root.id === currentRootId,
         execute: async () => {
-          await actions.navigateToNode(root.id);
+          navigate(`/nodes/${encodeURIComponent(root.id)}`);
         }
       });
     });
@@ -341,7 +343,8 @@ function App() {
     currentModelName,
     renderingMode,
     actions,
-    copyToClipboard
+    copyToClipboard,
+    navigate
   ]);
 
   // Handle command execution
