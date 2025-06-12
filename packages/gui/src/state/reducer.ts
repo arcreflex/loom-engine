@@ -224,6 +224,15 @@ export function guiAppReducer(
         }
       };
     }
+    case 'SET_TOOLS_ACTIVE': {
+      return {
+        ...state,
+        tools: {
+          ...state.tools,
+          active: action.payload.toolNames
+        }
+      };
+    }
 
     default:
       // Ensure all action types are handled (useful for type checking)

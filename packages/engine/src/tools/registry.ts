@@ -25,7 +25,7 @@ export class ToolRegistry {
     group?: string
   ): void {
     if (this.tools.has(name)) {
-      console.warn(`Tool "${name}" is being overwritten.`);
+      throw new Error(`Tool "${name}" is already registered.`);
     }
     this.tools.set(name, { name, description, parameters, handler, group });
   }

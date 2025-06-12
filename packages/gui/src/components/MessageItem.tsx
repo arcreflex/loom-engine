@@ -31,6 +31,8 @@ export type CoalescedMessage = {
   messages: DisplayMessage[];
 };
 
+type ToolCallInfo = NonNullable<DisplayMessage['tool_calls']>[number];
+
 export const MessageItem = forwardRef(
   (
     { message, siblings, isPreview, isLast, onCopy }: MessageItemProps,
@@ -43,9 +45,10 @@ export const MessageItem = forwardRef(
       message.role === 'user'
         ? 'message-user'
         : message.role === 'tool'
-          ? '' // No border for tool results - they'll be full width
+          ? 'message-tool' // No border for tool results - they'll be full width
           : 'message-assistant';
     const previewClass = isPreview ? 'opacity-70 border-l-terminal-border' : '';
+    const spacing = message.role === 'tool' ? '' : 'p-4 mb-4';
 
     const end = message.messages[message.messages.length - 1];
     const currentIndex = siblings?.findIndex(s => s.id === end.nodeId) ?? -1;
@@ -77,7 +80,7 @@ export const MessageItem = forwardRef(
     const isToolResult = message.role === 'tool';
 
     return (
-      <div ref={ref} className={`p-4 mb-4 ${messageClass} ${previewClass}`}>
+      <div ref={ref} className={`${spacing} ${messageClass} ${previewClass}`}>
         {/* Render tool calls for assistant messages */}
         {hasToolCalls &&
           message.messages.map(
@@ -85,29 +88,8 @@ export const MessageItem = forwardRef(
               msg.tool_calls &&
               msg.tool_calls.length > 0 && (
                 <div key={`${msg.nodeId}-tools-${index}`} className="mb-4">
-                  {msg.tool_calls.map((toolCall, toolIndex) => (
-                    <div
-                      key={`${toolCall.id}-${toolIndex}`}
-                      className="bg-gray-800/50 p-2 rounded mb-2"
-                    >
-                      <div className="flex items-center mb-2">
-                        <div className="text-xs font-mono text-gray-400">
-                          🔧 Tool Call
-                        </div>
-                        <div className="ml-2 text-xs text-gray-300">
-                          {toolCall.function.name}
-                        </div>
-                      </div>
-                      {toolCall.function.arguments && (
-                        <pre className="text-xs text-gray-300 bg-gray-900/50 p-2 rounded">
-                          {JSON.stringify(
-                            JSON.parse(toolCall.function.arguments),
-                            null,
-                            2
-                          )}
-                        </pre>
-                      )}
-                    </div>
+                  {msg.tool_calls.map(toolCall => (
+                    <ToolCall toolCall={toolCall} key={toolCall.id} />
                   ))}
                 </div>
               )
@@ -189,6 +171,32 @@ export const MessageItem = forwardRef(
     );
   }
 );
+
+const ToolCall = ({ toolCall }: { toolCall: ToolCallInfo }) => {
+  const [isExpanded, setIsExpanded] = useState(false);
+  return (
+    <div className="bg-gray-800/50 p-2 rounded">
+      <button
+        className="flex items-center"
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <span className="mr-2">{isExpanded ? '▼' : '▶'}</span>
+        <div className="text-xs font-mono text-gray-400">🔧 Tool Call</div>
+        <div className="ml-2 text-xs text-gray-300">
+          {toolCall.function.name}
+        </div>
+        {toolCall.id && (
+          <span className="ml-2 text-xs text-gray-500">ID: {toolCall.id}</span>
+        )}
+      </button>
+      {isExpanded && toolCall.function.arguments && (
+        <pre className="text-xs text-gray-300 bg-gray-900/50 p-2 rounded">
+          {JSON.stringify(JSON.parse(toolCall.function.arguments), null, 2)}
+        </pre>
+      )}
+    </div>
+  );
+};
 
 const ToolResultDisplay = ({
   content,

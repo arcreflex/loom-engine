@@ -72,6 +72,8 @@ export type SourceInfo =
       provider: ProviderName;
       model_name: string;
       parameters: ProviderRequest['parameters'];
+      tools?: ProviderRequest['tools'];
+      tool_choice?: ProviderRequest['tool_choice'];
       finish_reason?: string | null;
       usage?: {
         input_tokens?: number;

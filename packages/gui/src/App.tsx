@@ -39,7 +39,7 @@ import { CommandPalette } from './components/CommandPalette';
 import { ModelSwitcherModal } from './components/ModelSwitcherModal.tsx';
 import HomeView from './components/HomeView';
 import type { Command, DisplayMessage, GenerateOptions } from './types';
-import type { NodeData, NodeId, Role } from '@ankhdt/loom-engine';
+import type { NodeData, NodeId, Role, Node } from '@ankhdt/loom-engine';
 import { parseModelString, KNOWN_MODELS } from '@ankhdt/loom-engine/browser';
 import { ChildNavigator } from './components/ChildNavigator';
 import { ToolsPanel } from './components/ToolsPanel';
@@ -116,6 +116,45 @@ function AppContent() {
     [dispatch, currentProviderName, currentModelName]
   );
 
+  // Helper function to set default tools based on node's source info
+  const setDefaultToolsFromSourceInfo = useCallback(
+    (node: Node) => {
+      // Only handle NodeData (not RootData) and only model nodes with tool information
+      if (
+        'metadata' in node &&
+        node.metadata.source_info.type === 'model' &&
+        node.metadata.source_info.tools &&
+        node.metadata.source_info.tools.length > 0
+      ) {
+        // Extract tool names from the source info
+        const toolNames = node.metadata.source_info.tools.map(
+          tool => tool.function.name
+        );
+
+        // Filter to only include tools that are currently available
+        const availableToolNames = tools.available.map(tool => tool.name);
+        const validToolNames = toolNames.filter(name =>
+          availableToolNames.includes(name)
+        );
+
+        // Only update if there are valid tools to set
+        if (validToolNames.length > 0) {
+          dispatch({
+            type: 'SET_TOOLS_ACTIVE',
+            payload: { toolNames: validToolNames }
+          });
+        }
+      } else {
+        // For root nodes, non-model nodes, or nodes without tools, clear active tools
+        dispatch({
+          type: 'SET_TOOLS_ACTIVE',
+          payload: { toolNames: [] }
+        });
+      }
+    },
+    [dispatch, tools.available]
+  );
+
   // Find the current bookmark for this node
   const currentBookmark = currentNode?.id
     ? bookmarks.find(b => b.nodeId === currentNode?.id) || null
@@ -172,8 +211,17 @@ function AppContent() {
       if (defaultParameters) {
         initializeModelSelection(pathData.messages);
       }
+
+      // Set default tool selection based on the current node's source info
+      setDefaultToolsFromSourceInfo(node);
     },
-    [dispatch, fetchTopology, initializeModelSelection, defaultParameters]
+    [
+      dispatch,
+      fetchTopology,
+      initializeModelSelection,
+      defaultParameters,
+      setDefaultToolsFromSourceInfo
+    ]
   );
 
   const loadNodeDataWithStatusUpdates = useCallback(

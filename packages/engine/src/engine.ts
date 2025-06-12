@@ -104,6 +104,8 @@ export class LoomEngine {
                 provider: providerName,
                 model_name: modelName,
                 parameters,
+                tools: undefined,
+                tool_choice: undefined,
                 finish_reason: response.finish_reason,
                 usage: response.usage
               }
@@ -151,13 +153,17 @@ export class LoomEngine {
           }
         }));
 
+      const toolsToUse =
+        toolsForProvider.length > 0 ? toolsForProvider : undefined;
+      const toolChoiceToUse = toolsForProvider.length > 0 ? 'auto' : undefined;
+
       const response = await provider.generate({
         systemMessage: root.config.systemPrompt,
         messages: coalesced,
         model: modelName,
         parameters,
-        tools: toolsForProvider.length > 0 ? toolsForProvider : undefined,
-        tool_choice: toolsForProvider.length > 0 ? 'auto' : undefined
+        tools: toolsToUse,
+        tool_choice: toolChoiceToUse
       });
 
       const assistantMessage = response.message;
@@ -172,6 +178,8 @@ export class LoomEngine {
             provider: providerName,
             model_name: modelName,
             parameters,
+            tools: toolsToUse,
+            tool_choice: toolChoiceToUse,
             finish_reason: response.finish_reason,
             usage: response.usage
           }

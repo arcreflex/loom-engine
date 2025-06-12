@@ -74,11 +74,12 @@ async function discoverAndRegisterMcpTools(
     // List available tools from the server
     const toolsResponse = await client.listTools();
     configStore.log(
-      `[MCP] Discovered ${toolsResponse.tools.length} tools from ${serverConfig.name || 'server'}`
+      `[MCP] Discovered ${toolsResponse.tools.length} tools from ${serverConfig.name}`
     );
 
     // Register each discovered tool
     for (const tool of toolsResponse.tools) {
+      const qualifiedName = `${serverConfig.name}_${tool.name}`;
       // Create a handler that calls back to the MCP server
       const handler = async (args: Record<string, unknown>) => {
         try {
@@ -97,7 +98,7 @@ async function discoverAndRegisterMcpTools(
           }
         } catch (error) {
           configStore.log(
-            `[MCP] Tool execution failed for ${tool.name}:` + error
+            `[MCP] Tool execution failed for ${qualifiedName}:` + error
           );
           throw error;
         }
@@ -113,7 +114,7 @@ async function discoverAndRegisterMcpTools(
       };
 
       registry.register(
-        tool.name,
+        qualifiedName,
         tool.description ||
           `Tool from MCP server: ${serverConfig.name || 'unknown'}`,
         parameters,
@@ -121,9 +122,7 @@ async function discoverAndRegisterMcpTools(
         serverConfig.name // Use server name as group
       );
 
-      configStore.log(
-        `[MCP] Registered tool: ${tool.name} from ${serverConfig.name || 'server'}`
-      );
+      configStore.log(`[MCP] Registered tool: ${qualifiedName}`);
     }
   } catch (error) {
     configStore.log(

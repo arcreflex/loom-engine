@@ -217,4 +217,5 @@ export type GuiAppAction =
       };
     }
   | { type: 'TOGGLE_TOOL_ACTIVE'; payload: { toolName: string } }
-  | { type: 'TOGGLE_TOOL_GROUP_ACTIVE'; payload: { groupName: string } };
+  | { type: 'TOGGLE_TOOL_GROUP_ACTIVE'; payload: { groupName: string } }
+  | { type: 'SET_TOOLS_ACTIVE'; payload: { toolNames: string[] } };
