@@ -1,8 +1,9 @@
 import { useEffect, useCallback, useMemo } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { StatusBar } from './components/StatusBar';
 import { CommandPalette } from './components/CommandPalette';
 import { ModelSwitcherModal } from './components/ModelSwitcherModal.tsx';
+import { NavigationManager } from './components/NavigationManager';
 import HomeView from './components/HomeView';
 import { NodeView } from './views/NodeView';
 import type { Command } from './types';
@@ -11,8 +12,6 @@ import { useAppStore } from './state';
 
 // Main App Component - Unified Shell
 function App() {
-  const navigate = useNavigate();
-
   const {
     status,
     paletteState,
@@ -134,7 +133,7 @@ function App() {
         disabled:
           status.type === 'loading' || bookmark.nodeId === currentNode?.id,
         execute: async () => {
-          navigate(`/nodes/${encodeURIComponent(bookmark.nodeId)}`);
+          actions.setPendingNavigation(bookmark.nodeId);
         }
       });
     });
@@ -149,7 +148,7 @@ function App() {
         description: `System Prompt: ${systemPrompt}`,
         disabled: status.type === 'loading' || root.id === currentRootId,
         execute: async () => {
-          navigate(`/nodes/${encodeURIComponent(root.id)}`);
+          actions.setPendingNavigation(root.id);
         }
       });
     });
@@ -343,8 +342,7 @@ function App() {
     currentModelName,
     renderingMode,
     actions,
-    copyToClipboard,
-    navigate
+    copyToClipboard
   ]);
 
   // Handle command execution
@@ -393,6 +391,7 @@ function App() {
 
   return (
     <div className="flex flex-col h-screen bg-terminal-bg text-terminal-text">
+      <NavigationManager />
       <StatusBar
         currentNodeId={currentNode?.id ?? null}
         siblings={siblings}

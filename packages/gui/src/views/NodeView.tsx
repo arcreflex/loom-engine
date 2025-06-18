@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useMemo, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { ContextView } from '../components/ContextView';
 import { GraphView } from '../components/GraphView';
@@ -12,7 +12,6 @@ import type { NodeId } from '@ankhdt/loom-engine';
 
 export function NodeView() {
   const { nodeId: nodeIdFromUrl } = useParams<{ nodeId: string }>();
-  const navigate = useNavigate();
 
   // Get state and actions from Zustand store
   const {
@@ -89,10 +88,10 @@ export function NodeView() {
   const navigateToNode = useCallback(
     (nodeId: NodeId) => {
       if (nodeId === nodeIdFromUrl) return;
-      console.log(`Navigating to node: ${nodeId}`);
-      navigate(`/nodes/${encodeURIComponent(nodeId)}`);
+      console.log(`Setting pending navigation to node: ${nodeId}`);
+      actions.setPendingNavigation(nodeId);
     },
-    [navigate, nodeIdFromUrl]
+    [actions, nodeIdFromUrl]
   );
 
   // Copy to clipboard helper

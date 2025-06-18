@@ -50,6 +50,10 @@ export interface GuiAppActions {
     options?: Partial<GenerateOptions>
   ) => Promise<NodeData[]>;
 
+  // Navigation management
+  setPendingNavigation: (nodeId: NodeId | null) => void;
+  clearPendingNavigation: () => void;
+
   // Core navigation and data loading
   navigateToNode: (nodeId: NodeId) => Promise<void>;
   loadNodeData: (nodeId: NodeId) => Promise<void>;
@@ -140,6 +144,9 @@ export interface GuiAppState {
   inputRole: Role;
   requestOnSubmit: boolean;
   previewChild: NodeData | null;
+
+  // Navigation intent - when set, the UI should navigate
+  pendingNavigation: NodeId | null;
 
   // Application Status
   status: Status;

@@ -47,6 +47,9 @@ const initialState: Omit<GuiAppState, 'actions'> = {
   requestOnSubmit: true,
   previewChild: null,
 
+  // Navigation intent - when set, the UI should navigate
+  pendingNavigation: null,
+
   // Application Status
   status: { type: 'initializing' },
 
@@ -109,6 +112,11 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
     setStatusError: (message: string) => {
       set({ status: { type: 'error', message } });
     },
+
+    // Navigation management
+    setPendingNavigation: (nodeId: NodeId | null) =>
+      set({ pendingNavigation: nodeId }),
+    clearPendingNavigation: () => set({ pendingNavigation: null }),
 
     // Internal helper functions (do not manage status)
     _loadNodeData: async (nodeId: NodeId) => {
@@ -308,17 +316,17 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
             await get().actions._generateCompletion(messageNodeId);
 
           if (results.length === 1) {
-            await get().actions._loadNodeData(results[0].id);
+            set({ pendingNavigation: results[0].id });
           } else if (results.length > 1) {
-            await get().actions._loadNodeData(messageNodeId);
+            set({ pendingNavigation: messageNodeId });
             console.log(
               `Multiple results found: ${results.map(r => r.id).join(', ')}`
             );
           } else {
-            await get().actions._loadNodeData(messageNodeId);
+            set({ pendingNavigation: messageNodeId });
           }
         } else {
-          await get().actions._loadNodeData(messageNodeId);
+          set({ pendingNavigation: messageNodeId });
         }
 
         get().actions.setStatusIdle();
@@ -350,7 +358,8 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
       get().actions.setStatusLoading('Submitting Pasted Content');
       try {
         const newNode = await appendMessage(currentNode.id, inputRole, content);
-        await get().actions.navigateToNode(newNode.id);
+        set({ pendingNavigation: newNode.id });
+        get().actions.setStatusIdle();
       } catch (error) {
         get().actions.setStatusError(
           error instanceof Error
@@ -418,7 +427,7 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
 
         if (parentId) {
           await apiDeleteNode(nodeId);
-          await get().actions._loadNodeData(parentId);
+          set({ pendingNavigation: parentId });
           get().actions.setStatusIdle();
         } else {
           console.error('Attempted to delete node without parent ID:', nodeId);
@@ -471,7 +480,8 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
       get().actions.setStatusLoading('Saving Edit');
       try {
         const newNode = await editNodeContent(nodeId, newContent);
-        await get().actions.navigateToNode(newNode.id);
+        set({ pendingNavigation: newNode.id });
+        get().actions.setStatusIdle();
       } catch (error) {
         get().actions.setStatusError(
           error instanceof Error ? error.message : 'Failed to save edit'
@@ -616,10 +626,15 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
 
     // Root/conversation management
     createNewRoot: async (systemPrompt?: string) => {
+      const { status } = get();
+      if (status.type === 'loading') return;
+
+      get().actions.setStatusLoading('Creating New Conversation');
       try {
         const newRoot = await switchRoot(systemPrompt);
-        await get().actions.navigateToNode(newRoot.id);
+        set({ pendingNavigation: newRoot.id });
         get().actions.closeModelSwitcher();
+        get().actions.setStatusIdle();
       } catch (error) {
         get().actions.closeModelSwitcher();
         get().actions.setStatusError(
@@ -637,7 +652,8 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
       get().actions.setStatusLoading('Navigating Parent');
       try {
         if (currentNode.parent_id) {
-          await get().actions.navigateToNode(currentNode.parent_id);
+          set({ pendingNavigation: currentNode.parent_id });
+          get().actions.setStatusIdle();
         } else {
           get().actions.setStatusIdle();
         }
