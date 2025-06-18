@@ -334,28 +334,13 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
     },
 
     // Legacy wrapper for command palette - generates from current node
-    handleGenerate: async (
-      nodeId?: NodeId,
-      _options?: Partial<GenerateOptions>
-    ) => {
+    handleGenerate: async () => {
       const { currentNode } = get();
-      const targetNodeId = nodeId || currentNode?.id;
-      if (!targetNodeId) return;
+      if (!currentNode) return;
 
       // Call submitInput directly via actions - using 'user' role for empty content
       const actions = get().actions;
       await actions.submitInput('user', '', true);
-    },
-
-    // Legacy wrapper for backward compatibility
-    handleSendMessage: async (
-      role: Role,
-      content: string,
-      generateAfter: boolean
-    ) => {
-      // Call submitInput directly via actions
-      const actions = get().actions;
-      await actions.submitInput(role, content, generateAfter);
     },
 
     handleLargePasteSubmit: async (content: string) => {

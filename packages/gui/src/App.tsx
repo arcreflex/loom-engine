@@ -91,7 +91,7 @@ function App() {
         disabled: !currentNode || status.type === 'loading',
         execute: async () => {
           if (!currentNode) return;
-          await actions.handleGenerate(currentNode.id);
+          await actions.handleGenerate();
         }
       }
     ];

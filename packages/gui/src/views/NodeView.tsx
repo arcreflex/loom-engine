@@ -165,7 +165,7 @@ export function NodeView() {
       </PanelGroup>
 
       <InputArea
-        onSend={actions.handleSendMessage}
+        onSend={actions.submitInput}
         disabled={isLoading}
         requestOnSubmit={requestOnSubmit}
         role={inputRole}

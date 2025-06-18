@@ -69,15 +69,7 @@ export interface GuiAppActions {
     content: string,
     generateAfter: boolean
   ) => Promise<void>;
-  handleSendMessage: (
-    role: Role,
-    content: string,
-    generateAfter: boolean
-  ) => Promise<void>;
-  handleGenerate: (
-    nodeId?: NodeId,
-    options?: Partial<GenerateOptions>
-  ) => Promise<void>;
+  handleGenerate: () => Promise<void>;
   handleLargePasteSubmit: (content: string) => Promise<void>;
 
   // Bookmark management
