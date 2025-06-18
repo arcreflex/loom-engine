@@ -110,23 +110,8 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
       set({ status: { type: 'error', message } });
     },
 
-    // Core navigation and data loading
-    navigateToNode: async (nodeId: NodeId) => {
-      const { status, currentNode } = get();
-      if (status.type === 'loading' || currentNode?.id === nodeId) return;
-
-      get().actions.setStatusLoading('Navigating');
-      try {
-        await get().actions.loadNodeData(nodeId);
-        get().actions.setStatusIdle();
-      } catch (error) {
-        get().actions.setStatusError(
-          error instanceof Error ? error.message : 'Failed to navigate to node'
-        );
-      }
-    },
-
-    loadNodeData: async (nodeId: NodeId) => {
+    // Internal helper functions (do not manage status)
+    _loadNodeData: async (nodeId: NodeId) => {
       // Update current node ID in backend state first
       await setAppState(nodeId);
 
@@ -162,6 +147,70 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
 
       // Set default tool selection based on the current node's source info
       get().actions.setDefaultToolsFromSourceInfo(node);
+    },
+
+    _generateCompletion: async (
+      nodeId: NodeId,
+      options?: Partial<GenerateOptions>
+    ): Promise<NodeData[]> => {
+      const {
+        currentProviderName,
+        currentModelName,
+        defaultParameters,
+        presets,
+        activePresetName,
+        tools
+      } = get();
+
+      if (!currentProviderName || !currentModelName) {
+        throw new Error('No model selected. Please select a model first.');
+      }
+
+      // Calculate effective generation parameters
+      let effectiveParams = defaultParameters || {};
+      if (activePresetName && presets[activePresetName]) {
+        effectiveParams = {
+          ...effectiveParams,
+          ...presets[activePresetName]
+        };
+      }
+
+      const finalParams: GenerateOptions = {
+        n: 1,
+        temperature: 1.0,
+        max_tokens: 1024,
+        ...effectiveParams,
+        ...(options || {})
+      };
+
+      return await apiGenerateCompletion(
+        nodeId,
+        currentProviderName,
+        currentModelName,
+        finalParams,
+        tools.active
+      );
+    },
+
+    // Core navigation and data loading
+    navigateToNode: async (nodeId: NodeId) => {
+      const { status, currentNode } = get();
+      if (status.type === 'loading' || currentNode?.id === nodeId) return;
+
+      get().actions.setStatusLoading('Navigating');
+      try {
+        await get().actions._loadNodeData(nodeId);
+        get().actions.setStatusIdle();
+      } catch (error) {
+        get().actions.setStatusError(
+          error instanceof Error ? error.message : 'Failed to navigate to node'
+        );
+      }
+    },
+
+    loadNodeData: async (nodeId: NodeId) => {
+      // Legacy wrapper - prefer _loadNodeData for internal use
+      await get().actions._loadNodeData(nodeId);
     },
 
     refreshTopology: async () => {
@@ -230,7 +279,7 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
       }),
 
     // Message and generation actions
-    handleSendMessage: async (
+    submitInput: async (
       role: Role,
       content: string,
       generateAfter: boolean
@@ -238,7 +287,8 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
       const { currentNode, status } = get();
       if (!currentNode || status.type === 'loading') return;
 
-      get().actions.setStatusLoading('Sending');
+      const operation = generateAfter ? 'Generating' : 'Sending';
+      get().actions.setStatusLoading(operation);
       try {
         let messageNodeId = currentNode.id;
         let newNode: NodeData | undefined;
@@ -254,82 +304,58 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
             // Preview the node we just sent
             get().actions.setPreviewChild(newNode);
           }
-          await get().actions.handleGenerate(messageNodeId);
+          const results =
+            await get().actions._generateCompletion(messageNodeId);
+
+          if (results.length === 1) {
+            await get().actions._loadNodeData(results[0].id);
+          } else if (results.length > 1) {
+            await get().actions._loadNodeData(messageNodeId);
+            console.log(
+              `Multiple results found: ${results.map(r => r.id).join(', ')}`
+            );
+          } else {
+            await get().actions._loadNodeData(messageNodeId);
+          }
         } else {
-          await get().actions.navigateToNode(messageNodeId);
+          await get().actions._loadNodeData(messageNodeId);
         }
+
+        get().actions.setStatusIdle();
       } catch (error) {
         get().actions.setStatusError(
-          error instanceof Error ? error.message : 'Failed to send message'
+          error instanceof Error
+            ? error.message
+            : generateAfter
+              ? 'Generation failed'
+              : 'Failed to send message'
         );
       }
     },
 
+    // Legacy wrapper for command palette - generates from current node
     handleGenerate: async (
-      nodeId: NodeId,
-      options?: Partial<GenerateOptions>
+      nodeId?: NodeId,
+      _options?: Partial<GenerateOptions>
     ) => {
-      const {
-        status,
-        currentProviderName,
-        currentModelName,
-        defaultParameters,
-        presets,
-        activePresetName,
-        tools
-      } = get();
-      if (status.type === 'loading') return;
+      const { currentNode } = get();
+      const targetNodeId = nodeId || currentNode?.id;
+      if (!targetNodeId) return;
 
-      if (!currentProviderName || !currentModelName) {
-        get().actions.setStatusError(
-          'No model selected. Please select a model first.'
-        );
-        return;
-      }
+      // Call submitInput directly via actions - using 'user' role for empty content
+      const actions = get().actions;
+      await actions.submitInput('user', '', true);
+    },
 
-      get().actions.setStatusLoading('Generating');
-      try {
-        // Calculate effective generation parameters
-        let effectiveParams = defaultParameters || {};
-        if (activePresetName && presets[activePresetName]) {
-          effectiveParams = {
-            ...effectiveParams,
-            ...presets[activePresetName]
-          };
-        }
-
-        const finalParams: GenerateOptions = {
-          n: 1,
-          temperature: 1.0,
-          max_tokens: 1024,
-          ...effectiveParams,
-          ...(options || {})
-        };
-
-        const results = await apiGenerateCompletion(
-          nodeId,
-          currentProviderName,
-          currentModelName,
-          finalParams,
-          tools.active
-        );
-
-        if (results.length === 1) {
-          await get().actions.navigateToNode(results[0].id);
-        } else if (results.length > 1) {
-          await get().actions.navigateToNode(nodeId);
-          console.log(
-            `Multiple results found: ${results.map(r => r.id).join(', ')}`
-          );
-          get().actions.setStatusIdle();
-        } else {
-          get().actions.setStatusIdle();
-        }
-      } catch (error) {
-        get().actions.setStatusError(
-          error instanceof Error ? error.message : 'Generation failed'
-        );
-      }
+    // Legacy wrapper for backward compatibility
+    handleSendMessage: async (
+      role: Role,
+      content: string,
+      generateAfter: boolean
+    ) => {
+      // Call submitInput directly via actions
+      const actions = get().actions;
+      await actions.submitInput(role, content, generateAfter);
     },
 
     handleLargePasteSubmit: async (content: string) => {
@@ -407,7 +433,8 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
 
         if (parentId) {
           await apiDeleteNode(nodeId);
-          await get().actions.navigateToNode(parentId);
+          await get().actions._loadNodeData(parentId);
+          get().actions.setStatusIdle();
         } else {
           console.error('Attempted to delete node without parent ID:', nodeId);
           get().actions.setStatusIdle();

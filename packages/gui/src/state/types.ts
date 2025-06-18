@@ -43,6 +43,13 @@ export interface GuiAppActions {
   setStatusIdle: () => void;
   setStatusError: (message: string) => void;
 
+  // Internal helper functions (do not manage status)
+  _loadNodeData: (nodeId: NodeId) => Promise<void>;
+  _generateCompletion: (
+    nodeId: NodeId,
+    options?: Partial<GenerateOptions>
+  ) => Promise<NodeData[]>;
+
   // Core navigation and data loading
   navigateToNode: (nodeId: NodeId) => Promise<void>;
   loadNodeData: (nodeId: NodeId) => Promise<void>;
@@ -57,13 +64,18 @@ export interface GuiAppActions {
   setPreviewChild: (nodeData: NodeData | null) => void;
 
   // Message and generation actions
+  submitInput: (
+    role: Role,
+    content: string,
+    generateAfter: boolean
+  ) => Promise<void>;
   handleSendMessage: (
     role: Role,
     content: string,
     generateAfter: boolean
   ) => Promise<void>;
   handleGenerate: (
-    nodeId: NodeId,
+    nodeId?: NodeId,
     options?: Partial<GenerateOptions>
   ) => Promise<void>;
   handleLargePasteSubmit: (content: string) => Promise<void>;
