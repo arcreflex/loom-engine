@@ -10,12 +10,9 @@ import type { NodeId } from '@ankhdt/loom-engine';
 export default function HomeView() {
   const navigate = useNavigate();
 
-  // Get data from Zustand store
-  const { bookmarks, roots, status } = useAppStore(state => ({
-    bookmarks: state.bookmarks,
-    roots: state.roots,
-    status: state.status
-  }));
+  const bookmarks = useAppStore(state => state.bookmarks);
+  const roots = useAppStore(state => state.roots);
+  const status = useAppStore(state => state.status);
 
   // Local state for HomeView-specific data
   const [topology, setTopology] = useState<NodeStructure[]>([]);

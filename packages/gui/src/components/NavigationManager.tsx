@@ -5,19 +5,21 @@ import { useAppStore } from '../state';
 export function NavigationManager() {
   const navigate = useNavigate();
   const { nodeId: currentNodeId } = useParams<{ nodeId: string }>();
-  const { pendingNavigation, actions } = useAppStore(state => ({
-    pendingNavigation: state.pendingNavigation,
-    actions: state.actions
-  }));
+
+  const pendingNavigation = useAppStore(state => state.pendingNavigation);
+
+  const clearPendingNavigation = useAppStore(
+    state => state.actions.clearPendingNavigation
+  );
 
   useEffect(() => {
     if (pendingNavigation && pendingNavigation !== currentNodeId) {
       // Perform the navigation
       navigate(`/nodes/${encodeURIComponent(pendingNavigation)}`);
       // Clear the pending navigation
-      actions.clearPendingNavigation();
+      clearPendingNavigation();
     }
-  }, [pendingNavigation, currentNodeId, navigate, actions]);
+  }, [pendingNavigation, currentNodeId, navigate, clearPendingNavigation]);
 
   return null; // This component doesn't render anything
 }
