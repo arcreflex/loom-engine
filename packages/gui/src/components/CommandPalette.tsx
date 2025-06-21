@@ -1,41 +1,58 @@
-import { useEffect, useRef, KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, KeyboardEvent } from 'react';
 import fuzzysort from 'fuzzysort';
 import { type Command } from '../types';
+import { useAppStore } from '../state';
 
 interface CommandPaletteProps {
-  isOpen: boolean;
-  onClose: () => void;
   commands: Command[];
-  onExecuteCommand: (command: Command) => void;
-  // New controlled component props
-  query: string;
-  selectedIndex: number;
-  onQueryChange: (query: string) => void;
-  onSelectedIndexChange: (index: number) => void;
 }
 
-export function CommandPalette({
-  isOpen,
-  onClose,
-  commands,
-  onExecuteCommand,
-  query,
-  selectedIndex,
-  onQueryChange,
-  onSelectedIndexChange
-}: CommandPaletteProps) {
+export function CommandPalette({ commands }: CommandPaletteProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Filter commands based on query
-  const filteredCommands = query
-    ? fuzzysort
+  // Get state and actions directly from the store
+  const isOpen = useAppStore(state => state.paletteState.status === 'open');
+  const query = useAppStore(state =>
+    state.paletteState.status === 'open' ? state.paletteState.query : ''
+  );
+  const selectedIndex = useAppStore(state =>
+    state.paletteState.status === 'open' ? state.paletteState.selectedIndex : 0
+  );
+  const status = useAppStore(state => state.status);
+  const {
+    closePalette,
+    updatePaletteQuery,
+    setPaletteSelectedIndex,
+    setStatusError
+  } = useAppStore(state => state.actions);
+
+  // State for the filtered/displayed commands
+  const [displayedCommands, setDisplayedCommands] =
+    useState<Command[]>(commands);
+
+  // Debounced filtering effect
+  useEffect(() => {
+    if (!isOpen) return;
+
+    // If the query is empty, show all commands immediately
+    if (!query) {
+      setDisplayedCommands(commands);
+      return;
+    }
+
+    const debounceTimeout = setTimeout(() => {
+      const results = fuzzysort
         .go(query, commands, {
           keys: ['title', 'description'],
           limit: 10,
           threshold: -10000 // Allow very low matches
         })
-        .map(result => result.obj)
-    : commands;
+        .map(result => result.obj);
+      setDisplayedCommands(results);
+    }, 50); // 50ms debounce delay
+
+    return () => clearTimeout(debounceTimeout);
+  }, [query, commands, isOpen]);
 
   // Focus input when opened
   useEffect(() => {
@@ -44,40 +61,57 @@ export function CommandPalette({
     }
   }, [isOpen]);
 
+  // Handle command execution
+  const handleExecuteCommand = async (command: Command) => {
+    closePalette();
+    try {
+      await command.execute();
+    } catch (error) {
+      console.error('Failed to execute command:', command.id, error);
+      if (status.type !== 'error') {
+        setStatusError(
+          error instanceof Error
+            ? error.message
+            : `Command ${command.id} failed`
+        );
+      }
+    }
+  };
+
   // Scroll selected item into view
   useEffect(() => {
     if (
-      filteredCommands.length > 0 &&
+      displayedCommands.length > 0 &&
       selectedIndex >= 0 &&
-      selectedIndex < filteredCommands.length
+      selectedIndex < displayedCommands.length
     ) {
       const selectedItemElement = document.getElementById(
-        `command-item-${filteredCommands[selectedIndex].id}`
+        `command-item-${displayedCommands[selectedIndex].id}`
       );
       if (selectedItemElement) {
         selectedItemElement.scrollIntoView({ block: 'nearest' });
       }
     }
-  }, [selectedIndex, filteredCommands]);
+  }, [selectedIndex, displayedCommands]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
       event.stopPropagation();
-      onClose();
+      closePalette();
     } else if (event.key === 'ArrowDown') {
       event.preventDefault();
-      onSelectedIndexChange((selectedIndex + 1) % filteredCommands.length);
+      setPaletteSelectedIndex((selectedIndex + 1) % displayedCommands.length);
     } else if (event.key === 'ArrowUp') {
       event.preventDefault();
-      onSelectedIndexChange(
-        selectedIndex === 0 ? filteredCommands.length - 1 : selectedIndex - 1
+      setPaletteSelectedIndex(
+        selectedIndex === 0 ? displayedCommands.length - 1 : selectedIndex - 1
       );
     } else if (event.key === 'Enter') {
       event.preventDefault();
-      const selected = filteredCommands[selectedIndex];
+      const selected = displayedCommands[selectedIndex];
       if (selected) {
-        onExecuteCommand(selected);
+        handleExecuteCommand(selected);
       }
     }
   };
@@ -94,26 +128,26 @@ export function CommandPalette({
             className="w-full bg-transparent p-2 outline-none"
             placeholder="Type a command or search..."
             value={query}
-            onChange={e => onQueryChange(e.target.value)}
+            onChange={e => updatePaletteQuery(e.target.value)}
             onKeyDown={handleKeyDown}
           />
         </div>
 
         <div className="max-h-80 overflow-y-auto">
-          {filteredCommands.length === 0 ? (
+          {displayedCommands.length === 0 ? (
             <div className="p-4 text-center text-gray-500">
               No commands found
             </div>
           ) : (
             <ul className="divide-y divide-terminal-border">
-              {filteredCommands.map((command, index) => (
+              {displayedCommands.map((command, index) => (
                 <li
                   key={command.id}
                   id={`command-item-${command.id}`} // Added id for scrolling
                   className={`p-3 cursor-pointer ${index === selectedIndex ? 'bg-terminal-selection' : 'hover:bg-terminal-border'}`}
                   onClick={() => {
-                    onSelectedIndexChange(index);
-                    onExecuteCommand(command);
+                    setPaletteSelectedIndex(index);
+                    handleExecuteCommand(command);
                   }}
                 >
                   <div className="font-medium">{command.title}</div>

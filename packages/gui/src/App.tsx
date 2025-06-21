@@ -12,24 +12,25 @@ import { useAppStore } from './state';
 
 // Main App Component - Unified Shell
 function App() {
-  const {
-    status,
-    paletteState,
-    isModelSwitcherOpen,
-    currentNode,
-    siblings,
-    bookmarks,
-    currentProviderName,
-    currentModelName,
-    roots,
-    children,
-    messages,
-    root,
-    presets,
-    activePresetName,
-    renderingMode,
-    actions
-  } = useAppStore();
+  // Use granular selectors to prevent re-renders on palette state changes
+  const status = useAppStore(state => state.status);
+  const isModelSwitcherOpen = useAppStore(state => state.isModelSwitcherOpen);
+  const currentNode = useAppStore(state => state.currentNode);
+  const siblings = useAppStore(state => state.siblings);
+  const bookmarks = useAppStore(state => state.bookmarks);
+  const currentProviderName = useAppStore(state => state.currentProviderName);
+  const currentModelName = useAppStore(state => state.currentModelName);
+  const roots = useAppStore(state => state.roots);
+  const children = useAppStore(state => state.children);
+  const messages = useAppStore(state => state.messages);
+  const root = useAppStore(state => state.root);
+  const presets = useAppStore(state => state.presets);
+  const activePresetName = useAppStore(state => state.activePresetName);
+  const renderingMode = useAppStore(state => state.renderingMode);
+  const actions = useAppStore(state => state.actions);
+
+  // Only get paletteState for keyboard shortcuts (not for rendering)
+  const paletteStatus = useAppStore(state => state.paletteState.status);
 
   // Find the current bookmark for this node
   const currentBookmark = currentNode?.id
@@ -345,33 +346,13 @@ function App() {
     copyToClipboard
   ]);
 
-  // Handle command execution
-  const handleExecuteCommand = useCallback(
-    async (command: Command) => {
-      actions.closePalette();
-      try {
-        await command.execute();
-      } catch (error) {
-        console.error('Failed to execute command:', command.id, error);
-        if (status.type !== 'error') {
-          actions.setStatusError(
-            error instanceof Error
-              ? error.message
-              : `Command ${command.id} failed`
-          );
-        }
-      }
-    },
-    [actions, status.type]
-  );
-
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       // Command palette
       if ((event.metaKey || event.ctrlKey) && event.key === 'p') {
         event.preventDefault();
-        if (paletteState.status === 'closed') {
+        if (paletteStatus === 'closed') {
           actions.openPalette();
         } else {
           actions.closePalette();
@@ -379,7 +360,7 @@ function App() {
       }
 
       // Navigate to parent (Escape) only when palette is closed
-      if (event.key === 'Escape' && paletteState.status === 'closed') {
+      if (event.key === 'Escape' && paletteStatus === 'closed') {
         event.preventDefault();
         actions.navigateToParent();
       }
@@ -387,7 +368,7 @@ function App() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [actions, paletteState.status]);
+  }, [actions, paletteStatus]);
 
   return (
     <div className="flex flex-col h-screen bg-terminal-bg text-terminal-text">
@@ -408,18 +389,7 @@ function App() {
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
-      <CommandPalette
-        isOpen={paletteState.status === 'open'}
-        onClose={actions.closePalette}
-        commands={commands}
-        onExecuteCommand={handleExecuteCommand}
-        query={paletteState.status === 'open' ? paletteState.query : ''}
-        selectedIndex={
-          paletteState.status === 'open' ? paletteState.selectedIndex : 0
-        }
-        onQueryChange={actions.updatePaletteQuery}
-        onSelectedIndexChange={actions.setPaletteSelectedIndex}
-      />
+      <CommandPalette commands={commands} />
 
       <ModelSwitcherModal
         isOpen={isModelSwitcherOpen}
