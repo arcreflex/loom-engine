@@ -33,7 +33,7 @@ export class LoomEngine {
 
   private constructor(store: ILoomStore, configStore?: ConfigStore) {
     this.store = store;
-    this.forest = new Forest(this.store);
+    this.forest = new Forest(this.store, configStore);
     this.toolRegistry = new ToolRegistry();
     this.configStore = configStore;
   }

@@ -10,13 +10,17 @@ import type {
 } from './types.ts';
 import type { ILoomStore } from './store/types.ts';
 import { SerialQueue } from './queue.ts';
+import type { ConfigStore } from './config.ts';
 
 export class Forest {
   private queue = new SerialQueue();
 
   private store: ILoomStore;
-  constructor(store: ILoomStore) {
+  private configStore?: ConfigStore;
+
+  constructor(store: ILoomStore, configStore?: ConfigStore) {
     this.store = store;
+    this.configStore = configStore;
   }
 
   private async enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -396,11 +400,16 @@ export class Forest {
       for (const id of descendants) {
         await this.store.deleteNode(id);
       }
+      // Clean up bookmarks for all deleted descendants
+      await this.cleanupBookmarks(descendants);
       parentNode.child_ids = parentNode.child_ids.filter(id => id !== nodeId);
     }
     await this.store.saveNode(parentNode);
 
     await this.store.deleteNode(nodeId);
+
+    // Clean up bookmark for the deleted node itself
+    await this.cleanupBookmarks([nodeId]);
 
     return parentNode;
   }
@@ -416,6 +425,28 @@ export class Forest {
       }
     }
     return descendants;
+  }
+
+  /**
+   * Removes bookmarks that reference the given node IDs
+   */
+  private async cleanupBookmarks(nodeIds: NodeId[]): Promise<void> {
+    if (!this.configStore) {
+      return; // No config store available, skip bookmark cleanup
+    }
+
+    const config = this.configStore.get();
+    const bookmarks = config.bookmarks || [];
+
+    // Filter out bookmarks that reference deleted nodes
+    const remainingBookmarks = bookmarks.filter(
+      bookmark => !nodeIds.includes(bookmark.nodeId)
+    );
+
+    // Only update if there are bookmarks to remove
+    if (remainingBookmarks.length !== bookmarks.length) {
+      await this.configStore.update({ bookmarks: remainingBookmarks });
+    }
   }
 
   async updateNodeMetadata(

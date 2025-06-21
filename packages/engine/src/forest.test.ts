@@ -868,6 +868,159 @@ describe('Forest', () => {
       // Verify
       assert.equal(result, null);
     });
+
+    it('should clean up bookmarks when deleting a bookmarked node', async () => {
+      // Setup
+      const mockConfigStore = {
+        get: mock.fn(() => ({
+          bookmarks: [
+            {
+              nodeId: 'node1' as NodeId,
+              title: 'Test Bookmark',
+              rootId: 'root1' as any,
+              createdAt: '2023-01-01T00:00:00Z',
+              updatedAt: '2023-01-01T00:00:00Z'
+            },
+            {
+              nodeId: 'node2' as NodeId,
+              title: 'Another Bookmark',
+              rootId: 'root1' as any,
+              createdAt: '2023-01-01T00:00:00Z',
+              updatedAt: '2023-01-01T00:00:00Z'
+            }
+          ]
+        })),
+        update: mock.fn()
+      };
+
+      // Create forest with configStore
+      const forestWithConfig = new Forest(
+        mockStoreWrapper.mockStore,
+        mockConfigStore as any
+      );
+
+      const parent = mockStoreWrapper.createTestNode(
+        'parent',
+        'root1',
+        null,
+        createMessage('user', 'first')
+      );
+      const node = mockStoreWrapper.createTestNode(
+        'node1',
+        'root1',
+        'parent',
+        createMessage('assistant', 'Test message')
+      );
+
+      parent.child_ids = [node.id];
+      await mockStoreWrapper.mockStore.saveNode(parent);
+      await mockStoreWrapper.mockStore.saveNode(node);
+
+      // Execute
+      await forestWithConfig.deleteNode(node.id);
+
+      // Verify bookmark cleanup was called
+      assert.equal(mockConfigStore.update.mock.calls.length, 1);
+      const updateCall = mockConfigStore.update.mock.calls[0];
+      assert.deepEqual(updateCall.arguments[0], {
+        bookmarks: [
+          {
+            nodeId: 'node2' as NodeId,
+            title: 'Another Bookmark',
+            rootId: 'root1' as any,
+            createdAt: '2023-01-01T00:00:00Z',
+            updatedAt: '2023-01-01T00:00:00Z'
+          }
+        ]
+      });
+    });
+
+    it('should clean up bookmarks for deleted descendants', async () => {
+      // Setup
+      let currentBookmarks = [
+        {
+          nodeId: 'parent' as NodeId,
+          title: 'Parent Bookmark',
+          rootId: 'root1' as any,
+          createdAt: '2023-01-01T00:00:00Z',
+          updatedAt: '2023-01-01T00:00:00Z'
+        },
+        {
+          nodeId: 'child1' as NodeId,
+          title: 'Child Bookmark',
+          rootId: 'root1' as any,
+          createdAt: '2023-01-01T00:00:00Z',
+          updatedAt: '2023-01-01T00:00:00Z'
+        },
+        {
+          nodeId: 'other' as NodeId,
+          title: 'Other Bookmark',
+          rootId: 'root1' as any,
+          createdAt: '2023-01-01T00:00:00Z',
+          updatedAt: '2023-01-01T00:00:00Z'
+        }
+      ];
+
+      const mockConfigStore = {
+        get: mock.fn(() => ({
+          bookmarks: currentBookmarks
+        })),
+        update: mock.fn((updates: any) => {
+          if (updates.bookmarks) {
+            currentBookmarks = updates.bookmarks;
+          }
+        })
+      };
+
+      // Create forest with configStore
+      const forestWithConfig = new Forest(
+        mockStoreWrapper.mockStore,
+        mockConfigStore as any
+      );
+
+      const grandparent = mockStoreWrapper.createTestNode(
+        'grandparent',
+        'root1',
+        null,
+        createMessage('user', 'first')
+      );
+      const parent = mockStoreWrapper.createTestNode(
+        'parent',
+        'root1',
+        'grandparent',
+        createMessage('assistant', 'second')
+      );
+      const child1 = mockStoreWrapper.createTestNode(
+        'child1',
+        'root1',
+        'parent',
+        createMessage('user', 'third')
+      );
+
+      grandparent.child_ids = [parent.id];
+      parent.child_ids = [child1.id];
+
+      await mockStoreWrapper.mockStore.saveNode(grandparent);
+      await mockStoreWrapper.mockStore.saveNode(parent);
+      await mockStoreWrapper.mockStore.saveNode(child1);
+
+      // Execute - delete parent node (will delete descendants by default)
+      await forestWithConfig.deleteNode(parent.id);
+
+      // Verify bookmarks for both parent and child were cleaned up
+      assert.equal(mockConfigStore.update.mock.calls.length, 2);
+
+      // Verify that only the 'other' bookmark remains
+      assert.deepEqual(currentBookmarks, [
+        {
+          nodeId: 'other' as NodeId,
+          title: 'Other Bookmark',
+          rootId: 'root1' as any,
+          createdAt: '2023-01-01T00:00:00Z',
+          updatedAt: '2023-01-01T00:00:00Z'
+        }
+      ]);
+    });
   });
 
   // Testing edge cases
