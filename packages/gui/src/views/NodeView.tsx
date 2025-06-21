@@ -13,24 +13,23 @@ import type { NodeId } from '@ankhdt/loom-engine';
 export function NodeView() {
   const { nodeId: nodeIdFromUrl } = useParams<{ nodeId: string }>();
 
-  // Get state and actions from Zustand store
-  const {
-    currentNode,
-    root,
-    messages,
-    children,
-    siblings,
-    inputRole,
-    requestOnSubmit,
-    previewChild,
-    status,
-    graphViewState,
-    tools,
-    defaultParameters,
-    presets,
-    activePresetName,
-    actions
-  } = useAppStore();
+  // Use granular selectors to prevent unnecessary re-renders
+  const currentNode = useAppStore(state => state.currentNode);
+  const root = useAppStore(state => state.root);
+  const messages = useAppStore(state => state.messages);
+  const children = useAppStore(state => state.children);
+  const siblings = useAppStore(state => state.siblings);
+  const inputRole = useAppStore(state => state.inputRole);
+  const requestOnSubmit = useAppStore(state => state.requestOnSubmit);
+  const previewChild = useAppStore(state => state.previewChild);
+  const status = useAppStore(state => state.status);
+  const graphViewState = useAppStore(state => state.graphViewState);
+  const tools = useAppStore(state => state.tools);
+  const defaultParameters = useAppStore(state => state.defaultParameters);
+  const presets = useAppStore(state => state.presets);
+  const activePresetName = useAppStore(state => state.activePresetName);
+  const bookmarks = useAppStore(state => state.bookmarks);
+  const actions = useAppStore(state => state.actions);
 
   // Local state for graph topology
   const [graphTopology, setGraphTopology] = useState<NodeStructure[]>([]);
@@ -123,7 +122,7 @@ export function NodeView() {
               <GraphView
                 state={graphViewState}
                 topology={graphTopology}
-                bookmarks={useAppStore.getState().bookmarks}
+                bookmarks={bookmarks}
                 currentPath={messages.map(m => m.nodeId)}
                 currentNodeId={currentNode?.id ?? null}
                 currentRootId={currentRootId ?? null}
