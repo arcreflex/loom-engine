@@ -1,12 +1,6 @@
 import { create } from 'zustand';
 import type { GuiAppState, Status } from './types';
-import type {
-  NodeId,
-  Role,
-  Node,
-  NodeData,
-  ProviderName
-} from '@ankhdt/loom-engine';
+import type { NodeId, Role, NodeData, ProviderName } from '@ankhdt/loom-engine';
 import type { DisplayMessage, GenerateOptions } from '../types';
 import {
   setState as setAppState,
@@ -32,6 +26,7 @@ import {
   listToolGroups,
   editNodeContent
 } from '../api';
+import { ModelSourceInfo } from '../../../engine/src/types';
 
 // Define the initial state
 const initialState: Omit<GuiAppState, 'actions'> = {
@@ -153,8 +148,23 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
         get().actions.initializeModelSelection(pathData.messages);
       }
 
-      // Set default tool selection based on the current node's source info
-      get().actions.setDefaultToolsFromSourceInfo(node);
+      let maybeModelNode = node;
+      while (
+        maybeModelNode?.parent_id &&
+        maybeModelNode.metadata.source_info.type !== 'model'
+      ) {
+        // Traverse up to find the first model node
+        maybeModelNode = await getNode(maybeModelNode.parent_id);
+      }
+      if (
+        maybeModelNode?.parent_id &&
+        maybeModelNode?.metadata.source_info.type === 'model'
+      ) {
+        // Set default tool selection
+        get().actions.setDefaultToolsFromSourceInfo(
+          maybeModelNode.metadata.source_info
+        );
+      }
     },
 
     _generateCompletion: async (
@@ -690,20 +700,11 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
       }
     },
 
-    setDefaultToolsFromSourceInfo: (node: Node) => {
+    setDefaultToolsFromSourceInfo: (sourceInfo: ModelSourceInfo) => {
       const { tools } = get();
-
-      // Only handle NodeData (not RootData) and only model nodes with tool information
-      if (
-        'metadata' in node &&
-        node.metadata.source_info.type === 'model' &&
-        node.metadata.source_info.tools &&
-        node.metadata.source_info.tools.length > 0
-      ) {
+      if (sourceInfo.tools && sourceInfo.tools.length > 0) {
         // Extract tool names from the source info
-        const toolNames = node.metadata.source_info.tools.map(
-          tool => tool.function.name
-        );
+        const toolNames = sourceInfo.tools.map(tool => tool.function.name);
 
         // Filter to only include tools that are currently available
         const availableToolNames = tools.available.map(tool => tool.name);

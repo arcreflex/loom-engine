@@ -66,21 +66,23 @@ export interface RootData {
   config: RootConfig;
 }
 
+export type ModelSourceInfo = {
+  type: 'model';
+  provider: ProviderName;
+  model_name: string;
+  parameters: ProviderRequest['parameters'];
+  tools?: ProviderRequest['tools'];
+  tool_choice?: ProviderRequest['tool_choice'];
+  finish_reason?: string | null;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    raw?: unknown;
+  };
+};
+
 export type SourceInfo =
-  | {
-      type: 'model';
-      provider: ProviderName;
-      model_name: string;
-      parameters: ProviderRequest['parameters'];
-      tools?: ProviderRequest['tools'];
-      tool_choice?: ProviderRequest['tool_choice'];
-      finish_reason?: string | null;
-      usage?: {
-        input_tokens?: number;
-        output_tokens?: number;
-        raw?: unknown;
-      };
-    }
+  | ModelSourceInfo
   | {
       type: 'split';
     }

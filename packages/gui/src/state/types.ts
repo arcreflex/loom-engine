@@ -11,6 +11,7 @@ import type {
 import type { DisplayMessage, GenerateOptions } from '../types';
 import type { PresetDefinition } from '../api';
 import { GraphViewState } from '../components/GraphView';
+import { ModelSourceInfo } from '../../../engine/src/types';
 
 /**
  * Defines the possible operational statuses of the GUI application.
@@ -126,7 +127,7 @@ export interface GuiAppActions {
 
   // Helper methods (internal)
   initializeModelSelection: (messages: DisplayMessage[]) => void;
-  setDefaultToolsFromSourceInfo: (node: Node) => void;
+  setDefaultToolsFromSourceInfo: (sourceInfo: ModelSourceInfo) => void;
 }
 
 /**
