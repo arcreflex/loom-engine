@@ -144,7 +144,7 @@ export function ContextView({
       className="flex-1 overflow-y-auto p-4"
       onScroll={handleScroll}
     >
-      <div className="max-w-4xl mx-auto w-full">
+      <div className="max-w-4xl mx-auto w-full pt-12">
         {/* System message */}
         {(root?.systemPrompt || isEditingPrompt) && (
           <div className="system-prompt">
