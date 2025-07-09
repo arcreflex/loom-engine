@@ -27,7 +27,15 @@ async function main() {
   const configStore = await ConfigStore.create(dataDir);
   const engine = await LoomEngine.create(dataDir, configStore);
 
-  console.log(`Initialized LoomEngine with data directory: ${dataDir}`);
+  const log = (message: string) => {
+    engine.log(`[server] ${message}`);
+  };
+
+  log(`Initialized LoomEngine with data directory: ${dataDir}`);
+  app.use((req, _res, next) => {
+    log(`${req.method} ${req.url}`);
+    next();
+  });
 
   // API routes
 
@@ -289,9 +297,8 @@ async function main() {
         configStore,
         children
       );
-      console.log(
-        'Deleting children:',
-        toDelete.map(node => node.id)
+      log(
+        'Deleting children: ' + JSON.stringify(toDelete.map(node => node.id))
       );
       await engine.getForest().deleteNodes(toDelete.map(node => node.id));
       res.json({ success: true });
@@ -483,7 +490,7 @@ async function main() {
 
   // Start server
   app.listen(port, () => {
-    console.log(`Server running at http://localhost:${port}`);
+    log(`Server running at http://localhost:${port}`);
   });
 }
 
