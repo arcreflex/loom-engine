@@ -4,6 +4,19 @@ import type { ProviderModelSpec } from './types.ts';
 export const KNOWN_MODELS: {
   [key: `${ProviderName}/${string}`]: ProviderModelSpec | undefined;
 } = {
+  'openrouter/moonshotai/kimi-k2': {
+    provider: 'openrouter',
+    model: 'moonshotai/kimi-k2',
+    docs_url: 'https://openrouter.ai/moonshotai/kimi-k2',
+    capabilities: {
+      max_input_tokens: 131072,
+      max_output_tokens: 131072
+    },
+    cost: {
+      input: 0.57,
+      output: 2.3
+    }
+  },
   'google/gemini-2.5-pro-preview-06-05': {
     provider: 'google',
     model: 'gemini-2.5-pro-preview-06-05',

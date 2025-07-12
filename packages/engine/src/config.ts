@@ -28,6 +28,10 @@ export interface Config {
       apiKey?: string;
       projectId?: string;
     };
+    openrouter?: {
+      apiKey?: string;
+      baseURL?: string; // Default is https://openrouter.ai/api/v1
+    };
   };
   defaults: {
     model?: string;
@@ -250,5 +254,10 @@ function setEnvFromConfig(config: Config): void {
   // Set Google API key if present in config and not already set in env
   if (config.providers?.google?.apiKey && !process.env.GOOGLE_API_KEY) {
     process.env.GOOGLE_API_KEY = config.providers.google.apiKey;
+  }
+
+  // Set Openrouter API key if present in config and not already set in env
+  if (config.providers?.openrouter?.apiKey && !process.env.OPENROUTER_API_KEY) {
+    process.env.OPENROUTER_API_KEY = config.providers.openrouter.apiKey;
   }
 }

@@ -16,6 +16,7 @@ import { GoogleProvider } from './providers/google.ts';
 import { ToolRegistry } from './tools/registry.ts';
 import type { ConfigStore, Bookmark } from './config.ts';
 import { discoverMcpTools } from './mcp/client.ts';
+import { KNOWN_MODELS } from './browser.ts';
 
 export interface GenerateOptions {
   n: number;
@@ -81,6 +82,28 @@ export class LoomEngine {
       temperature: options.temperature,
       model: modelName
     };
+
+    const estimatedInputTokens = contextMessages
+      .map(msg => {
+        let len = msg.content?.length || 0;
+        if (msg.tool_calls) {
+          len += JSON.stringify(msg.tool_calls).length;
+        }
+        // 1 token ~= 4 chars, but want to overestimate a bit
+        return len * 0.3;
+      })
+      .reduce((sum, tok) => sum + tok, 0);
+
+    const modelSpec = KNOWN_MODELS[`${providerName}/${modelName}`];
+    if (modelSpec) {
+      parameters.max_tokens = Math.min(
+        options.max_tokens,
+        modelSpec.capabilities.max_output_tokens,
+        modelSpec.capabilities.max_input_tokens
+          ? modelSpec.capabilities.max_input_tokens - estimatedInputTokens
+          : Infinity
+      );
+    }
 
     // If no tools are active, use the original n > 1 logic
     if (!activeTools || activeTools.length === 0) {
@@ -301,7 +324,17 @@ export class LoomEngine {
         return new AnthropicProvider(this);
       case 'google':
         return new GoogleProvider(this);
+      case 'openrouter':
+        if (!process.env.OPENROUTER_API_KEY) {
+          throw new Error('OpenRouter API key is required.');
+        }
+        return new OpenAIProvider(
+          this,
+          process.env.OPENROUTER_API_KEY,
+          `https://openrouter.ai/api/v1`
+        );
       default:
+        provider satisfies never;
         throw new Error(`Unsupported provider: ${provider}`);
     }
   }

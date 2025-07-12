@@ -15,7 +15,7 @@ export type RootId = NodeId & { readonly __rootIdBrand: unique symbol };
  */
 export type Role = 'user' | 'assistant' | 'tool';
 
-export type ProviderName = 'openai' | 'anthropic' | 'google';
+export type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter';
 
 /**
  * Represents a message in a conversation.

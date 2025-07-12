@@ -83,6 +83,8 @@ export interface ProviderModelSpec {
   capabilities: {
     max_input_tokens: number;
     max_output_tokens: number;
+    /** If set, limits total tokens (input + output) */
+    max_total_tokens?: number;
   };
 
   cost: {
