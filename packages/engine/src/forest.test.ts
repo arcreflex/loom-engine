@@ -502,16 +502,19 @@ describe('Forest', () => {
   // Test splitNode method
   describe('splitNode', () => {
     it('should split a node at the specified position in the message content', async () => {
+      const root = mockStoreWrapper.createTestRoot('root1', {
+        systemPrompt: ''
+      });
       // Setup - create a node with a single message containing a longer text
       const parent = mockStoreWrapper.createTestNode(
         'parent',
-        'root1',
+        root.id,
         null,
         createMessage('user', 'Initial prompt')
       );
       const node = mockStoreWrapper.createTestNode(
         'node1',
-        'root1',
+        root.id,
         'parent',
         createMessage(
           'user',
@@ -522,15 +525,17 @@ describe('Forest', () => {
       // Create a child of the node
       const childNode = mockStoreWrapper.createTestNode(
         'child1',
-        'root1',
+        root.id,
         'node1',
         createMessage('assistant', 'Child response')
       );
 
       // Set up the parent-child relationships
+      root.child_ids = [parent.id];
       parent.child_ids = [node.id];
       node.child_ids = [childNode.id];
 
+      await mockStoreWrapper.mockStore.saveRootInfo(root);
       await mockStoreWrapper.mockStore.saveNode(parent);
       await mockStoreWrapper.mockStore.saveNode(node);
       await mockStoreWrapper.mockStore.saveNode(childNode);
@@ -539,46 +544,67 @@ describe('Forest', () => {
       const splitPosition = 15;
 
       // Execute - split the node at the specified position
-      const result = await forest.splitNode(node.id, splitPosition);
+      const lhsNode = await forest.splitNode(node.id, splitPosition);
 
-      // Verify original node was updated correctly
-      assert.equal(result.id, node.id);
-      assert.equal(result.message.content, 'This is a long ');
-      assert.equal(result.message.role, 'user');
-      assert.equal(result.child_ids.length, 1);
-      assert.deepEqual(result.metadata.source_info, { type: 'split' });
-
-      assert.equal(result.child_ids.length, 1);
-
-      // Verify the new node created from the split
-      const splitNodeId = result.child_ids[0];
-      const splitNode = await mockStoreWrapper.mockStore.loadNode(splitNodeId!);
-
-      assert.ok(splitNode);
-      // The split node's parent is the parent node
-      assert.equal(splitNode.parent_id, parent.id);
-      assert.equal(splitNode.message.role, 'user');
-      assert.equal(
-        splitNode.message.content,
-        'message that will be split into two parts.'
-      );
-      assert.equal(splitNode.child_ids.length, 1);
-      assert.equal(splitNode.child_ids[0], childNode.id);
-
-      // Verify the child was reparented to the new split node
-      const updatedChild = await mockStoreWrapper.mockStore.loadNode(
-        childNode.id
-      );
-      assert.ok(updatedChild);
-      assert.equal(updatedChild.parent_id, splitNode.id);
+      assert.deepEqual(await forest.serialize(), {
+        root1: {
+          children: {
+            parent: {
+              children: {
+                [lhsNode.id]: {
+                  children: {
+                    node1: {
+                      children: {
+                        child1: {
+                          children: {},
+                          id: 'child1',
+                          message: {
+                            content: 'Child response',
+                            role: 'assistant'
+                          },
+                          role: 'assistant'
+                        }
+                      },
+                      id: 'node1',
+                      message: {
+                        content: 'message that will be split into two parts.',
+                        role: 'user'
+                      },
+                      role: 'user'
+                    }
+                  },
+                  id: lhsNode.id,
+                  message: {
+                    content: 'This is a long ',
+                    role: 'user'
+                  },
+                  role: 'user'
+                }
+              },
+              id: 'parent',
+              message: {
+                content: 'Initial prompt',
+                role: 'user'
+              },
+              role: 'user'
+            }
+          },
+          id: 'root1',
+          message: '',
+          role: 'system'
+        }
+      });
     });
 
-    it('should maintain metadata in the new node except for source_info', async () => {
+    it('should mark split node with correct metadata', async () => {
       // Setup
+      const root = mockStoreWrapper.createTestRoot('root1', {
+        systemPrompt: ''
+      });
       const node = mockStoreWrapper.createTestNode(
         'node_with_metadata',
         'root1',
-        null,
+        root.id,
         createMessage('assistant', 'Response with some tags and custom data'),
         {
           type: 'model',
@@ -592,36 +618,34 @@ describe('Forest', () => {
       node.metadata.tags = ['important', 'reference'];
       node.metadata.custom_data = { note: 'Remember this', priority: 'high' };
 
+      root.child_ids = [node.id];
+      await mockStoreWrapper.mockStore.saveRootInfo(root);
       await mockStoreWrapper.mockStore.saveNode(node);
 
       // Execute - split at position 10
-      const result = await forest.splitNode(node.id, 10);
-
-      // Get the split node
-      const splitNodeId = result.child_ids[0];
-      const splitNode = await mockStoreWrapper.mockStore.loadNode(splitNodeId);
+      const lhs = await forest.splitNode(node.id, 10);
 
       // Verify metadata was preserved in new node
-      assert.ok(splitNode?.parent_id);
-      assert.deepEqual(splitNode.metadata.tags, ['important', 'reference']);
-      assert.deepEqual(splitNode.metadata.custom_data, {
+      assert.ok(lhs?.parent_id);
+      assert.deepEqual(lhs.metadata.tags, ['important', 'reference']);
+      assert.deepEqual(lhs.metadata.custom_data, {
         note: 'Remember this',
         priority: 'high'
       });
-      assert.deepEqual(splitNode.metadata.source_info, {
+      assert.deepEqual(lhs.metadata.source_info, {
         type: 'model',
         provider: 'openai',
         model_name: 'gpt-4',
         parameters: { temperature: 0.7, max_tokens: 1 }
       });
+      assert.equal(lhs.metadata.split_source, node.id);
 
-      // Verify original node's source_info was updated to split
-      assert.deepEqual(result.metadata.source_info, { type: 'split' });
-      assert.deepEqual(result.metadata.tags, ['important', 'reference']);
-      assert.deepEqual(result.metadata.custom_data, {
-        note: 'Remember this',
-        priority: 'high'
-      });
+      const original = await mockStoreWrapper.mockStore.loadNode(node.id);
+      assert.deepEqual(
+        original?.parent_id !== undefined && original.metadata,
+        node.metadata,
+        'Original node metadata should remain unchanged'
+      );
     });
 
     it('should throw error if the node does not exist', async () => {
@@ -663,52 +687,6 @@ describe('Forest', () => {
           message: /Invalid message index for split/
         }
       );
-    });
-
-    it('should handle splitting at different positions within the content', async () => {
-      // Test splitting at beginning, middle, and near end
-      const node = mockStoreWrapper.createTestNode(
-        'node_positions',
-        'root1',
-        null,
-        createMessage('user', 'Testing different split positions')
-      );
-      await mockStoreWrapper.mockStore.saveNode(node);
-
-      // Split near beginning
-      const result1 = await forest.splitNode(node.id, 2);
-      assert.equal(result1.message.content, 'Te');
-
-      // Get the new node
-      const splitNode1 = await mockStoreWrapper.mockStore.loadNode(
-        result1.child_ids[0]
-      );
-      assert.ok(splitNode1?.parent_id);
-      if (splitNode1) {
-        assert.equal(
-          splitNode1.message.content,
-          'sting different split positions'
-        );
-
-        // Now split the new node near the end
-        const result2 = await forest.splitNode(
-          splitNode1.id,
-          splitNode1.message.content!.length - 2
-        );
-
-        // Get the final node
-        const splitNode2 = await mockStoreWrapper.mockStore.loadNode(
-          result2.child_ids[0]
-        );
-        assert.ok(splitNode2?.parent_id);
-        if (splitNode2) {
-          assert.equal(
-            result2.message.content,
-            'sting different split positio'
-          );
-          assert.equal(splitNode2.message.content, 'ns');
-        }
-      }
     });
   });
 
@@ -1020,6 +998,333 @@ describe('Forest', () => {
           updatedAt: '2023-01-01T00:00:00Z'
         }
       ]);
+    });
+  });
+
+  // Test editNodeContent method
+  describe('editNodeContent', () => {
+    it('should edit node content in place when node has no children', async () => {
+      // Setup
+      const parent = mockStoreWrapper.createTestNode(
+        'parent',
+        'root1',
+        null,
+        createMessage('user', 'Parent node')
+      );
+      const node = mockStoreWrapper.createTestNode(
+        'node1',
+        'root1',
+        'parent',
+        createMessage('user', 'Original content')
+      );
+
+      parent.child_ids = [node.id];
+      await mockStoreWrapper.mockStore.saveNode(parent);
+      await mockStoreWrapper.mockStore.saveNode(node);
+
+      // Execute
+      const result = await forest.editNodeContent(node.id, 'Edited content');
+
+      // Verify
+      assert.equal(result.id, node.id, 'Same node ID returned');
+      assert.equal(
+        result.message.content,
+        'Edited content',
+        'Content was updated'
+      );
+      assert.equal(result.message.role, 'user', 'Role preserved');
+      assert.deepEqual(
+        result.metadata.source_info,
+        { type: 'user' },
+        'Source info updated'
+      );
+
+      // Verify in store
+      const storedNode = await mockStoreWrapper.mockStore.loadNode(node.id);
+      const content = storedNode?.parent_id ? storedNode.message.content : null;
+      assert.equal(content, 'Edited content', 'Content persisted in store');
+    });
+
+    it('should create new branch when node has children', async () => {
+      // Setup
+      const parent = mockStoreWrapper.createTestNode(
+        'parent',
+        'root1',
+        null,
+        createMessage('user', 'Parent node')
+      );
+      const node = mockStoreWrapper.createTestNode(
+        'node1',
+        'root1',
+        'parent',
+        createMessage('user', 'Original content')
+      );
+      const child = mockStoreWrapper.createTestNode(
+        'child1',
+        'root1',
+        'node1',
+        createMessage('assistant', 'Child response')
+      );
+
+      parent.child_ids = [node.id];
+      node.child_ids = [child.id];
+      await mockStoreWrapper.mockStore.saveNode(parent);
+      await mockStoreWrapper.mockStore.saveNode(node);
+      await mockStoreWrapper.mockStore.saveNode(child);
+
+      const originalNodeCount = mockStoreWrapper.nodes.size;
+
+      // Execute
+      const result = await forest.editNodeContent(node.id, 'New content');
+
+      // Verify
+      assert.notEqual(result.id, node.id, 'New node created');
+      assert.equal(
+        result.message.content,
+        'New content',
+        'New content applied'
+      );
+      assert.equal(result.message.role, 'user', 'Role preserved');
+      assert.deepEqual(
+        result.metadata.source_info,
+        { type: 'user' },
+        'Source info set'
+      );
+
+      // Verify new node was created
+      assert.equal(
+        mockStoreWrapper.nodes.size,
+        originalNodeCount + 1,
+        'One new node created'
+      );
+    });
+
+    it('should handle prefix matching when editing with children', async () => {
+      // Setup
+      const root = mockStoreWrapper.createTestRoot('root1', {
+        systemPrompt: ''
+      });
+      const parent = mockStoreWrapper.createTestNode(
+        'parent',
+        root.id,
+        null,
+        createMessage('user', 'Parent node')
+      );
+      const node = mockStoreWrapper.createTestNode(
+        'node1',
+        root.id,
+        'parent',
+        createMessage('user', 'Original message content')
+      );
+      const child = mockStoreWrapper.createTestNode(
+        'child1',
+        root.id,
+        'node1',
+        createMessage('assistant', 'Child response')
+      );
+
+      root.child_ids = [parent.id];
+      parent.child_ids = [node.id];
+      node.child_ids = [child.id];
+      await mockStoreWrapper.mockStore.saveRootInfo(root);
+      await mockStoreWrapper.mockStore.saveNode(parent);
+      await mockStoreWrapper.mockStore.saveNode(node);
+      await mockStoreWrapper.mockStore.saveNode(child);
+
+      // Execute - edit with content that shares prefix with original
+      const editedNode = await forest.editNodeContent(
+        node.id,
+        'Original message with new ending'
+      );
+
+      const splitParentId = editedNode.parent_id;
+
+      assert.deepEqual(await forest.serialize(), {
+        root1: {
+          id: 'root1',
+          role: 'system',
+          message: '',
+          children: {
+            parent: {
+              id: 'parent',
+              role: 'user',
+              message: { role: 'user', content: 'Parent node' },
+              children: {
+                [splitParentId]: {
+                  id: splitParentId,
+                  role: 'user',
+                  message: { role: 'user', content: 'Original message ' },
+                  children: {
+                    node1: {
+                      id: 'node1',
+                      role: 'user',
+                      message: { role: 'user', content: 'content' },
+                      children: {
+                        child1: {
+                          id: 'child1',
+                          role: 'assistant',
+                          message: {
+                            role: 'assistant',
+                            content: 'Child response'
+                          },
+                          children: {}
+                        }
+                      }
+                    },
+                    [editedNode.id]: {
+                      id: editedNode.id,
+                      role: 'user',
+                      message: { role: 'user', content: 'with new ending' },
+                      children: {}
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      });
+    });
+
+    it('should return existing node when new content is prefix of original', async () => {
+      // Setup
+      const parent = mockStoreWrapper.createTestNode(
+        'parent',
+        'root1',
+        null,
+        createMessage('user', 'Parent node')
+      );
+      const node = mockStoreWrapper.createTestNode(
+        'node1',
+        'root1',
+        'parent',
+        createMessage('user', 'Original message content')
+      );
+      const child = mockStoreWrapper.createTestNode(
+        'child1',
+        'root1',
+        'node1',
+        createMessage('assistant', 'Child response')
+      );
+
+      parent.child_ids = [node.id];
+      node.child_ids = [child.id];
+      await mockStoreWrapper.mockStore.saveNode(parent);
+      await mockStoreWrapper.mockStore.saveNode(node);
+      await mockStoreWrapper.mockStore.saveNode(child);
+
+      const originalNodeCount = mockStoreWrapper.nodes.size;
+
+      // Execute - edit with content that is a prefix of original
+      const result = await forest.editNodeContent(node.id, 'Original message');
+
+      // Verify - should split and return the split node
+      assert.notEqual(result.id, node.id, 'Split node returned');
+      assert.equal(
+        result.message.content,
+        'Original message',
+        'Content matches prefix'
+      );
+      assert.equal(
+        mockStoreWrapper.nodes.size,
+        originalNodeCount + 1,
+        'One new node created from split'
+      );
+    });
+
+    it('should throw error when editing non-existent node', async () => {
+      // Setup
+      const nonExistentNodeId = mockNodeId('nonexistent');
+
+      // Execute & Verify
+      await assert.rejects(
+        async () =>
+          await forest.editNodeContent(nonExistentNodeId, 'New content'),
+        {
+          name: 'Error',
+          message: `Node not found or is a root: ${nonExistentNodeId}`
+        }
+      );
+    });
+
+    it('should throw error when editing root node', async () => {
+      // Setup
+      const root = mockStoreWrapper.createTestRoot('root1');
+
+      // Execute & Verify
+      await assert.rejects(
+        async () => await forest.editNodeContent(root.id, 'New content'),
+        {
+          name: 'Error',
+          message: `Node not found or is a root: ${root.id}`
+        }
+      );
+    });
+
+    it('should handle empty content edit', async () => {
+      // Setup
+      const parent = mockStoreWrapper.createTestNode(
+        'parent',
+        'root1',
+        null,
+        createMessage('user', 'Parent node')
+      );
+      const node = mockStoreWrapper.createTestNode(
+        'node1',
+        'root1',
+        'parent',
+        createMessage('user', 'Original content')
+      );
+
+      parent.child_ids = [node.id];
+      await mockStoreWrapper.mockStore.saveNode(parent);
+      await mockStoreWrapper.mockStore.saveNode(node);
+
+      // Execute
+      const result = await forest.editNodeContent(node.id, '');
+
+      // Verify
+      assert.equal(result.id, node.id, 'Same node ID returned');
+      assert.equal(result.message.content, '', 'Content set to empty string');
+      assert.deepEqual(
+        result.metadata.source_info,
+        { type: 'user' },
+        'Source info updated'
+      );
+    });
+
+    it('should handle editing with same content', async () => {
+      // Setup
+      const parent = mockStoreWrapper.createTestNode(
+        'parent',
+        'root1',
+        null,
+        createMessage('user', 'Parent node')
+      );
+      const node = mockStoreWrapper.createTestNode(
+        'node1',
+        'root1',
+        'parent',
+        createMessage('user', 'Same content')
+      );
+
+      parent.child_ids = [node.id];
+      await mockStoreWrapper.mockStore.saveNode(parent);
+      await mockStoreWrapper.mockStore.saveNode(node);
+
+      const originalNodeCount = mockStoreWrapper.nodes.size;
+
+      // Execute
+      const result = await forest.editNodeContent(node.id, 'Same content');
+
+      // Verify
+      assert.equal(result.id, node.id, 'Same node ID returned');
+      assert.equal(result.message.content, 'Same content', 'Content unchanged');
+      assert.equal(
+        mockStoreWrapper.nodes.size,
+        originalNodeCount,
+        'No new nodes created'
+      );
     });
   });
 

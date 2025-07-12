@@ -84,9 +84,6 @@ export type ModelSourceInfo = {
 export type SourceInfo =
   | ModelSourceInfo
   | {
-      type: 'split';
-    }
-  | {
       type: 'user';
     }
   | {
@@ -111,6 +108,8 @@ export interface NodeMetadata {
 
   /** Additional custom data associated with this node. */
   custom_data?: Record<string, unknown>;
+
+  split_source?: NodeId;
 }
 
 /**

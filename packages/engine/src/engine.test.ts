@@ -756,4 +756,266 @@ describe('LoomEngine', () => {
       );
     });
   });
+
+  // --- editNode Tests ---
+  describe('editNode', () => {
+    it('should edit node content in place and return same node when no children', async () => {
+      // Setup
+      const root = createTestRoot('r1', { systemPrompt: 'Test' });
+      const node = createTestNode('n1', root.id, null, {
+        role: 'user',
+        content: 'Original content'
+      });
+      await mockStoreWrapper.mockStore.saveNode(node);
+
+      // Execute
+      const result = await engine.editNode(node.id, 'Edited content');
+
+      // Verify
+      assert.equal(result.id, node.id, 'Same node ID returned');
+      assert.equal(result.message.content, 'Edited content', 'Content updated');
+      assert.equal(result.message.role, 'user', 'Role preserved');
+      assert.deepEqual(
+        result.metadata.source_info,
+        { type: 'user' },
+        'Source info updated'
+      );
+    });
+
+    it('should create new branch when editing node with children', async () => {
+      // Setup
+      const root = createTestRoot('r1', { systemPrompt: 'Test' });
+      const node = createTestNode('n1', root.id, null, {
+        role: 'user',
+        content: 'Original content'
+      });
+      const child = createTestNode('c1', root.id, node.id, {
+        role: 'assistant',
+        content: 'Child response'
+      });
+      node.child_ids = [child.id];
+      await mockStoreWrapper.mockStore.saveNode(node);
+      await mockStoreWrapper.mockStore.saveNode(child);
+
+      const originalNodeCount = mockStoreWrapper.nodes.size;
+
+      // Execute
+      const result = await engine.editNode(node.id, 'New content');
+
+      // Verify
+      assert.notEqual(result.id, node.id, 'New node created');
+      assert.equal(
+        result.message.content,
+        'New content',
+        'New content applied'
+      );
+      assert.equal(result.message.role, 'user', 'Role preserved');
+      assert.equal(
+        mockStoreWrapper.nodes.size,
+        originalNodeCount + 1,
+        'One new node created'
+      );
+    });
+
+    it('should move bookmark when edit creates new node', async () => {
+      // Setup
+      const mockConfigStore = {
+        get: mock.fn(() => ({
+          bookmarks: [
+            {
+              nodeId: 'n1',
+              title: 'Test Bookmark',
+              rootId: 'r1',
+              createdAt: '2023-01-01T00:00:00Z',
+              updatedAt: '2023-01-01T00:00:00Z'
+            },
+            {
+              nodeId: 'other',
+              title: 'Other Bookmark',
+              rootId: 'r1',
+              createdAt: '2023-01-01T00:00:00Z',
+              updatedAt: '2023-01-01T00:00:00Z'
+            }
+          ]
+        })),
+        update: mock.fn()
+      };
+
+      const engineWithConfig = await LoomEngine.create(
+        mockStoreWrapper.mockStore,
+        mockConfigStore as any
+      );
+
+      const root = createTestRoot('r1', { systemPrompt: 'Test' });
+      const node = createTestNode('n1', root.id, null, {
+        role: 'user',
+        content: 'Original content'
+      });
+      const child = createTestNode('c1', root.id, node.id, {
+        role: 'assistant',
+        content: 'Child response'
+      });
+      node.child_ids = [child.id];
+      await mockStoreWrapper.mockStore.saveNode(node);
+      await mockStoreWrapper.mockStore.saveNode(child);
+
+      // Execute
+      const result = await engineWithConfig.editNode(node.id, 'New content');
+
+      // Verify bookmark was moved
+      assert.equal(
+        mockConfigStore.update.mock.calls.length,
+        1,
+        'Config update called once'
+      );
+      const updateCall = mockConfigStore.update.mock.calls[0];
+      const updatedBookmarks = updateCall.arguments[0].bookmarks;
+
+      assert.equal(updatedBookmarks.length, 2, 'Two bookmarks remain');
+      const movedBookmark = updatedBookmarks.find(
+        (b: any) => b.title === 'Test Bookmark'
+      );
+      assert.ok(movedBookmark, 'Bookmark found');
+      assert.equal(
+        movedBookmark.nodeId,
+        result.id,
+        'Bookmark moved to new node'
+      );
+      assert.notEqual(
+        movedBookmark.updatedAt,
+        '2023-01-01T00:00:00Z',
+        'Bookmark updatedAt changed'
+      );
+    });
+
+    it('should not move bookmark when edit is in place', async () => {
+      // Setup
+      const mockConfigStore = {
+        get: mock.fn(() => ({
+          bookmarks: [
+            {
+              nodeId: 'n1',
+              title: 'Test Bookmark',
+              rootId: 'r1',
+              createdAt: '2023-01-01T00:00:00Z',
+              updatedAt: '2023-01-01T00:00:00Z'
+            }
+          ]
+        })),
+        update: mock.fn()
+      };
+
+      const engineWithConfig = await LoomEngine.create(
+        mockStoreWrapper.mockStore,
+        mockConfigStore as any
+      );
+
+      const root = createTestRoot('r1', { systemPrompt: 'Test' });
+      const node = createTestNode('n1', root.id, null, {
+        role: 'user',
+        content: 'Original content'
+      });
+      await mockStoreWrapper.mockStore.saveNode(node);
+
+      // Execute - edit in place (no children)
+      const result = await engineWithConfig.editNode(node.id, 'Edited content');
+
+      // Verify bookmark was not moved
+      assert.equal(result.id, node.id, 'Same node returned');
+      assert.equal(
+        mockConfigStore.update.mock.calls.length,
+        0,
+        'Config update not called'
+      );
+    });
+
+    it('should work without configStore', async () => {
+      // Setup - engine without configStore
+      const engineNoConfig = await LoomEngine.create(
+        mockStoreWrapper.mockStore
+      );
+
+      const root = createTestRoot('r1', { systemPrompt: 'Test' });
+      const node = createTestNode('n1', root.id, null, {
+        role: 'user',
+        content: 'Original content'
+      });
+      const child = createTestNode('c1', root.id, node.id, {
+        role: 'assistant',
+        content: 'Child response'
+      });
+      node.child_ids = [child.id];
+      await mockStoreWrapper.mockStore.saveNode(node);
+      await mockStoreWrapper.mockStore.saveNode(child);
+
+      // Execute
+      const result = await engineNoConfig.editNode(node.id, 'New content');
+
+      // Verify - should work without errors
+      assert.notEqual(result.id, node.id, 'New node created');
+      assert.equal(result.message.content, 'New content', 'Content updated');
+    });
+
+    it('should handle bookmark not found during move', async () => {
+      // Setup
+      const mockConfigStore = {
+        get: mock.fn(() => ({
+          bookmarks: [
+            {
+              nodeId: 'other',
+              title: 'Other Bookmark',
+              rootId: 'r1',
+              createdAt: '2023-01-01T00:00:00Z',
+              updatedAt: '2023-01-01T00:00:00Z'
+            }
+          ]
+        })),
+        update: mock.fn()
+      };
+
+      const engineWithConfig = await LoomEngine.create(
+        mockStoreWrapper.mockStore,
+        mockConfigStore as any
+      );
+
+      const root = createTestRoot('r1', { systemPrompt: 'Test' });
+      const node = createTestNode('n1', root.id, null, {
+        role: 'user',
+        content: 'Original content'
+      });
+      const child = createTestNode('c1', root.id, node.id, {
+        role: 'assistant',
+        content: 'Child response'
+      });
+      node.child_ids = [child.id];
+      await mockStoreWrapper.mockStore.saveNode(node);
+      await mockStoreWrapper.mockStore.saveNode(child);
+
+      // Execute - edit node that doesn't have a bookmark
+      const result = await engineWithConfig.editNode(node.id, 'New content');
+
+      // Verify - should work without errors, no bookmark update
+      assert.notEqual(result.id, node.id, 'New node created');
+      assert.equal(result.message.content, 'New content', 'Content updated');
+      assert.equal(
+        mockConfigStore.update.mock.calls.length,
+        0,
+        'Config update not called'
+      );
+    });
+
+    it('should propagate errors from forest.editNodeContent', async () => {
+      // Setup
+      const nonExistentNodeId = 'nonexistent' as any;
+
+      // Execute & Verify
+      await assert.rejects(
+        async () => await engine.editNode(nonExistentNodeId, 'New content'),
+        {
+          name: 'Error',
+          message: `Node not found or is a root: ${nonExistentNodeId}`
+        }
+      );
+    });
+  });
 });

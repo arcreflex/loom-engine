@@ -8,7 +8,7 @@ import type {
   RootData,
   NodeMetadata
 } from './types.ts';
-import type { ILoomStore } from './store/types.ts';
+import type { ILoomStore, NodeStructure } from './store/types.ts';
 import { SerialQueue } from './queue.ts';
 import type { ConfigStore } from './config.ts';
 
@@ -21,6 +21,46 @@ export class Forest {
   constructor(store: ILoomStore, configStore?: ConfigStore) {
     this.store = store;
     this.configStore = configStore;
+  }
+
+  async serialize() {
+    const allNodes = await this.store.listAllNodeStructures();
+    const nodesById: { [id: NodeId]: NodeStructure } = {};
+    for (const n of allNodes) {
+      nodesById[n.id] = n;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const out: any = {};
+    const roots = await this.listRoots();
+    // DFS to serialize the tree structure
+    for (const root of roots) {
+      out[root.id] = await this.serializeNode(root.id);
+    }
+    return out;
+  }
+
+  private async serializeNode(nodeId: NodeId) {
+    const node = await this.store.loadNode(nodeId);
+    if (!node) {
+      throw new Error(`Node not found: ${nodeId}`);
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const serialized: any = {
+      id: node.id,
+      role: node.parent_id ? node.message.role : 'system',
+      message:
+        node.parent_id !== undefined
+          ? {
+              role: node.message.role,
+              content: node.message.content
+            }
+          : node.config.systemPrompt,
+      children: {}
+    };
+    for (const childId of node.child_ids) {
+      serialized.children[childId] = await this.serializeNode(childId);
+    }
+    return serialized;
   }
 
   private async enqueue<T>(fn: () => Promise<T>): Promise<T> {
@@ -178,87 +218,95 @@ export class Forest {
     /** The metadata to attach if we create a node */
     metadata: Omit<NodeMetadata, 'timestamp' | 'original_root_id'>
   ): Promise<Node> {
-    return this.enqueue(async (): Promise<Node> => {
-      const parentNode = await this.store.loadNode(parentId);
-      if (!parentNode) {
-        throw new Error(`Parent node not found: ${parentId}`);
-      }
+    return this.enqueue(async () =>
+      this.appendUnsafe(parentId, messages, metadata)
+    );
+  }
 
-      messages = messages.filter(
-        m => (m.content != null && m.content.length > 0) || m.tool_calls?.length
+  private async appendUnsafe(
+    parentId: NodeId,
+    messages: Message[],
+    metadata: Omit<NodeMetadata, 'timestamp' | 'original_root_id'>
+  ): Promise<Node> {
+    const parentNode = await this.store.loadNode(parentId);
+    if (!parentNode) {
+      throw new Error(`Parent node not found: ${parentId}`);
+    }
+
+    messages = messages.filter(
+      m => (m.content != null && m.content.length > 0) || m.tool_calls?.length
+    );
+
+    if (!messages.length) {
+      return parentNode;
+    }
+
+    // Start with the parent node and first message index
+    let currentParentId: NodeId = parentId;
+    let messageIndex = 0;
+
+    // Implement prefix matching
+    while (true) {
+      // Get children of current parent
+      const children = await this.getChildren(currentParentId);
+
+      // Look for a child that matches the current message
+      const currentMessage = messages[messageIndex];
+      const matchingChild = children.find(
+        child =>
+          child.message.role === currentMessage.role &&
+          child.message.content === currentMessage.content &&
+          JSON.stringify(child.message.tool_calls) ===
+            JSON.stringify(currentMessage.tool_calls)
       );
 
-      if (!messages.length) {
-        return parentNode;
-      }
-
-      // Start with the parent node and first message index
-      let currentParentId: NodeId = parentId;
-      let messageIndex = 0;
-
-      // Implement prefix matching
-      while (true) {
-        // Get children of current parent
-        const children = await this.getChildren(currentParentId);
-
-        // Look for a child that matches the current message
-        const currentMessage = messages[messageIndex];
-        const matchingChild = children.find(
-          child =>
-            child.message.role === currentMessage.role &&
-            child.message.content === currentMessage.content &&
-            JSON.stringify(child.message.tool_calls) ===
-              JSON.stringify(currentMessage.tool_calls)
-        );
-
-        if (matchingChild) {
-          // Found a match, move to the next message and continue with this child as the new parent
-          currentParentId = matchingChild.id;
-          messageIndex++;
-          if (messageIndex >= messages.length) {
-            // All messages matched, return the current child node
-            return matchingChild;
-          }
-        } else {
-          // No match found, create new nodes for remaining messages
-          break;
+      if (matchingChild) {
+        // Found a match, move to the next message and continue with this child as the new parent
+        currentParentId = matchingChild.id;
+        messageIndex++;
+        if (messageIndex >= messages.length) {
+          // All messages matched, return the current child node
+          return matchingChild;
         }
+      } else {
+        // No match found, create new nodes for remaining messages
+        break;
       }
+    }
 
-      // Create new nodes for the remaining messages
-      const timestamp = new Date().toISOString();
-      const remainingMessages = messages.slice(messageIndex);
-      let head = await this.store.loadNode(currentParentId);
-      if (!head) {
-        throw new Error(`Current parent node not found: ${currentParentId}`);
-      }
-      const root_id = head.parent_id === undefined ? head.id : head.root_id;
+    // Create new nodes for the remaining messages
+    const timestamp = new Date().toISOString();
+    const remainingMessages = messages.slice(messageIndex);
+    let head = await this.store.loadNode(currentParentId);
+    if (!head) {
+      throw new Error(`Current parent node not found: ${currentParentId}`);
+    }
+    const root_id = head.parent_id === undefined ? head.id : head.root_id;
 
-      for (const message of remainingMessages) {
-        const newNode: NodeData = {
-          id: this.store.generateNodeId(root_id),
-          root_id,
-          parent_id: head.id,
-          child_ids: [],
-          message,
-          metadata: {
-            timestamp,
-            original_root_id: root_id,
-            ...metadata
-          }
-        };
+    for (const message of remainingMessages) {
+      const newNode: NodeData = {
+        id: this.store.generateNodeId(root_id),
+        root_id,
+        parent_id: head.id,
+        child_ids: [],
+        message,
+        metadata: {
+          timestamp,
+          original_root_id: root_id,
+          ...metadata
+        }
+      };
 
-        // Update parent's child_ids
-        head.child_ids.push(newNode.id);
-        await this.store.saveNode(head);
+      // Update parent's child_ids
+      head.child_ids.push(newNode.id);
+      await this.store.saveNode(head);
 
-        // Save the new node
-        await this.store.saveNode(newNode);
-        head = newNode;
-      }
+      // Save the new node
+      await this.store.saveNode(newNode);
+      head = newNode;
+    }
 
-      return head;
-    });
+    return head;
   }
 
   /**
@@ -266,78 +314,80 @@ export class Forest {
    * The original node will contain content up to the split point, and the new node will contain
    * content after it. Children of the original node will be reparented to the new node.
    *
-   * @returns The original node (now containing only messages before the split)
+   * @returns The node representing messages up to the split point
    */
   async splitNode(nodeId: NodeId, position: number): Promise<NodeData> {
-    return this.enqueue(async () => {
-      // Get the node to split
-      const node = await this.store.loadNode(nodeId);
-      if (!node) {
-        throw new Error(`Node not found: ${nodeId}`);
-      }
-      if (!node.parent_id) {
-        throw new Error(`Cannot split root node: ${nodeId}`);
-      }
+    return this.enqueue(async () => this.splitNodeUnsafe(nodeId, position));
+  }
 
-      // Validate the message has content and position is valid
-      if (node.message.content == null) {
-        throw new Error(`Cannot split node with null content: ${nodeId}`);
-      }
-      if (position <= 0 || position >= node.message.content.length) {
-        throw new Error(
-          `Invalid message index for split: ${position}. Must be between 1 and ${node.message.content.length - 1}`
-        );
-      }
+  private async splitNodeUnsafe(
+    nodeId: NodeId,
+    position: number
+  ): Promise<NodeData> {
+    // Get the node to split
+    const node = await this.store.loadNode(nodeId);
+    if (!node) {
+      throw new Error(`Node not found: ${nodeId}`);
+    }
+    if (!node.parent_id) {
+      throw new Error(`Cannot split root node: ${nodeId}`);
+    }
 
-      const left = node.message.content.slice(0, position);
-      const right = node.message.content.slice(position);
+    // Validate the message has content and position is valid
+    if (node.message.content == null) {
+      throw new Error(`Cannot split node with null content: ${nodeId}`);
+    }
+    if (position <= 0 || position >= node.message.content.length) {
+      throw new Error(
+        `Invalid message index for split: ${position}. Must be between 1 and ${node.message.content.length - 1}`
+      );
+    }
 
-      // Create a new node to hold the messages after the split point
-      const timestamp = new Date().toISOString();
-      const newNode: NodeData = {
-        id: this.store.generateNodeId(node.root_id),
-        root_id: node.root_id,
-        parent_id: node.parent_id, // Same parent as the original node
-        child_ids: [...node.child_ids], // Take all the children from the original node
-        message: {
-          role: node.message.role,
-          content: right
-        },
-        metadata: {
-          timestamp,
-          original_root_id: node.metadata.original_root_id,
-          tags: node.metadata.tags ? [...node.metadata.tags] : undefined,
-          custom_data: node.metadata.custom_data
-            ? { ...node.metadata.custom_data }
-            : undefined,
-          source_info: { ...node.metadata.source_info }
-        }
-      };
+    const left = node.message.content.slice(0, position);
+    const right = node.message.content.slice(position);
 
-      node.message = {
+    // Create a new node to hold the messages up to the split point
+    const timestamp = new Date().toISOString();
+    const lhsNode: NodeData = {
+      id: this.store.generateNodeId(node.root_id),
+      root_id: node.root_id,
+      parent_id: node.parent_id, // Same parent as the original node
+      child_ids: [node.id], // Original node, which will now be the right-hand node, is the only child of the left-hand node
+      message: {
         role: node.message.role,
         content: left
-      };
-      node.child_ids = [newNode.id]; // Original node now has only new node as child
-      node.metadata.source_info = { type: 'split' };
-
-      // Update all children of the original node to point to the new node as their parent
-      for (const childId of newNode.child_ids) {
-        const child = await this.store.loadNode(childId);
-        if (child) {
-          child.parent_id = newNode.id;
-          await this.store.saveNode(child);
-        }
+      },
+      metadata: {
+        timestamp,
+        original_root_id: node.metadata.original_root_id,
+        tags: node.metadata.tags ? [...node.metadata.tags] : undefined,
+        custom_data: node.metadata.custom_data
+          ? { ...node.metadata.custom_data }
+          : undefined,
+        source_info: { ...node.metadata.source_info },
+        split_source: node.id
       }
+    };
 
-      // Save the new node
-      await this.store.saveNode(newNode);
+    // Reparent the original node to the new left-hand node
+    const originalParentId = node.parent_id;
+    node.message.content = right;
+    node.parent_id = lhsNode.id;
 
-      // Save the modified original node
-      await this.store.saveNode(node);
+    // Update original parent's child_ids
+    const parentNode = await this.store.loadNode(originalParentId);
+    if (!parentNode) {
+      throw new Error(`Parent node not found: ${originalParentId}`);
+    }
+    parentNode.child_ids = parentNode.child_ids.filter(
+      id => id !== nodeId // Remove the original node from parent's children
+    );
+    parentNode.child_ids.push(lhsNode.id); // Add the new left-hand node as a child
 
-      return node;
-    });
+    await this.store.saveNode(parentNode);
+    await this.store.saveNode(lhsNode);
+    await this.store.saveNode(node);
+    return lhsNode;
   }
 
   /**
@@ -506,23 +556,30 @@ export class Forest {
         lcpLength++;
       }
 
-      let baseNode = nodeToEdit;
+      let baseNode: Node = nodeToEdit;
 
       // 2. If the original node needs to be split (i.e., the edit doesn't share the full original content as a prefix).
-      if (lcpLength < originalContent.length) {
+      if (lcpLength === 0) {
+        // If there's no common prefix, just append to the parent
+        const parent = await this.getNode(nodeToEdit.parent_id);
+        if (!parent) {
+          throw new Error(`Parent node not found: ${nodeToEdit.parent_id}`);
+        }
+        baseNode = parent;
+      } else if (lcpLength < originalContent.length) {
         // splitNode returns the truncated original node.
-        baseNode = await this.splitNode(nodeId, lcpLength);
+        baseNode = await this.splitNodeUnsafe(nodeId, lcpLength);
       }
 
       // 3. Append the remainder of the new content.
       const newSuffix = newContent.slice(lcpLength);
       if (newSuffix.length > 0) {
         const newMessage: Message = {
-          role: baseNode.message.role,
+          role: nodeToEdit.message.role,
           content: newSuffix
         };
         // `append` will create a new node for the suffix.
-        return (await this.append(baseNode.id, [newMessage], {
+        return (await this.appendUnsafe(baseNode.id, [newMessage], {
           source_info: { type: 'user' }
         })) as NodeData;
       } else {

@@ -152,14 +152,10 @@ async function main() {
         return res.status(400).json({ error: 'Role and content are required' });
       }
 
-      // Set source_info based on role
-      const sourceInfo = {
-        type: role === 'user' ? ('user' as const) : ('split' as const)
-      };
       const newNode = await engine
         .getForest()
         .append(parentId as NodeId, [{ role, content }], {
-          source_info: sourceInfo
+          source_info: { type: 'user' }
         });
 
       // Update current node ID in config
@@ -211,25 +207,6 @@ async function main() {
       );
 
       res.json(newNodes);
-    } catch (error) {
-      res.status(500).json({ error: String(error) });
-    }
-  });
-
-  app.post('/api/nodes/:nodeId/split', async (req, res) => {
-    try {
-      const { nodeId } = req.params;
-      const { position } = req.body;
-
-      if (position === undefined) {
-        return res.status(400).json({ error: 'Position is required' });
-      }
-
-      const updatedNode = await engine
-        .getForest()
-        .splitNode(nodeId as NodeId, position);
-
-      res.json(updatedNode);
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }

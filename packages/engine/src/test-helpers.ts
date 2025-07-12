@@ -38,7 +38,7 @@ export function createMockStore() {
     }),
 
     loadNode: mock.fn(async (nodeId: NodeId) => {
-      const node = nodes.get(nodeId) ?? roots.get(nodeId);
+      const node = roots.get(nodeId) ?? nodes.get(nodeId);
       return node ? { ...node } : null;
     }),
 

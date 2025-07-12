@@ -122,16 +122,6 @@ export async function generateCompletion(
   });
 }
 
-export async function splitNode(
-  nodeId: NodeId,
-  position: number
-): Promise<NodeData> {
-  return fetchApi<NodeData>(`/api/nodes/${encode(nodeId)}/split`, {
-    method: 'POST',
-    body: JSON.stringify({ position })
-  });
-}
-
 export async function editNodeContent(
   nodeId: NodeId,
   content: string
