@@ -107,7 +107,7 @@ export function InputArea({
       </div>
 
       {/* Input area container with focus ring */}
-      <div className="input-area flex items-end">
+      <div className="input-area flex items-end relative">
         {' '}
         {/* Use items-end */}
         <TextareaAutosize
@@ -128,7 +128,7 @@ export function InputArea({
           }}
           disabled={disabled}
           placeholder="Type message... (Cmd+Enter to send & generate, Ctrl+Enter to send w/o generating)"
-          className="w-full resize-none p-2 bg-transparent outline-none min-h-[40px]" // Reduced padding/min-height
+          className="w-full resize-none p-2 bg-transparent outline-none min-h-[40px]"
           minRows={1} // Start smaller
           maxRows={10} // Limit excessive growth
         />
@@ -136,7 +136,10 @@ export function InputArea({
         <button
           onClick={handleSubmit}
           disabled={disabled}
-          className={`self-end text-lg px-2 mx-1 btn ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`} // Adjusted margin
+          style={{ height: '1.675rem' }}
+          className={`absolute right-2 top-2 bottom-0
+                    text-sm px-2 leading-none mx-1 btn
+                    ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
         >
           ⌘⏎
         </button>

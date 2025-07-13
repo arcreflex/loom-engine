@@ -76,19 +76,6 @@ body {
     @apply border-l-4 border-terminal-assistant rounded;
   }
 
-  /* Input Area container style */
-  .input-area {
-    /* Add border, rounding, and focus-within styles */
-    @apply border border-terminal-border rounded focus-within:ring-1 focus-within:ring-terminal-focus focus-within:border-terminal-focus transition-all;
-  }
-  /* Ensure textarea within input-area removes its default border/ring */
-  /* Let the container handle the focus visual */
-  .input-area textarea {
-    @apply border-none ring-0 focus:ring-0 focus:border-transparent;
-    /* Remove default resize handle */
-    resize: none;
-  }
-
   /* Command Palette Item Hover/Focus */
   /* (The selection bg is applied directly via className in the component) */
   /* We could add general hover styles here if needed */
@@ -100,9 +87,4 @@ body {
   .system-prompt {
     @apply bg-terminal-border/20 border-l-4 border-terminal-border rounded p-4 mb-4 whitespace-pre-wrap text-sm;
   }
-}
-
-/* Additional focus styles for accessibility */
-*:focus-visible {
-  @apply outline-none ring-2 ring-terminal-focus ring-offset-1 ring-offset-terminal-bg;
 }
