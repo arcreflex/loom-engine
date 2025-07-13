@@ -328,6 +328,8 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
           if (results.length === 1) {
             set({ pendingNavigation: results[0].id });
           } else if (results.length > 1) {
+            // reload children since we'll have new ones
+            await get().actions.loadNodeData(messageNodeId);
             set({ pendingNavigation: messageNodeId });
             console.log(
               `Multiple results found: ${results.map(r => r.id).join(', ')}`
