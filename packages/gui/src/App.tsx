@@ -319,7 +319,7 @@ function App() {
 
     cmds.push({
       id: 'toggle-rendering-mode',
-      title: `Rendering Mode: ${renderingMode === 'markdown' ? 'Markdown' : 'Raw'} (Click to toggle)`,
+      title: `Change to ${renderingMode === 'raw' ? 'Markdown' : 'Raw'} Rendering Mode`,
       execute: async () => {
         actions.toggleRenderingMode();
       }
