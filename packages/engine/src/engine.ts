@@ -85,10 +85,8 @@ export class LoomEngine {
 
     const estimatedInputTokens = contextMessages
       .map(msg => {
-        let len = msg.content?.length || 0;
-        if (msg.tool_calls) {
-          len += JSON.stringify(msg.tool_calls).length;
-        }
+        const str = JSON.stringify(msg);
+        const len = str.length;
         // 1 token ~= 4 chars, but want to overestimate a bit
         return len * 0.3;
       })
