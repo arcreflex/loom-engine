@@ -9,7 +9,8 @@ import {
   RootConfig,
   RootData,
   RootId,
-  ProviderName
+  ProviderName,
+  ToolInfo
 } from '@ankhdt/loom-engine';
 import type { DisplayMessage, GenerateOptions } from './types';
 
@@ -238,30 +239,8 @@ export async function listModels(): Promise<string[]> {
   return fetchApi<string[]>('/api/models');
 }
 
-export interface ToolInfo {
-  name: string;
-  description: string;
-  parameters: object;
-  group?: string;
-}
-
-export interface ToolGroup {
-  name: string;
-  description?: string;
-  tools: string[];
-}
-
-export interface ToolGroupsResponse {
-  groups: ToolGroup[];
-  ungroupedTools: string[];
-}
-
 export async function listTools(): Promise<ToolInfo[]> {
   return fetchApi<ToolInfo[]>('/api/tools');
-}
-
-export async function listToolGroups(): Promise<ToolGroupsResponse> {
-  return fetchApi<ToolGroupsResponse>('/api/tools/groups');
 }
 
 /**

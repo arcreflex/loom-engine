@@ -23,7 +23,6 @@ import {
   getGraphTopology,
   listRoots,
   listTools,
-  listToolGroups,
   editNodeContent
 } from '../api';
 import { ModelSourceInfo } from '../../../engine/src/types';
@@ -250,16 +249,41 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
           fetchedBookmarks,
           presetConfig,
           defaults,
-          availableTools,
-          toolGroups
+          availableTools
         ] = await Promise.all([
           listRoots(),
           listBookmarks(),
           getConfigPresets(),
           getDefaultConfig(),
-          listTools(),
-          listToolGroups()
+          listTools()
         ]);
+
+        const groups = new Map<
+          string,
+          {
+            name: string;
+            description?: string;
+            tools: string[];
+          }
+        >();
+
+        const ungroupedTools: string[] = [];
+        for (const tool of availableTools) {
+          if (tool.group) {
+            const existingGroup = groups.get(tool.group);
+            if (existingGroup) {
+              existingGroup.tools.push(tool.name);
+            } else {
+              groups.set(tool.group, {
+                name: tool.group,
+                description: tool.description,
+                tools: [tool.name]
+              });
+            }
+          } else {
+            ungroupedTools.push(tool.name);
+          }
+        }
 
         set({
           roots,
@@ -269,8 +293,8 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
           defaultParameters: defaults,
           tools: {
             available: availableTools,
-            groups: toolGroups.groups,
-            ungroupedTools: toolGroups.ungroupedTools,
+            groups: Array.from(groups.values()),
+            ungroupedTools,
             active: []
           }
         });

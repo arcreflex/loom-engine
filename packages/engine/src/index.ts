@@ -17,6 +17,7 @@ export type {
   RootData,
   Role
 } from './types.ts';
+export * from './tools/types.ts';
 export { coalesceMessages } from './coalesce-messages.ts';
 export { Forest } from './forest.ts';
 export * from './config.ts';

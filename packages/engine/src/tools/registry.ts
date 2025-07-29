@@ -1,9 +1,4 @@
-import type {
-  ToolDefinition,
-  ToolHandler,
-  ToolGroup,
-  ToolInfo
-} from './types.ts';
+import type { ToolDefinition, ToolHandler, ToolInfo } from './types.ts';
 import type { JSONSchema7 } from 'json-schema';
 
 export class ToolRegistry {
@@ -47,49 +42,6 @@ export class ToolRegistry {
     return Array.from(this.tools.values()).map(
       ({ handler: _, ...rest }) => rest
     );
-  }
-
-  /**
-   * Gets all tool groups.
-   * @returns An array of tool groups with their associated tools.
-   */
-  public getGroups(): ToolGroup[] {
-    const groups = new Map<string, ToolGroup>();
-
-    for (const tool of this.tools.values()) {
-      if (tool.group) {
-        if (!groups.has(tool.group)) {
-          groups.set(tool.group, {
-            name: tool.group,
-            tools: []
-          });
-        }
-        groups.get(tool.group)!.tools.push(tool.name);
-      }
-    }
-
-    return Array.from(groups.values());
-  }
-
-  /**
-   * Gets all tools in a specific group.
-   * @param groupName - The name of the group.
-   * @returns An array of tool names in the group.
-   */
-  public getToolsInGroup(groupName: string): string[] {
-    return Array.from(this.tools.values())
-      .filter(tool => tool.group === groupName)
-      .map(tool => tool.name);
-  }
-
-  /**
-   * Gets all ungrouped tools.
-   * @returns An array of tool names that don't belong to any group.
-   */
-  public getUngroupedTools(): string[] {
-    return Array.from(this.tools.values())
-      .filter(tool => !tool.group)
-      .map(tool => tool.name);
   }
 
   /**
