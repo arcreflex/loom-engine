@@ -11,7 +11,86 @@ import {
   RootId,
   type ProviderName
 } from '@ankhdt/loom-engine';
-import { DisplayMessage } from './types';
+import { DisplayMessage, GenerationRequestUpdate } from './types';
+
+class GenerationRequest {
+  readonly parentNodeId: NodeId;
+  private requests: Set<{
+    id: string;
+    options: Partial<GenerateOptions>;
+    promise: Promise<NodeData[]>;
+    startedAt: Date;
+  }> = new Set();
+
+  callbacks: Set<(state: GenerationRequestUpdate) => void> = new Set();
+
+  constructor(parentNodeId: NodeId) {
+    this.parentNodeId = parentNodeId;
+  }
+
+  getStatus() {
+    return this.requests.size > 0 ? 'pending' : 'idle';
+  }
+
+  addRequest(
+    options: Partial<GenerateOptions>,
+    promise: Promise<NodeData[]>
+  ): string {
+    const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    const request = {
+      id: requestId,
+      options,
+      promise,
+      startedAt: new Date()
+    };
+
+    this.requests.add(request);
+
+    // Handle promise resolution
+    promise
+      .then(data => {
+        this.requests.delete(request);
+        this.update({
+          status: this.getStatus(),
+          added: data
+        });
+      })
+      .catch(error => {
+        this.requests.delete(request);
+        this.update({
+          status: this.getStatus(),
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+
+    return requestId;
+  }
+
+  update(state: GenerationRequestUpdate) {
+    this.callbacks.forEach(callback => callback(state));
+  }
+}
+
+class GenerationRequestManager {
+  private requests: Map<NodeId, GenerationRequest> = new Map();
+
+  get(nodeId: NodeId): GenerationRequest | undefined {
+    return this.requests.get(nodeId);
+  }
+
+  getOrCreate(nodeId: NodeId): GenerationRequest {
+    let request = this.requests.get(nodeId);
+    if (!request) {
+      request = new GenerationRequest(nodeId);
+      this.requests.set(nodeId, request);
+    }
+    return request;
+  }
+
+  remove(nodeId: NodeId): void {
+    this.requests.delete(nodeId);
+  }
+}
 
 async function main() {
   const app = express();
@@ -26,6 +105,8 @@ async function main() {
   // Create engine and config store
   const configStore = await ConfigStore.create(dataDir);
   const engine = await LoomEngine.create(dataDir, configStore);
+
+  const generationRequests = new GenerationRequestManager();
 
   const log = (message: string) => {
     engine.log(`[server] ${message}`);
@@ -60,6 +141,31 @@ async function main() {
     }
   });
 
+  // SSE endpoint for updates on a pending generation for a specific node
+  app.get('/api/nodes/:nodeId/generation', (req, res) => {
+    const { nodeId } = req.params;
+    const generationReq = generationRequests.get(nodeId as NodeId);
+    if (!generationReq) {
+      return res
+        .status(404)
+        .json({ error: 'No pending generation for this node' });
+    }
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    const sendUpdate = (state: GenerationRequestUpdate) => {
+      res.write(`data: ${JSON.stringify(state)}\n\n`);
+    };
+    // Send initial state
+    sendUpdate({ status: generationReq.getStatus() });
+    // Subscribe to updates
+    generationReq.callbacks.add(sendUpdate);
+    req.on('close', () => {
+      generationReq.callbacks.delete(sendUpdate);
+      res.end();
+    });
+  });
+
   // Nodes
   app.get('/api/nodes/:nodeId', async (req, res) => {
     try {
@@ -70,7 +176,18 @@ async function main() {
         return res.status(404).json({ error: 'Node not found' });
       }
 
-      res.json(node);
+      // Check if there's a pending generation for this node
+      const generationReq = generationRequests.get(nodeId as NodeId);
+      const pendingGeneration = generationReq
+        ? {
+            status: generationReq.getStatus()
+          }
+        : undefined;
+
+      res.json({
+        ...node,
+        pendingGeneration
+      });
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }
@@ -188,8 +305,11 @@ async function main() {
       // Get message history up to this node
       const { messages } = await engine.getMessages(nodeId as NodeId);
 
-      // Generate responses
-      const newNodes = await engine.generate(
+      // Create or get existing generation request for this node
+      const generationReq = generationRequests.getOrCreate(nodeId as NodeId);
+
+      // Start generation and add it to the request
+      const generationPromise = engine.generate(
         rootId,
         providerName,
         modelName,
@@ -200,10 +320,13 @@ async function main() {
           n: defaults.n,
           ...options
         },
-        activeTools // Pass activeTools to engine.generate
+        activeTools
       );
 
-      res.json(newNodes);
+      generationReq.addRequest(options, generationPromise);
+
+      // Return success immediately - client will subscribe to SSE for updates
+      res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }

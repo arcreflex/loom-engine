@@ -1,4 +1,23 @@
-import { Message, NodeId, ProviderName } from '@ankhdt/loom-engine';
+import {
+  Node,
+  Message,
+  NodeData,
+  NodeId,
+  ProviderName
+} from '@ankhdt/loom-engine';
+
+export const PENDING_GENERATION = Symbol('PENDING_GENERATION');
+
+type GenerationRequestStatus = 'pending' | 'idle' | 'error';
+export type GenerationRequestUpdate = {
+  status: GenerationRequestStatus;
+  added?: NodeData[];
+  error?: string;
+};
+
+export type GetNodeResponse = Node & {
+  pendingGeneration?: { status: 'pending' | 'idle' };
+};
 
 export type DisplayMessage = Message & {
   nodeId: NodeId;

@@ -1,14 +1,17 @@
 import type {
   NodeId,
   RootConfig,
-  Node,
   NodeData,
   Role,
   Bookmark,
   RootData,
   ProviderName
 } from '@ankhdt/loom-engine';
-import type { DisplayMessage, GenerateOptions } from '../types';
+import type {
+  DisplayMessage,
+  GenerateOptions,
+  GetNodeResponse
+} from '../types';
 import type { PresetDefinition } from '../api';
 import { GraphViewState } from '../components/GraphView';
 import { ModelSourceInfo } from '../../../engine/src/types';
@@ -46,10 +49,6 @@ export interface GuiAppActions {
 
   // Internal helper functions (do not manage status)
   _loadNodeData: (nodeId: NodeId) => Promise<void>;
-  _generateCompletion: (
-    nodeId: NodeId,
-    options?: Partial<GenerateOptions>
-  ) => Promise<NodeData[]>;
 
   // Navigation management
   setPendingNavigation: (nodeId: NodeId | null) => void;
@@ -57,7 +56,6 @@ export interface GuiAppActions {
 
   // Core navigation and data loading
   navigateToNode: (nodeId: NodeId) => Promise<void>;
-  loadNodeData: (nodeId: NodeId) => Promise<void>;
   refreshTopology: () => Promise<void>;
 
   // Data initialization
@@ -74,8 +72,14 @@ export interface GuiAppActions {
     content: string,
     generateAfter: boolean
   ) => Promise<void>;
-  handleGenerate: () => Promise<void>;
   handleLargePasteSubmit: (content: string) => Promise<void>;
+
+  startGenerationForNode: (
+    parentNodeId: NodeId,
+    options?: Partial<GenerateOptions>
+  ) => Promise<void>;
+  subscribeToGeneration: (nodeId: NodeId) => void;
+  unsubscribeFromGeneration: () => void;
 
   // Bookmark management
   saveBookmark: (title: string) => Promise<void>;
@@ -135,7 +139,7 @@ export interface GuiAppActions {
  */
 export interface GuiAppState {
   // Core Data
-  currentNode: Node | null;
+  currentNode: GetNodeResponse | null;
   root: RootConfig | null;
   messages: DisplayMessage[];
   children: NodeData[];
@@ -148,6 +152,13 @@ export interface GuiAppState {
 
   // Navigation intent - when set, the UI should navigate
   pendingNavigation: NodeId | null;
+
+  // NEW: Track the single pending generation we're monitoring
+  pendingGeneration: {
+    nodeId: NodeId;
+    subscription: EventSource | null;
+    startedAt: Date;
+  } | null;
 
   // Application Status
   status: Status;

@@ -9,6 +9,7 @@ import { ToolsPanel } from '../components/ToolsPanel';
 import { useAppStore } from '../state';
 import { getGraphTopology, NodeStructure } from '../api';
 import type { NodeId } from '@ankhdt/loom-engine';
+import { PENDING_GENERATION } from '../types';
 
 export function NodeView() {
   const { nodeId: nodeIdFromUrl } = useParams<{ nodeId: string }>();
@@ -153,7 +154,11 @@ export function NodeView() {
               root={root}
               siblings={siblings}
               onNavigateToNode={navigateToNode}
-              previewChild={previewChild}
+              previewChild={
+                currentNode?.pendingGeneration?.status === 'pending'
+                  ? PENDING_GENERATION
+                  : previewChild
+              }
               onCopy={copyToClipboard}
               onEditSave={actions.handleEditSave}
               onSystemPromptSave={actions.handleSystemPromptSave}

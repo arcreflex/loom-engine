@@ -1,7 +1,7 @@
 // packages/gui/src/components/ContextView.tsx
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { CoalescedMessage, MessageItem } from './MessageItem';
-import { type DisplayMessage } from '../types';
+import { PENDING_GENERATION, type DisplayMessage } from '../types';
 import { NodeData, NodeId, RootConfig } from '@ankhdt/loom-engine';
 import TextareaAutosize from 'react-textarea-autosize';
 
@@ -10,7 +10,7 @@ interface ContextViewProps {
   root: RootConfig | null;
   siblings: NodeData[];
   onNavigateToNode: (nodeId: NodeId) => void;
-  previewChild: NodeData | null;
+  previewChild: typeof PENDING_GENERATION | NodeData | null;
   onCopy?: (content: string, notice: string) => void;
   onEditSave: (nodeId: NodeId, content: string) => Promise<void>;
   onSystemPromptSave: (newPrompt: string) => Promise<void>;
@@ -215,8 +215,17 @@ export function ContextView({
           );
         })}
 
-        {/* --- Child Preview --- */}
-        {previewChild && (
+        {previewChild === null ? null : previewChild === PENDING_GENERATION ? (
+          <div>
+            <div
+              className={`animate-pulse mt-2 px-3 py-2
+                        text-terminal-text/50 bg-terminal-bg
+                          border border-dashed border-terminal-border/80`}
+            >
+              ...
+            </div>
+          </div>
+        ) : (
           <div
             ref={previewContainerRef}
             className="mt-4 pt-4 border-t-2 border-dashed border-terminal-border/30"

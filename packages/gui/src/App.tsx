@@ -84,15 +84,6 @@ function App() {
         title: 'Navigate to Parent',
         disabled: !currentNode?.parent_id || !root || !messages.length,
         execute: actions.navigateToParent
-      },
-      {
-        id: 'generate',
-        title: 'Generate Completion',
-        disabled: !currentNode || status.type === 'loading',
-        execute: async () => {
-          if (!currentNode) return;
-          await actions.handleGenerate();
-        }
       }
     ];
 

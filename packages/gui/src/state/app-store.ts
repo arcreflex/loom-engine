@@ -10,6 +10,7 @@ import {
   getSiblings,
   appendMessage,
   generateCompletion as apiGenerateCompletion,
+  subscribeToGenerationUpdates,
   deleteNode as apiDeleteNode,
   deleteChildren as apiDeleteChildren,
   deleteSiblings as apiDeleteSiblings,
@@ -43,6 +44,8 @@ const initialState: Omit<GuiAppState, 'actions'> = {
 
   // Navigation intent - when set, the UI should navigate
   pendingNavigation: null,
+
+  pendingGeneration: null,
 
   // Application Status
   status: { type: 'initializing' },
@@ -138,6 +141,10 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
         previewChild: null // Reset preview on nav
       });
 
+      if (node.pendingGeneration?.status === 'pending') {
+        get().actions.subscribeToGeneration(nodeId);
+      }
+
       // Refresh topology in the background
       get().actions.refreshTopology();
 
@@ -166,53 +173,13 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
       }
     },
 
-    _generateCompletion: async (
-      nodeId: NodeId,
-      options?: Partial<GenerateOptions>
-    ): Promise<NodeData[]> => {
-      const {
-        currentProviderName,
-        currentModelName,
-        defaultParameters,
-        presets,
-        activePresetName,
-        tools
-      } = get();
-
-      if (!currentProviderName || !currentModelName) {
-        throw new Error('No model selected. Please select a model first.');
-      }
-
-      // Calculate effective generation parameters
-      let effectiveParams = defaultParameters || {};
-      if (activePresetName && presets[activePresetName]) {
-        effectiveParams = {
-          ...effectiveParams,
-          ...presets[activePresetName]
-        };
-      }
-
-      const finalParams: GenerateOptions = {
-        n: 1,
-        temperature: 1.0,
-        max_tokens: 1024,
-        ...effectiveParams,
-        ...(options || {})
-      };
-
-      return await apiGenerateCompletion(
-        nodeId,
-        currentProviderName,
-        currentModelName,
-        finalParams,
-        tools.active
-      );
-    },
-
     // Core navigation and data loading
     navigateToNode: async (nodeId: NodeId) => {
       const { status, currentNode } = get();
       if (status.type === 'loading' || currentNode?.id === nodeId) return;
+
+      // Clean up any existing generation subscription when navigating away
+      get().actions.unsubscribeFromGeneration();
 
       get().actions.setStatusLoading('Navigating');
       try {
@@ -223,11 +190,6 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
           error instanceof Error ? error.message : 'Failed to navigate to node'
         );
       }
-    },
-
-    loadNodeData: async (nodeId: NodeId) => {
-      // Legacy wrapper - prefer _loadNodeData for internal use
-      await get().actions._loadNodeData(nodeId);
     },
 
     refreshTopology: async () => {
@@ -342,28 +304,10 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
         }
 
         if (generateAfter) {
-          if (newNode) {
-            // Preview the node we just sent
-            get().actions.setPreviewChild(newNode);
-          }
-          const results =
-            await get().actions._generateCompletion(messageNodeId);
-
-          if (results.length === 1) {
-            set({ pendingNavigation: results[0].id });
-          } else if (results.length > 1) {
-            // reload children since we'll have new ones
-            await get().actions.loadNodeData(messageNodeId);
-            set({ pendingNavigation: messageNodeId });
-            console.log(
-              `Multiple results found: ${results.map(r => r.id).join(', ')}`
-            );
-          } else {
-            set({ pendingNavigation: messageNodeId });
-          }
-        } else {
-          set({ pendingNavigation: messageNodeId });
+          await get().actions.startGenerationForNode(messageNodeId);
+          await get().actions._loadNodeData(messageNodeId);
         }
+        set({ pendingNavigation: messageNodeId });
 
         get().actions.setStatusIdle();
       } catch (error) {
@@ -375,16 +319,6 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
               : 'Failed to send message'
         );
       }
-    },
-
-    // Legacy wrapper for command palette - generates from current node
-    handleGenerate: async () => {
-      const { currentNode } = get();
-      if (!currentNode) return;
-
-      // Call submitInput directly via actions - using 'user' role for empty content
-      const actions = get().actions;
-      await actions.submitInput('user', '', true);
     },
 
     handleLargePasteSubmit: async (content: string) => {
@@ -483,7 +417,7 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
       get().actions.setStatusLoading('Deleting Children');
       try {
         await apiDeleteChildren(nodeId);
-        await get().actions.loadNodeData(nodeId);
+        await get().actions._loadNodeData(nodeId);
         get().actions.setStatusIdle();
       } catch (error) {
         get().actions.setStatusError(
@@ -499,7 +433,7 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
       get().actions.setStatusLoading('Deleting Siblings');
       try {
         await apiDeleteSiblings(nodeId);
-        await get().actions.loadNodeData(nodeId);
+        await get().actions._loadNodeData(nodeId);
         get().actions.setStatusIdle();
       } catch (error) {
         get().actions.setStatusError(
@@ -697,6 +631,87 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
         get().actions.setStatusError(
           error instanceof Error ? error.message : 'Failed to navigate parent'
         );
+      }
+    },
+
+    startGenerationForNode: async (
+      parentNodeId: NodeId,
+      options?: Partial<GenerateOptions>
+    ) => {
+      const {
+        currentProviderName,
+        currentModelName,
+        defaultParameters,
+        presets,
+        activePresetName,
+        tools
+      } = get();
+
+      if (!currentProviderName || !currentModelName) {
+        throw new Error('No model selected. Please select a model first.');
+      }
+
+      let effectiveParams = defaultParameters || {};
+      if (activePresetName && presets[activePresetName]) {
+        effectiveParams = {
+          ...effectiveParams,
+          ...presets[activePresetName]
+        };
+      }
+
+      const finalParams: GenerateOptions = {
+        n: 1,
+        temperature: 1.0,
+        max_tokens: 1024,
+        ...effectiveParams,
+        ...(options || {})
+      };
+
+      await apiGenerateCompletion(
+        parentNodeId,
+        currentProviderName,
+        currentModelName,
+        finalParams,
+        tools.active
+      );
+    },
+
+    subscribeToGeneration: (nodeId: NodeId) => {
+      get().actions.unsubscribeFromGeneration();
+
+      const eventSource = subscribeToGenerationUpdates(nodeId, state => {
+        if (state.added) {
+          set({ children: get().children.concat(state.added) });
+        }
+
+        if (state.error) {
+          get().actions.setStatusError(state.error);
+        }
+
+        if (state.status === 'idle' && state.added?.length === 1) {
+          // Auto-navigate if single child and we're currently on the parent
+          set({ pendingNavigation: state.added[0].id });
+        } else if (state.status === 'error') {
+          // Handle error state
+          get().actions.setStatusError(state.error || 'Generation failed');
+          get().actions.unsubscribeFromGeneration();
+        }
+      });
+
+      set({
+        pendingGeneration: {
+          nodeId,
+          subscription: eventSource,
+          startedAt: new Date()
+        }
+      });
+    },
+
+    unsubscribeFromGeneration: () => {
+      const { pendingGeneration } = get();
+      if (pendingGeneration?.subscription) {
+        pendingGeneration.subscription.close();
+        set({ pendingGeneration: null });
       }
     },
 

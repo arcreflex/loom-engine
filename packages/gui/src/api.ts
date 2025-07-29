@@ -3,7 +3,6 @@ import {
   Config,
   Message,
   NodeData,
-  Node,
   NodeId,
   Role,
   RootConfig,
@@ -12,7 +11,12 @@ import {
   ProviderName,
   ToolInfo
 } from '@ankhdt/loom-engine';
-import type { DisplayMessage, GenerateOptions } from './types';
+import type {
+  DisplayMessage,
+  GenerateOptions,
+  GenerationRequestUpdate,
+  GetNodeResponse
+} from './types';
 
 /**
  * Represents the minimal structure of a node for graph visualization.
@@ -79,8 +83,8 @@ export async function setState(
   });
 }
 
-export async function getNode(nodeId: NodeId): Promise<Node> {
-  return fetchApi<Node>(`/api/nodes/${encode(nodeId)}`);
+export async function getNode(nodeId: NodeId): Promise<GetNodeResponse> {
+  return fetchApi<GetNodeResponse>(`/api/nodes/${encode(nodeId)}`);
 }
 
 export async function getPath(
@@ -116,11 +120,32 @@ export async function generateCompletion(
   modelName: string,
   options: Partial<GenerateOptions>,
   activeTools?: string[]
-): Promise<NodeData[]> {
-  return fetchApi<NodeData[]>(`/api/nodes/${encode(nodeId)}/generate`, {
+): Promise<{ success: true }> {
+  return fetchApi<{ success: true }>(`/api/nodes/${encode(nodeId)}/generate`, {
     method: 'POST',
     body: JSON.stringify({ providerName, modelName, activeTools, ...options })
   });
+}
+
+export function subscribeToGenerationUpdates(
+  nodeId: NodeId,
+  onUpdate: (state: GenerationRequestUpdate) => void
+): EventSource {
+  const eventSource = new EventSource(
+    `/api/nodes/${encode(nodeId)}/generation`
+  );
+
+  eventSource.onmessage = event => {
+    const state: GenerationRequestUpdate = JSON.parse(event.data);
+    onUpdate(state);
+  };
+
+  eventSource.onerror = () => {
+    // Handle connection errors
+    onUpdate({ status: 'error', error: 'Connection lost' });
+  };
+
+  return eventSource;
 }
 
 export async function editNodeContent(
