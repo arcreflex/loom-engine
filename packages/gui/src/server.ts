@@ -97,10 +97,7 @@ async function main() {
           sourceModelName = node.metadata.source_info.model_name;
         }
         return {
-          role: node.message.role,
-          content: node.message.content,
-          tool_calls: node.message.tool_calls,
-          tool_call_id: node.message.tool_call_id,
+          ...node.message,
           nodeId: node.id,
           timestamp: node.metadata.timestamp,
           sourceProvider,

@@ -1,12 +1,13 @@
-import type {
-  Node,
-  NodeData,
-  NodeId,
-  RootId,
-  RootConfig,
-  Message,
-  RootData,
-  NodeMetadata
+import {
+  type Node,
+  type NodeData,
+  type NodeId,
+  type RootId,
+  type RootConfig,
+  type Message,
+  type RootData,
+  type NodeMetadata,
+  getToolCalls
 } from './types.ts';
 import type { ILoomStore, NodeStructure } from './store/types.ts';
 import { SerialQueue } from './queue.ts';
@@ -234,7 +235,8 @@ export class Forest {
     }
 
     messages = messages.filter(
-      m => (m.content != null && m.content.length > 0) || m.tool_calls?.length
+      m =>
+        (m.content != null && m.content.length > 0) || getToolCalls(m)?.length
     );
 
     if (!messages.length) {
@@ -256,8 +258,8 @@ export class Forest {
         child =>
           child.message.role === currentMessage.role &&
           child.message.content === currentMessage.content &&
-          JSON.stringify(child.message.tool_calls) ===
-            JSON.stringify(currentMessage.tool_calls)
+          JSON.stringify(getToolCalls(child.message)) ===
+            JSON.stringify(getToolCalls(currentMessage))
       );
 
       if (matchingChild) {
@@ -341,6 +343,10 @@ export class Forest {
       throw new Error(
         `Invalid message index for split: ${position}. Must be between 1 and ${node.message.content.length - 1}`
       );
+    }
+
+    if (node.message.role === 'tool') {
+      throw new Error(`Cannot split tool message: ${nodeId}`);
     }
 
     const left = node.message.content.slice(0, position);
@@ -575,7 +581,7 @@ export class Forest {
       const newSuffix = newContent.slice(lcpLength);
       if (newSuffix.length > 0) {
         const newMessage: Message = {
-          role: nodeToEdit.message.role,
+          ...nodeToEdit.message,
           content: newSuffix
         };
         // `append` will create a new node for the suffix.

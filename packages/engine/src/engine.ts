@@ -3,13 +3,14 @@ import { OpenAIProvider } from './providers/openai.ts';
 import { FileSystemStore } from './store/file-system-store.ts';
 import type { ILoomStore } from './store/types.ts';
 import { Forest } from './forest.ts';
-import type {
-  NodeId,
-  RootId,
-  ProviderName,
-  RootConfig,
-  Message,
-  NodeData
+import {
+  type NodeId,
+  type RootId,
+  type ProviderName,
+  type RootConfig,
+  type Message,
+  type NodeData,
+  getToolCalls
 } from './types.ts';
 import { AnthropicProvider } from './providers/anthropic.ts';
 import { GoogleProvider } from './providers/google.ts';
@@ -215,10 +216,8 @@ export class LoomEngine {
       // Update the message history with the assistant's turn
       currentMessages.push(assistantMessage);
 
-      if (
-        !assistantMessage.tool_calls ||
-        assistantMessage.tool_calls.length === 0
-      ) {
+      const toolCalls = getToolCalls(assistantMessage) ?? [];
+      if (toolCalls.length === 0) {
         // If no tool calls, this is the final response.
         finalAssistantNodes.push(assistantNode as NodeData);
         break; // Exit the loop
@@ -226,7 +225,7 @@ export class LoomEngine {
 
       // --- If there are tool calls, execute them ---
       const toolResults = await Promise.all(
-        assistantMessage.tool_calls.map(async toolCall => {
+        toolCalls.map(async toolCall => {
           try {
             const result = await this.toolRegistry.execute(
               toolCall.function.name,
@@ -249,7 +248,7 @@ export class LoomEngine {
 
       // Append each tool result as a new node and update message history
       for (const toolResultMessage of toolResults) {
-        const toolCall = assistantMessage.tool_calls!.find(
+        const toolCall = toolCalls.find(
           tc => tc.id === toolResultMessage.tool_call_id
         )!;
         const toolNode = await this.forest.append(

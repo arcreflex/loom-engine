@@ -17,17 +17,14 @@ export type Role = 'user' | 'assistant' | 'tool';
 
 export type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter';
 
-/**
- * Represents a message in a conversation.
- */
-export interface Message {
-  /** The role of the entity sending the message. */
-  role: Role;
-
-  /** The content of the message. Can be null for an assistant message that only contains tool calls. */
+export interface UserMessage {
+  role: 'user';
   content: string | null;
+}
 
-  /** For an 'assistant' role message, a list of tool calls the model wants to make. */
+export interface AssistantMessage {
+  role: 'assistant';
+  content: string | null;
   tool_calls?: {
     id: string; // A unique ID for this specific tool call.
     type: 'function'; // The type of tool call, always 'function' for now.
@@ -36,10 +33,15 @@ export interface Message {
       arguments: string; // A JSON string of arguments for the function.
     };
   }[];
-
-  /** For a 'tool' role message, the ID of the tool_call that this is the result for. */
-  tool_call_id?: string;
 }
+
+export interface ToolMessage {
+  role: 'tool';
+  content: string | null;
+  tool_call_id: string;
+}
+
+export type Message = UserMessage | AssistantMessage | ToolMessage;
 
 /**
  * Configuration for a conversation root.
@@ -135,3 +137,7 @@ export interface NodeData {
 }
 
 export type Node = RootData | NodeData;
+
+export function getToolCalls(message: Message) {
+  return message.role === 'assistant' ? message.tool_calls : undefined;
+}

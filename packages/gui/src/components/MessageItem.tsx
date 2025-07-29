@@ -15,6 +15,7 @@ import { Link } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import TextareaAutosize from 'react-textarea-autosize';
+import { AssistantMessage } from '../../../engine/src/types';
 
 // Threshold for collapsing messages (number of lines)
 const LINE_THRESHOLD = 30;
@@ -33,7 +34,7 @@ export type CoalescedMessage = {
   messages: DisplayMessage[];
 };
 
-type ToolCallInfo = NonNullable<DisplayMessage['tool_calls']>[number];
+type ToolCallInfo = NonNullable<AssistantMessage['tool_calls']>[number];
 
 export const MessageItem = forwardRef(
   (
@@ -100,9 +101,13 @@ export const MessageItem = forwardRef(
 
     // Check if any message has tool calls or is a tool result
     const hasToolCalls = message.messages.some(
-      msg => msg.tool_calls && msg.tool_calls.length > 0
+      msg =>
+        msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0
     );
-    const isToolResult = message.role === 'tool';
+    const toolCallId =
+      message.role === 'tool' && message.messages[0]?.role === 'tool'
+        ? message.messages[0].tool_call_id
+        : undefined;
 
     return (
       <div ref={ref} className={`${spacing} ${messageClass} ${previewClass}`}>
@@ -110,6 +115,7 @@ export const MessageItem = forwardRef(
         {hasToolCalls &&
           message.messages.map(
             (msg, index) =>
+              msg.role === 'assistant' &&
               msg.tool_calls &&
               msg.tool_calls.length > 0 && (
                 <div key={`${msg.nodeId}-tools-${index}`} className="mb-4">
@@ -121,16 +127,13 @@ export const MessageItem = forwardRef(
           )}
 
         {/* Render tool result for tool messages */}
-        {isToolResult && (
-          <ToolResultDisplay
-            content={combinedText}
-            toolCallId={message.messages[0]?.tool_call_id}
-          />
+        {!!toolCallId && (
+          <ToolResultDisplay content={combinedText} toolCallId={toolCallId} />
         )}
 
         {/* Render normal content if present and not a tool result */}
         {combinedText &&
-          !isToolResult &&
+          !toolCallId &&
           (!isEditing ? (
             renderingMode === 'raw' ? (
               <RawContent
@@ -207,7 +210,7 @@ export const MessageItem = forwardRef(
               )}
             </div>
             <div className="flex gap-1">
-              {!isEditing && !isPreview && combinedText && !isToolResult && (
+              {!isEditing && !isPreview && combinedText && !toolCallId && (
                 <button
                   onClick={() => setIsEditing(true)}
                   className="text-xs px-2 py-1 btn opacity-50 hover:opacity-100"
