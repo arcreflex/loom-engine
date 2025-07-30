@@ -1,3 +1,5 @@
+set -eo pipefail
+
 npx lint-staged
 pnpm test
 pnpm typecheck

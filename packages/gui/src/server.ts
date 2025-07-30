@@ -9,22 +9,25 @@ import {
   NodeData,
   KNOWN_MODELS,
   RootId,
-  type ProviderName
+  type ProviderName,
+  GenerateResult
 } from '@ankhdt/loom-engine';
 import { DisplayMessage, GenerationRequestUpdate } from './types';
 
 class GenerationRequest {
-  readonly parentNodeId: NodeId;
+  private manager: GenerationRequestManager;
   private requests: Set<{
     id: string;
     options: Partial<GenerateOptions>;
-    promise: Promise<NodeData[]>;
+    promise: Promise<GenerateResult>;
     startedAt: Date;
   }> = new Set();
 
+  readonly parentNodeId: NodeId;
   callbacks: Set<(state: GenerationRequestUpdate) => void> = new Set();
 
-  constructor(parentNodeId: NodeId) {
+  constructor(manager: GenerationRequestManager, parentNodeId: NodeId) {
+    this.manager = manager;
     this.parentNodeId = parentNodeId;
   }
 
@@ -34,7 +37,7 @@ class GenerationRequest {
 
   addRequest(
     options: Partial<GenerateOptions>,
-    promise: Promise<NodeData[]>
+    promise: Promise<GenerateResult>
   ): string {
     const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
     const request = {
@@ -48,11 +51,16 @@ class GenerationRequest {
 
     // Handle promise resolution
     promise
-      .then(data => {
+      .then(({ childNodes, next }) => {
         this.requests.delete(request);
+        if (next) {
+          for (const child of childNodes) {
+            this.manager.getOrCreate(child.id).addRequest(options, next);
+          }
+        }
         this.update({
           status: this.getStatus(),
-          added: data
+          added: childNodes
         });
       })
       .catch(error => {
@@ -81,7 +89,7 @@ class GenerationRequestManager {
   getOrCreate(nodeId: NodeId): GenerationRequest {
     let request = this.requests.get(nodeId);
     if (!request) {
-      request = new GenerationRequest(nodeId);
+      request = new GenerationRequest(this, nodeId);
       this.requests.set(nodeId, request);
     }
     return request;

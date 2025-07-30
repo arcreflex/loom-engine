@@ -1,7 +1,7 @@
 // engine.test.ts
 import { describe, it, mock, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { LoomEngine } from './engine.ts'; // Adjust path as needed
+import { LoomEngine, type GenerateResult } from './engine.ts'; // Adjust path as needed
 import { createMockStore, mockProviders, mockRootId } from './test-helpers.ts'; // Import the helper
 import type {
   RootConfig,
@@ -116,23 +116,23 @@ describe('LoomEngine', () => {
         expectedMessages,
         expectedRootConfig
       }: {
-        result: NodeData[];
+        result: GenerateResult;
         expectedRootConfig: RootConfig;
         expectedMessages: Message[][];
       }
     ) {
-      assert.ok(Array.isArray(result), 'Result is array');
+      assert.ok(Array.isArray(result.childNodes), 'Result is array');
       assert.strictEqual(
-        result.length,
+        result.childNodes.length,
         expectedMessages.length,
         'Result length matches expected'
       );
 
       const actualMessages = [];
-      for (let i = 0; i < result.length; i++) {
+      for (let i = 0; i < result.childNodes.length; i++) {
         const { root, messages } = await engine
           .getForest()
-          .getMessages(result[i].id);
+          .getMessages(result.childNodes[i].id);
         assert.deepEqual(
           root.config,
           expectedRootConfig,
@@ -174,14 +174,17 @@ describe('LoomEngine', () => {
       });
 
       // Check source_info
-      assert.strictEqual(result[0].metadata.source_info.type, 'model');
-      if (result[0].metadata.source_info.type === 'model') {
+      assert.strictEqual(
+        result.childNodes[0].metadata.source_info.type,
+        'model'
+      );
+      if (result.childNodes[0].metadata.source_info.type === 'model') {
         assert.strictEqual(
-          result[0].metadata.source_info.provider,
+          result.childNodes[0].metadata.source_info.provider,
           providerName
         );
         assert.strictEqual(
-          result[0].metadata.source_info.model_name,
+          result.childNodes[0].metadata.source_info.model_name,
           modelName
         );
       }
@@ -470,7 +473,7 @@ describe('LoomEngine', () => {
         }
       });
 
-      const result = await engine.generate(
+      let result = await engine.generate(
         root.id,
         providerName,
         modelName,
@@ -478,6 +481,9 @@ describe('LoomEngine', () => {
         options,
         activeTools
       );
+      while (result.next) {
+        result = await result.next;
+      }
 
       // Verify the sequence of calls
       assert.strictEqual(
@@ -487,14 +493,18 @@ describe('LoomEngine', () => {
       );
 
       // Check that we get exactly one final assistant node
-      assert.strictEqual(result.length, 1, 'One final assistant node returned');
       assert.strictEqual(
-        result[0].message.role,
+        result.childNodes.length,
+        1,
+        'One final assistant node returned'
+      );
+      assert.strictEqual(
+        result.childNodes[0].message.role,
         'assistant',
         'Final node is assistant'
       );
       assert.strictEqual(
-        result[0].message.content,
+        result.childNodes[0].message.content,
         'I echoed your message successfully!',
         'Final response content matches'
       );
@@ -567,65 +577,7 @@ describe('LoomEngine', () => {
       );
     });
 
-    it('should call onProgress callback for each node created during n>1 generation', async () => {
-      const root = createTestRoot('r8', { systemPrompt: 'You are a poet' });
-      const providerName: ProviderName = 'openai';
-      const modelName = 'gpt-4';
-      const userMessages: Message[] = [
-        { role: 'user', content: 'Write a poem' }
-      ];
-      const options = { n: 2, max_tokens: 100, temperature: 0.7 };
-
-      const progressNodes: NodeData[] = [];
-      const onProgress = mock.fn((node: NodeData) => {
-        progressNodes.push(node);
-      });
-
-      const result = await engine.generate(
-        root.id,
-        providerName,
-        modelName,
-        userMessages,
-        options,
-        undefined, // no active tools
-        onProgress
-      );
-
-      // Verify onProgress was called for each generated node
-      assert.strictEqual(
-        onProgress.mock.callCount(),
-        2,
-        'onProgress called twice for n=2'
-      );
-      assert.strictEqual(
-        progressNodes.length,
-        2,
-        'Two progress nodes captured'
-      );
-
-      // Verify that the progress nodes match the final result
-      assert.deepEqual(
-        progressNodes,
-        result,
-        'Progress nodes match final result'
-      );
-
-      // Verify all progress nodes are assistant messages
-      progressNodes.forEach((node, i) => {
-        assert.strictEqual(
-          node.message.role,
-          'assistant',
-          `Progress node ${i} is assistant`
-        );
-        assert.strictEqual(
-          node.message.content,
-          `response ${i}`,
-          `Progress node ${i} has correct content`
-        );
-      });
-    });
-
-    it('should call onProgress callback for tool-calling sequence', async () => {
+    it('should return a `next` promise tool-calling sequence', async () => {
       const root = createTestRoot('r9', {
         systemPrompt: 'You are a helpful assistant'
       });
@@ -638,9 +590,6 @@ describe('LoomEngine', () => {
       const activeTools = ['echo'];
 
       const progressNodes: NodeData[] = [];
-      const onProgress = mock.fn((node: NodeData) => {
-        progressNodes.push(node);
-      });
 
       // Reset mock and setup tool-calling sequence
       mockProviderInstance.generate.mock.resetCalls();
@@ -681,77 +630,78 @@ describe('LoomEngine', () => {
         }
       });
 
-      const result = await engine.generate(
+      let result = await engine.generate(
         root.id,
         providerName,
         modelName,
         userMessages,
         options,
-        activeTools,
-        onProgress
+        activeTools
       );
+      progressNodes.push(result.childNodes[0]);
+      while (result.next) {
+        result = await result.next;
+        progressNodes.push(result.childNodes[0]);
+      }
 
-      // Verify onProgress was called for user, tool result, and final assistant
-      assert.strictEqual(
-        onProgress.mock.callCount(),
-        3,
-        'onProgress called two times during tool-calling'
-      );
       assert.strictEqual(
         progressNodes.length,
-        3,
-        'Three progress nodes captured'
+        2,
+        'Two progress nodes captured'
       );
 
-      // Check the sequence of progress nodes
       assert.strictEqual(
         progressNodes[0].message.role,
+        'tool',
+        'First progress node is tool result'
+      );
+      assert.strictEqual(
+        progressNodes[0].message.tool_call_id,
+        'call_456',
+        'Tool result has correct call ID'
+      );
+      assert.strictEqual(
+        progressNodes[0].message.content,
+        '{"echo":"Hello Progress"}',
+        'Tool result content correct'
+      );
+
+      const toolResultParent = mockStoreWrapper.nodes.get(
+        progressNodes[0].parent_id
+      );
+
+      assert.strictEqual(
+        toolResultParent?.message.role,
         'assistant',
         'First progress node is tool call'
       );
       assert.strictEqual(
-        progressNodes[0].message.content,
+        toolResultParent?.message.content,
         null,
         'Content of tool call is null'
       );
       assert.strictEqual(
-        progressNodes[0].message.tool_calls?.length,
+        toolResultParent?.message.tool_calls?.length,
         1,
         'Tool call exists'
       );
 
       assert.strictEqual(
         progressNodes[1].message.role,
-        'tool',
-        'Second progress node is tool result'
-      );
-      assert.strictEqual(
-        progressNodes[1].message.tool_call_id,
-        'call_456',
-        'Tool result has correct call ID'
+        'assistant',
+        'Second progress node is final assistant'
       );
       assert.strictEqual(
         progressNodes[1].message.content,
-        '{"echo":"Hello Progress"}',
-        'Tool result content correct'
-      );
-
-      assert.strictEqual(
-        progressNodes[2].message.role,
-        'assistant',
-        'Third progress node is final assistant'
-      );
-      assert.strictEqual(
-        progressNodes[2].message.content,
         'Progress tracking works!',
         'Final assistant content correct'
       );
 
       // Verify final result matches the last progress node
-      assert.strictEqual(result.length, 1, 'One final result');
+      assert.strictEqual(result.childNodes.length, 1, 'One final result');
       assert.deepEqual(
-        result[0],
-        progressNodes[2],
+        result.childNodes[0],
+        progressNodes[1],
         'Final result matches last progress node'
       );
     });
@@ -838,7 +788,8 @@ describe('LoomEngine', () => {
             }
           ]
         })),
-        update: mock.fn()
+        update: mock.fn(),
+        log: mock.fn()
       };
 
       const engineWithConfig = await LoomEngine.create(
@@ -902,7 +853,8 @@ describe('LoomEngine', () => {
             }
           ]
         })),
-        update: mock.fn()
+        update: mock.fn(),
+        log: mock.fn()
       };
 
       const engineWithConfig = await LoomEngine.create(
@@ -970,7 +922,8 @@ describe('LoomEngine', () => {
             }
           ]
         })),
-        update: mock.fn()
+        update: mock.fn(),
+        log: mock.fn()
       };
 
       const engineWithConfig = await LoomEngine.create(

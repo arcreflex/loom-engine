@@ -10,7 +10,8 @@ import {
   type RootConfig,
   type Message,
   type NodeData,
-  getToolCalls
+  getToolCalls,
+  type RootData
 } from './types.ts';
 import { AnthropicProvider } from './providers/anthropic.ts';
 import { GoogleProvider } from './providers/google.ts';
@@ -18,6 +19,7 @@ import { ToolRegistry } from './tools/registry.ts';
 import type { ConfigStore, Bookmark } from './config.ts';
 import { discoverMcpTools } from './mcp/client.ts';
 import { KNOWN_MODELS } from './browser.ts';
+import type { ProviderRequest } from './providers/types.ts';
 
 export interface GenerateOptions {
   n: number;
@@ -25,7 +27,10 @@ export interface GenerateOptions {
   temperature: number;
 }
 
-export type ProgressCallback = (node: NodeData) => void;
+export interface GenerateResult {
+  childNodes: NodeData[];
+  next?: Promise<GenerateResult>;
+}
 
 export class LoomEngine {
   private forest: Forest;
@@ -69,9 +74,8 @@ export class LoomEngine {
     modelName: string,
     contextMessages: Message[],
     options: GenerateOptions,
-    activeTools?: string[],
-    onProgress?: ProgressCallback
-  ): Promise<NodeData[]> {
+    activeTools?: string[]
+  ): Promise<GenerateResult> {
     const root = await this.forest.getRoot(rootId);
     if (!root) {
       throw new Error(`Root with ID ${rootId} not found`);
@@ -104,182 +108,198 @@ export class LoomEngine {
       );
     }
 
-    // If no tools are active, use the original n > 1 logic
-    if (!activeTools || activeTools.length === 0) {
-      const coalesced = coalesceMessages(contextMessages, '');
+    if (activeTools && activeTools.length > 0) {
+      // Tool-calling logic (only supports n=1)
+      if (options.n > 1) {
+        throw new Error('Tool calling currently only supports n=1');
+      }
 
-      return Promise.all(
-        Array.from({ length: options.n }).map(async () => {
-          const response = await provider.generate({
-            systemMessage: root.config.systemPrompt,
-            messages: coalesced,
-            model: modelName,
-            parameters,
-            tools: undefined
-          });
-          const responseNode = await this.forest.append(
-            root.id,
-            [...contextMessages, response.message],
-            {
-              source_info: {
-                type: 'model',
-                provider: providerName,
-                model_name: modelName,
-                parameters,
-                tools: undefined,
-                tool_choice: undefined,
-                finish_reason: response.finish_reason,
-                usage: response.usage
-              }
-            }
-          );
-          if (!responseNode.parent_id) {
-            throw new Error(
-              'Expected result of appending >0 nodes to be a non-root node.'
-            );
-          }
-
-          // Call progress callback for the newly created node
-          if (onProgress) {
-            onProgress(responseNode);
-          }
-
-          return responseNode;
-        })
-      );
-    }
-
-    // Tool-calling logic (only supports n=1)
-    if (options.n > 1) {
-      throw new Error('Tool calling currently only supports n=1');
-    }
-
-    // The conversation history for this turn
-    const currentMessages = [...contextMessages];
-    const finalAssistantNodes: NodeData[] = [];
-
-    // Start the tool-calling loop
-    for (let i = 0; i < 5; i++) {
-      // Limit to 5 iterations to prevent infinite loops
-      const coalesced = coalesceMessages(currentMessages, '');
-
-      const toolsForProvider = this.toolRegistry
-        .list()
-        .filter(t => activeTools.includes(t.name))
-        .map(t => ({
-          type: 'function' as const,
-          function: {
-            name: t.name,
-            description: t.description,
-            parameters: t.parameters
-          }
-        }));
-
-      const toolsToUse =
-        toolsForProvider.length > 0 ? toolsForProvider : undefined;
-      const toolChoiceToUse = toolsForProvider.length > 0 ? 'auto' : undefined;
-
-      const response = await provider.generate({
-        systemMessage: root.config.systemPrompt,
-        messages: coalesced,
-        model: modelName,
+      return this.toolCall(
+        root,
+        providerName,
+        modelName,
+        contextMessages,
         parameters,
-        tools: toolsToUse,
-        tool_choice: toolChoiceToUse
-      });
-
-      const assistantMessage = response.message;
-
-      // Append the assistant's response (which may or may not have tool calls)
-      const assistantNode = await this.forest.append(
-        root.id,
-        [...currentMessages, assistantMessage],
-        {
-          source_info: {
-            type: 'model',
-            provider: providerName,
-            model_name: modelName,
-            parameters,
-            tools: toolsToUse,
-            tool_choice: toolChoiceToUse,
-            finish_reason: response.finish_reason,
-            usage: response.usage
-          }
-        }
+        activeTools
       );
+    }
 
-      // Call progress callback for the newly created assistant node
-      if (onProgress) {
-        onProgress(assistantNode as NodeData);
-      }
+    const coalesced = coalesceMessages(contextMessages, '');
 
-      // Update the message history with the assistant's turn
-      currentMessages.push(assistantMessage);
-
-      const toolCalls = getToolCalls(assistantMessage) ?? [];
-      if (toolCalls.length === 0) {
-        // If no tool calls, this is the final response.
-        finalAssistantNodes.push(assistantNode as NodeData);
-        break; // Exit the loop
-      }
-
-      // --- If there are tool calls, execute them ---
-      const toolResults = await Promise.all(
-        toolCalls.map(async toolCall => {
-          try {
-            const result = await this.toolRegistry.execute(
-              toolCall.function.name,
-              JSON.parse(toolCall.function.arguments)
-            );
-            return {
-              tool_call_id: toolCall.id,
-              role: 'tool' as const,
-              content: result
-            };
-          } catch (error) {
-            return {
-              tool_call_id: toolCall.id,
-              role: 'tool' as const,
-              content: JSON.stringify({ error: String(error) })
-            };
-          }
-        })
-      );
-
-      // Append each tool result as a new node and update message history
-      for (const toolResultMessage of toolResults) {
-        const toolCall = toolCalls.find(
-          tc => tc.id === toolResultMessage.tool_call_id
-        )!;
-        const toolNode = await this.forest.append(
+    const childNodes = await Promise.all(
+      Array.from({ length: options.n }).map(async () => {
+        const response = await provider.generate({
+          systemMessage: root.config.systemPrompt,
+          messages: coalesced,
+          model: modelName,
+          parameters,
+          tools: undefined
+        });
+        const responseNode = await this.forest.append(
           root.id,
-          [...currentMessages, toolResultMessage],
+          [...contextMessages, response.message],
           {
             source_info: {
-              type: 'tool_result',
-              tool_name: toolCall.function.name
+              type: 'model',
+              provider: providerName,
+              model_name: modelName,
+              parameters,
+              tools: undefined,
+              tool_choice: undefined,
+              finish_reason: response.finish_reason,
+              usage: response.usage
             }
           }
         );
-
-        // Call progress callback for the newly created tool result node
-        if (onProgress) {
-          onProgress(toolNode as NodeData);
+        if (!responseNode.parent_id) {
+          throw new Error(
+            'Expected result of appending >0 nodes to be a non-root node.'
+          );
         }
 
-        currentMessages.push(toolResultMessage);
+        return responseNode;
+      })
+    );
+
+    return { childNodes };
+  }
+
+  private async toolCall(
+    root: RootData,
+    providerName: ProviderName,
+    modelName: string,
+    contextMessages: Message[],
+    parameters: ProviderRequest['parameters'],
+    activeTools: string[]
+  ): Promise<GenerateResult> {
+    // The conversation history for this turn
+    const messages = [...contextMessages];
+
+    const provider = this.getProvider(providerName);
+
+    // Limit to 5 iterations to prevent infinite loops
+    const coalesced = coalesceMessages(messages, '');
+
+    const toolsForProvider = this.toolRegistry
+      .list()
+      .filter(t => activeTools.includes(t.name))
+      .map(t => ({
+        type: 'function' as const,
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters
+        }
+      }));
+
+    const toolsToUse =
+      toolsForProvider.length > 0 ? toolsForProvider : undefined;
+    const toolChoiceToUse = toolsForProvider.length > 0 ? 'auto' : undefined;
+
+    const response = await provider.generate({
+      systemMessage: root.config.systemPrompt,
+      messages: coalesced,
+      model: modelName,
+      parameters,
+      tools: toolsToUse,
+      tool_choice: toolChoiceToUse
+    });
+
+    const assistantMessage = response.message;
+
+    // Append the assistant's response (which may or may not have tool calls)
+    const assistantNode = await this.forest.append(
+      root.id,
+      [...messages, assistantMessage],
+      {
+        source_info: {
+          type: 'model',
+          provider: providerName,
+          model_name: modelName,
+          parameters,
+          tools: toolsToUse,
+          tool_choice: toolChoiceToUse,
+          finish_reason: response.finish_reason,
+          usage: response.usage
+        }
       }
+    );
 
-      // Continue the loop to send the tool results back to the model
+    // Update the message history with the assistant's turn
+    messages.push(assistantMessage);
+
+    const toolCalls = getToolCalls(assistantMessage) ?? [];
+    if (toolCalls.length === 0) {
+      // If no tool calls, this is the final response.
+      return { childNodes: [assistantNode as NodeData] };
     }
 
-    if (finalAssistantNodes.length === 0) {
-      throw new Error(
-        'Model did not produce a final response after tool calls.'
+    // --- If there are tool calls, execute them ---
+    const toolResults = await Promise.all(
+      toolCalls.map(async toolCall => {
+        try {
+          const result = await this.toolRegistry.execute(
+            toolCall.function.name,
+            JSON.parse(toolCall.function.arguments)
+          );
+          return {
+            tool_call_id: toolCall.id,
+            role: 'tool' as const,
+            content: result
+          };
+        } catch (error) {
+          return {
+            tool_call_id: toolCall.id,
+            role: 'tool' as const,
+            content: JSON.stringify({ error: String(error) })
+          };
+        }
+      })
+    );
+
+    // Append each tool result as a new node and update message history
+
+    let lastToolNode: NodeData | undefined;
+    for (const toolResultMessage of toolResults) {
+      const toolCall = toolCalls.find(
+        tc => tc.id === toolResultMessage.tool_call_id
+      )!;
+      const toolNode = await this.forest.append(
+        root.id,
+        [...messages, toolResultMessage],
+        {
+          source_info: {
+            type: 'tool_result',
+            tool_name: toolCall.function.name
+          }
+        }
       );
+      if (!toolNode.parent_id) {
+        throw new Error(
+          'Expected result of appending >0 nodes to be a non-root node.'
+        );
+      }
+      lastToolNode = toolNode;
+
+      messages.push(toolResultMessage);
+    }
+    if (!lastToolNode) {
+      return { childNodes: [assistantNode as NodeData] };
     }
 
-    return finalAssistantNodes;
+    // Continue the loop to send the tool results back to the model
+    const next = this.toolCall(
+      root,
+      providerName,
+      modelName,
+      messages,
+      parameters,
+      activeTools
+    );
+    return {
+      childNodes: [lastToolNode],
+      next
+    };
   }
 
   async getMessages(
