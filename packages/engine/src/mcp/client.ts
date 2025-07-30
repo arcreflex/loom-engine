@@ -88,9 +88,18 @@ async function discoverAndRegisterMcpTools(
             arguments: args
           });
 
-          // Handle the tool result - MCP returns structured data
           if (result.content) {
-            // If there's content, return it as a JSON string
+            if (
+              // TODO: this is annoying. `client.callTool`'s type is giving us `unknown` for content.
+              // I can see from the code that it's just calling `client.request` and validating & returning the
+              // result, but `client.request` gives a better-typed result.
+              // Reported the issue here: https://github.com/modelcontextprotocol/typescript-sdk/issues/823
+              Array.isArray(result.content) &&
+              result.content.length === 1 &&
+              result.content[0].type === 'text'
+            ) {
+              return result.content[0].text;
+            }
             return JSON.stringify(result.content);
           } else {
             // If no content, return empty result
