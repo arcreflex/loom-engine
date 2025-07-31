@@ -20,6 +20,7 @@ import type { ConfigStore, Bookmark } from './config.ts';
 import { discoverMcpTools } from './mcp/client.ts';
 import { KNOWN_MODELS } from './browser.ts';
 import type { ProviderRequest } from './providers/types.ts';
+import { getCodebaseContext } from './tools/introspect.ts';
 
 export interface GenerateOptions {
   n: number;
@@ -361,28 +362,35 @@ export class LoomEngine {
   }
 
   private async initializeTools(): Promise<void> {
-    // Register built-in tools first as fallback
-    this.toolRegistry.register(
-      'echo',
-      'Echoes the input back to the user.',
-      {
-        type: 'object',
-        properties: {
-          message: { type: 'string', description: 'The message to echo.' }
-        },
-        required: ['message']
-      },
-      async (args: { message?: string }) =>
-        JSON.stringify({ echo: args.message ?? 'No message provided' }),
-      'Built-in' // Group built-in tools together
-    );
-
     this.toolRegistry.register(
       'current_date',
       'Returns the current date and time.',
       { type: 'object', properties: {} },
       async () => JSON.stringify({ date: new Date().toISOString() }),
       'Built-in' // Group built-in tools together
+    );
+
+    this.toolRegistry.register(
+      'introspect',
+      `Introspects the loom-engine codebase that's powering this interaction.`,
+      {
+        type: 'object',
+        properties: {
+          level: {
+            type: 'string',
+            enum: ['overview', 'all'],
+            description:
+              'Level of detail: "overview" (README.md + file tree) or "all" (file tree + all file contents)'
+          }
+        },
+        required: ['level']
+      },
+      async (args: { level?: string }) => {
+        return await getCodebaseContext(
+          (args.level as 'overview' | 'all') || 'overview'
+        );
+      },
+      'Built-in'
     );
 
     // Discover and register tools from configured MCP servers

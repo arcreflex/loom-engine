@@ -27,6 +27,22 @@ describe('LoomEngine', () => {
 
     // Create engine with the stateful mock store instance
     engine = await LoomEngine.create(mockStoreWrapper.mockStore);
+
+    // Add echo tool for testing
+    engine.toolRegistry.register(
+      'echo',
+      'Echoes the input back to the user.',
+      {
+        type: 'object',
+        properties: {
+          message: { type: 'string', description: 'The message to echo.' }
+        },
+        required: ['message']
+      },
+      async (args: { message?: string }) =>
+        JSON.stringify({ echo: args.message ?? 'No message provided' }),
+      'Built-in'
+    );
   });
 
   afterEach(() => {
