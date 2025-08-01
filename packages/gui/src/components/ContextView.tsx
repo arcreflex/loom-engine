@@ -25,15 +25,14 @@ export function ContextView({
   onEditSave,
   onSystemPromptSave
 }: ContextViewProps) {
-  // When the head (current node) changes--and on initial load--we want to scroll to it.
   const [lastScrolledToHead, setLastScrolledToHead] = useState<NodeId | null>(
     null
   );
+  const [containerHeight, setContainerHeight] = useState(0);
 
   const [isEditingPrompt, setIsEditingPrompt] = useState(false);
   const [promptText, setPromptText] = useState(root?.systemPrompt || '');
 
-  // Update promptText when root changes
   useEffect(() => {
     setPromptText(root?.systemPrompt || '');
   }, [root?.systemPrompt]);
@@ -53,9 +52,8 @@ export function ContextView({
   };
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null); // Ref for the scroll container
-  const previewContainerRef = useRef<HTMLDivElement | null>(null); // Ref for the preview child
-  const lastMessageRef = useRef<HTMLDivElement | null>(null); // Ref for the last actual message
+  const containerRef = useRef<HTMLDivElement>(null);
+  const lastMessageRef = useRef<HTMLDivElement | null>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
 
   const coalescedMessages = useMemo(() => {
@@ -82,26 +80,32 @@ export function ContextView({
     return coalesced;
   }, [messages]);
 
-  // Scroll handler to detect when user scrolls away from bottom
   const handleScroll = () => {
     if (!containerRef.current) return;
 
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
 
-    // Show button if scrolled up more than 200px from bottom
     setShowScrollButton(distanceFromBottom > 200);
   };
 
-  // Scroll to bottom when messages or preview change
   useEffect(() => {
-    if (previewContainerRef.current) {
-      // For preview, scroll to top of the preview with smooth behavior
-      previewContainerRef.current.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start'
-      });
-    } else if (
+    if (!containerRef.current) return;
+
+    const resizeObserver = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (entry) {
+        setContainerHeight(entry.contentRect.height);
+      }
+    });
+
+    resizeObserver.observe(containerRef.current);
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (
       messages.length &&
       lastScrolledToHead !== messages[messages.length - 1].nodeId
     ) {
@@ -111,20 +115,17 @@ export function ContextView({
       });
       return;
     } else if (containerRef.current) {
-      // Check if user is scrolled near the bottom before auto-scrolling
       const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
       const isScrolledNearBottom =
-        scrollHeight - scrollTop - clientHeight < 100; // 100px threshold
+        scrollHeight - scrollTop - clientHeight < 100;
 
       if (isScrolledNearBottom || messages.length < 10) {
-        // If near bottom OR messages are few, scroll to the last message item
         if (lastMessageRef.current) {
           lastMessageRef.current.scrollIntoView({
             behavior: 'smooth',
             block: 'start'
           });
         } else if (messagesEndRef.current) {
-          // Fallback to messagesEndRef if lastMessageRef is not set
           messagesEndRef.current.scrollIntoView({
             behavior: 'smooth',
             block: 'end'
@@ -132,13 +133,11 @@ export function ContextView({
         }
       }
     }
-    // Depend on messages array length and previewChild identity
   }, [messages.length, previewChild, lastScrolledToHead, messages]);
 
   const messagesToRender = coalescedMessages;
 
   return (
-    // Add ref to the scrollable container
     <div
       ref={containerRef}
       className="flex-1 overflow-y-auto p-4"
@@ -215,7 +214,7 @@ export function ContextView({
           );
         })}
 
-        {previewChild === null ? null : previewChild === PENDING_GENERATION ? (
+        {previewChild === PENDING_GENERATION && (
           <div>
             <div
               className={`animate-pulse mt-2 px-3 py-2
@@ -224,23 +223,6 @@ export function ContextView({
             >
               ...
             </div>
-          </div>
-        ) : (
-          <div
-            ref={previewContainerRef}
-            className="mt-4 pt-4 border-t-2 border-dashed border-terminal-border/30"
-          >
-            <MessageItem
-              key={`preview-${previewChild.id}`}
-              message={{
-                role: previewChild.message.role,
-                messages: [{ ...previewChild.message, nodeId: previewChild.id }]
-              }}
-              isLast={true}
-              siblings={undefined}
-              isPreview={true} // Add isPreview prop
-              onEditSave={async () => {}} // No-op for preview
-            />
           </div>
         )}
 
@@ -253,8 +235,29 @@ export function ContextView({
             </div>
           )}
 
-        {/* Scroll anchor */}
-        <div ref={messagesEndRef} />
+        <div
+          className="relative overflow-hidden"
+          style={{ height: `${containerHeight / 2}px` }}
+          ref={messagesEndRef}
+        >
+          {previewChild && previewChild !== PENDING_GENERATION && (
+            <div className={` absolute inset-0 `}>
+              <MessageItem
+                key={`preview-${previewChild.id}`}
+                message={{
+                  role: previewChild.message.role,
+                  messages: [
+                    { ...previewChild.message, nodeId: previewChild.id }
+                  ]
+                }}
+                isLast={true}
+                siblings={undefined}
+                isPreview={true}
+                onEditSave={async () => {}}
+              />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Scroll to Latest button (fixed position at bottom-right) */}

@@ -693,6 +693,8 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
           if (state.added?.length === 1) {
             // Auto-navigate if single child and we're currently on the parent
             set({ pendingNavigation: state.added[0].id });
+          } else {
+            get().actions._loadNodeData(nodeId);
           }
         } else if (state.status === 'error') {
           // Handle error state
