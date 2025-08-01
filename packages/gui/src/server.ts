@@ -10,9 +10,11 @@ import {
   KNOWN_MODELS,
   RootId,
   type ProviderName,
-  GenerateResult
+  GenerateResult,
+  type Message
 } from '@ankhdt/loom-engine';
 import { DisplayMessage, GenerationRequestUpdate } from './types';
+import { getEncoding } from 'js-tiktoken';
 
 class GenerationRequest {
   private manager: GenerationRequestManager;
@@ -184,6 +186,9 @@ async function main() {
         return res.status(404).json({ error: 'Node not found' });
       }
 
+      const { root, messages } = await engine.getMessages(nodeId as NodeId);
+      const contextTokens = estimateTokenCount(messages, root.systemPrompt);
+
       // Check if there's a pending generation for this node
       const generationReq = generationRequests.get(nodeId as NodeId);
       const pendingGeneration = generationReq
@@ -194,6 +199,7 @@ async function main() {
 
       res.json({
         ...node,
+        contextTokens,
         pendingGeneration
       });
     } catch (error) {
@@ -620,4 +626,33 @@ async function filterOutBookmarkedDescendants(
   }
 
   return out;
+}
+
+// Token counting utility
+function estimateTokenCount(
+  messages: Message[],
+  systemPrompt?: string
+): number {
+  try {
+    const encoding = getEncoding('cl100k_base');
+    let totalTokens = 0;
+    if (systemPrompt) {
+      totalTokens += encoding.encode(systemPrompt).length;
+    }
+    for (const message of messages) {
+      totalTokens += encoding.encode(JSON.stringify(message)).length;
+    }
+    return totalTokens;
+  } catch (error) {
+    console.warn('Failed to estimate token count:', error);
+    // Fallback to simple approximation: roughly 4 chars per token
+    let totalChars = 0;
+    if (systemPrompt) totalChars += systemPrompt.length;
+    for (const message of messages) {
+      if (typeof message.content === 'string' && message.content) {
+        totalChars += message.content.length;
+      }
+    }
+    return Math.ceil(totalChars / 4);
+  }
 }

@@ -165,6 +165,31 @@ export class LoomEngine {
     return { childNodes };
   }
 
+  getToolParameters(
+    activeTools: string[]
+  ): Pick<ProviderRequest, 'tools' | 'tool_choice'> {
+    const toolsForProvider = this.toolRegistry
+      .list()
+      .filter(t => activeTools.includes(t.name))
+      .map(t => ({
+        type: 'function' as const,
+        function: {
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters
+        }
+      }));
+
+    if (toolsForProvider.length > 0) {
+      return {
+        tools: toolsForProvider,
+        tool_choice: 'auto'
+      };
+    }
+
+    return {};
+  }
+
   private async toolCall(
     root: RootData,
     providerName: ProviderName,
@@ -181,29 +206,14 @@ export class LoomEngine {
     // Limit to 5 iterations to prevent infinite loops
     const coalesced = coalesceMessages(messages, '');
 
-    const toolsForProvider = this.toolRegistry
-      .list()
-      .filter(t => activeTools.includes(t.name))
-      .map(t => ({
-        type: 'function' as const,
-        function: {
-          name: t.name,
-          description: t.description,
-          parameters: t.parameters
-        }
-      }));
-
-    const toolsToUse =
-      toolsForProvider.length > 0 ? toolsForProvider : undefined;
-    const toolChoiceToUse = toolsForProvider.length > 0 ? 'auto' : undefined;
+    const toolParameters = this.getToolParameters(activeTools);
 
     const response = await provider.generate({
       systemMessage: root.config.systemPrompt,
       messages: coalesced,
       model: modelName,
       parameters,
-      tools: toolsToUse,
-      tool_choice: toolChoiceToUse
+      ...toolParameters
     });
 
     const assistantMessage = response.message;
@@ -218,10 +228,9 @@ export class LoomEngine {
           provider: providerName,
           model_name: modelName,
           parameters,
-          tools: toolsToUse,
-          tool_choice: toolChoiceToUse,
           finish_reason: response.finish_reason,
-          usage: response.usage
+          usage: response.usage,
+          ...toolParameters
         }
       }
     );

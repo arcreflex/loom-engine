@@ -173,6 +173,7 @@ export function NodeView() {
         requestOnSubmit={requestOnSubmit}
         role={inputRole}
         generationParams={effectiveGenerationParams}
+        contextTokens={currentNode?.contextTokens}
         handleLargePaste={actions.handleLargePasteSubmit}
         currentNodeId={currentNode?.id}
       />

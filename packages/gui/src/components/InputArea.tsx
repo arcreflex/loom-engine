@@ -15,6 +15,7 @@ interface InputAreaProps {
   currentNodeId?: string | null; // Added currentNodeId prop
   disabled?: boolean;
   generationParams: GenerateOptions | null; // Generation parameters to display
+  contextTokens?: number; // Token count for current context
   handleLargePaste?: (content: string) => void | Promise<void>; // Function to handle large paste events
 }
 
@@ -25,6 +26,7 @@ export function InputArea({
   currentNodeId, // Use prop
   disabled = false,
   generationParams,
+  contextTokens,
   handleLargePaste
 }: InputAreaProps) {
   const PASTE_THRESHOLD_CHARS = 500; // Threshold for what constitutes a "large" paste
@@ -86,6 +88,11 @@ export function InputArea({
           ${requestOnSubmit ? 'text-terminal-text' : 'text-terminal-text/50'}
             `}
           >
+            {contextTokens !== undefined && (
+              <span className="text-terminal-text/80 mr-2">
+                ctx: {contextTokens.toLocaleString()} tok
+              </span>
+            )}
             {generationParams ? (
               <>
                 <span>n: {generationParams.n}</span>

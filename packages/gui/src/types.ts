@@ -16,6 +16,7 @@ export type GenerationRequestUpdate = {
 };
 
 export type GetNodeResponse = Node & {
+  contextTokens?: number;
   pendingGeneration?: { status: 'pending' | 'idle' };
 };
 
