@@ -688,9 +688,12 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
           get().actions.setStatusError(state.error);
         }
 
-        if (state.status === 'idle' && state.added?.length === 1) {
-          // Auto-navigate if single child and we're currently on the parent
-          set({ pendingNavigation: state.added[0].id });
+        if (state.status === 'idle') {
+          get().actions.unsubscribeFromGeneration();
+          if (state.added?.length === 1) {
+            // Auto-navigate if single child and we're currently on the parent
+            set({ pendingNavigation: state.added[0].id });
+          }
         } else if (state.status === 'error') {
           // Handle error state
           get().actions.setStatusError(state.error || 'Generation failed');
