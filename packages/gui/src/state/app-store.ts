@@ -291,7 +291,7 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
       const { currentNode, status } = get();
       if (!currentNode || status.type === 'loading') return;
 
-      const operation = generateAfter ? 'Generating' : 'Sending';
+      const operation = generateAfter ? 'Generating' : 'Saving';
       get().actions.setStatusLoading(operation);
       try {
         let messageNodeId = currentNode.id;
@@ -309,7 +309,9 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
         }
         set({ pendingNavigation: messageNodeId });
 
-        get().actions.setStatusIdle();
+        if (!get().currentNode?.pendingGeneration) {
+          get().actions.setStatusIdle();
+        }
       } catch (error) {
         get().actions.setStatusError(
           error instanceof Error
@@ -689,6 +691,7 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
         }
 
         if (state.status === 'idle') {
+          get().actions.setStatusIdle();
           get().actions.unsubscribeFromGeneration();
           if (state.added?.length === 1) {
             // Auto-navigate if single child and we're currently on the parent
