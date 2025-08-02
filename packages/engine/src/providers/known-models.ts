@@ -17,9 +17,9 @@ export const KNOWN_MODELS: {
       output: 2.3
     }
   },
-  'google/gemini-2.5-pro-preview-06-05': {
+  'google/gemini-2.5-pro': {
     provider: 'google',
-    model: 'gemini-2.5-pro-preview-06-05',
+    model: 'gemini-2.5-pro',
     docs_url:
       'https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-pro',
     capabilities: { max_input_tokens: 1048576, max_output_tokens: 65536 },
