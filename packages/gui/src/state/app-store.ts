@@ -62,6 +62,7 @@ const initialState: Omit<GuiAppState, 'actions'> = {
   // Component State
   paletteState: { status: 'closed' },
   isModelSwitcherOpen: false,
+  isMetadataModalOpen: false,
 
   // Dynamic Model Selection
   currentProviderName: null,
@@ -518,6 +519,8 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
     // Modal management
     openModelSwitcher: () => set({ isModelSwitcherOpen: true }),
     closeModelSwitcher: () => set({ isModelSwitcherOpen: false }),
+    openMetadataModal: () => set({ isMetadataModalOpen: true }),
+    closeMetadataModal: () => set({ isMetadataModalOpen: false }),
 
     // Graph view
     setGraphViewMode: mode =>

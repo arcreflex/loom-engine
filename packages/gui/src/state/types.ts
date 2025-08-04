@@ -108,6 +108,8 @@ export interface GuiAppActions {
   // Modal management
   openModelSwitcher: () => void;
   closeModelSwitcher: () => void;
+  openMetadataModal: () => void;
+  closeMetadataModal: () => void;
 
   // Graph view
   setGraphViewMode: (mode: GraphViewState['mode']) => void;
@@ -175,6 +177,7 @@ export interface GuiAppState {
   // Component State
   paletteState: PaletteStatus;
   isModelSwitcherOpen: boolean;
+  isMetadataModalOpen: boolean;
 
   // Dynamic Model Selection
   currentProviderName: ProviderName | null;

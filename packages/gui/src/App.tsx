@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { StatusBar } from './components/StatusBar';
 import { CommandPalette } from './components/CommandPalette';
 import { ModelSwitcherModal } from './components/ModelSwitcherModal.tsx';
+import { MetadataModal } from './components/MetadataModal';
 import { NavigationManager } from './components/NavigationManager';
 import HomeView from './components/HomeView';
 import { NodeView } from './views/NodeView';
@@ -15,6 +16,7 @@ function App() {
   // Use granular selectors to prevent re-renders on palette state changes
   const status = useAppStore(state => state.status);
   const isModelSwitcherOpen = useAppStore(state => state.isModelSwitcherOpen);
+  const isMetadataModalOpen = useAppStore(state => state.isMetadataModalOpen);
   const currentNode = useAppStore(state => state.currentNode);
   const siblings = useAppStore(state => state.siblings);
   const bookmarks = useAppStore(state => state.bookmarks);
@@ -316,6 +318,18 @@ function App() {
       }
     });
 
+    // Add command to show current node metadata
+    if (currentNode) {
+      cmds.push({
+        id: 'show-node-metadata',
+        title: 'Show Current Node Metadata',
+        description: 'Display metadata for the current node as formatted JSON',
+        execute: async () => {
+          actions.openMetadataModal();
+        }
+      });
+    }
+
     return cmds;
   }, [
     currentNode,
@@ -351,7 +365,11 @@ function App() {
       }
 
       // Navigate to parent (Escape) only when palette is closed
-      if (event.key === 'Escape' && paletteStatus === 'closed') {
+      if (
+        !event.defaultPrevented &&
+        event.key === 'Escape' &&
+        paletteStatus === 'closed'
+      ) {
         event.preventDefault();
         actions.navigateToParent();
       }
@@ -388,6 +406,14 @@ function App() {
         isOpen={isModelSwitcherOpen}
         onClose={actions.closeModelSwitcher}
         onSwitch={actions.createNewRoot}
+      />
+
+      <MetadataModal
+        isOpen={isMetadataModalOpen}
+        onClose={actions.closeMetadataModal}
+        metadata={
+          currentNode && 'metadata' in currentNode ? currentNode.metadata : null
+        }
       />
     </div>
   );
