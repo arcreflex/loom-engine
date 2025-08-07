@@ -3,3 +3,4 @@ set -eo pipefail
 npx lint-staged
 pnpm test
 pnpm typecheck
+npx agent-precommit --sandbox-only

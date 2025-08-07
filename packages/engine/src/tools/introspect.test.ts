@@ -4,6 +4,9 @@ import { getCodebaseContext } from './introspect.ts';
 
 function assertGitAndNodeModulesExcluded(str: string) {
   // Use join for these paths so that the source code doesn't cause a false positive, heh.
+  if (str.includes(['node_modules', 'typescript'].join('/'))) {
+    console.log(str);
+  }
   assert.ok(
     !str.includes(['node_modules', 'typescript'].join('/')),
     'Should not include node_modules'

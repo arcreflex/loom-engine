@@ -1,5 +1,6 @@
 # Dependencies
 node_modules/
+.pnpm-store
 
 # Build output
 dist/
@@ -35,3 +36,5 @@ data/
 # Coding agent workspace
 playground/
 **/.claude/settings.local.json
+.agent-precommit/reviews
+.agent-precommit/user-context.json
