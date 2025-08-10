@@ -82,6 +82,16 @@ export const KNOWN_MODELS: {
     capabilities: { max_input_tokens: 200000, max_output_tokens: 32000 },
     cost: { input: 15, output: 75 }
   },
+  'openai/gpt-5-2025-08-07': {
+    provider: 'openai',
+    model: 'gpt-5-2025-08-07',
+    capabilities: {
+      max_input_tokens: 400000,
+      max_output_tokens: 128000,
+      max_total_tokens: 400000
+    },
+    cost: { input: 1.25, output: 10 }
+  },
   'openai/o3-2025-04-16': {
     provider: 'openai',
     model: 'o3-2025-04-16',
