@@ -1,0 +1,9 @@
+{
+  "ports": [],
+  "readonly": [
+    ".git/hooks",
+    ".husky",
+    ".agent-sandbox",
+    ".agent-precommit/user-context.json"
+  ]
+}
