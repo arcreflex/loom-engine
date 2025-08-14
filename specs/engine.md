@@ -36,14 +36,16 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 ### Key Behaviors
 - **Generation flow**: Context construction → provider call → tool execution loop → result appending
 - **Multi-completion**: Parallel generation using Promise.all for n>1 requests
+- **Tool calling constraint**: When activeTools are provided, n must be 1; LoomEngine.generate throws if n > 1
 - **Token estimation**: ~0.3 tokens per character heuristic with model capability clamping
 - **Tool recursion**: GenerateResult.next enables streaming tool execution to UI
 - **Bookmark integration**: editNode moves bookmarks when creating new nodes
+- **Append filtering**: Empty text messages are dropped on append unless they carry tool_calls
 
 ### Provider Orchestration
 
 **Provider Selection**
-- Parses model string to determine provider (e.g., "openai/gpt-4o")
+- Engine receives providerName and modelName; parsing utilities may be used at call sites
 - Instantiates appropriate provider adapter
 - Handles provider-specific configuration and authentication
 
@@ -51,6 +53,7 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 - Applies default parameters from configuration
 - Enforces provider-specific parameter limits
 - Clamps max_tokens using: min(options.max_tokens, model.capabilities.max_output_tokens, residual_input_window)
+- **Invariant**: Effective max_tokens must be ≥ 1 after clamping (intended; current code may pass negative values)
 - Uses ~0.3 tokens per input character heuristic for token estimation
 
 **Message Coalescing**

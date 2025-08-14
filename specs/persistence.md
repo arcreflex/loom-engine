@@ -69,6 +69,7 @@ Matches current FileSystemStore implementation.
 **Direct writes**: Files written directly with fs.writeFile (no temp-file/rename sequence)
 **Cache invalidation**: NodeStructure cache invalidated after writes
 **No transactional guarantees**: No multi-file transaction or locking mechanisms
+**Root deletion**: roots.json includes a deleted flag and Forest.listRoots filters deleted roots; no root deletion operation exists today (flag is future-facing)
 
 ### Acceptable Failure Modes
 - **Stale cache**: Cache may be outdated after external modifications

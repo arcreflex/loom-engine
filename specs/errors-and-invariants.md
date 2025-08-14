@@ -83,6 +83,7 @@ The system fails loudly when referencing non-existent entities to maintain data 
 
 ### Capability Enforcement
 **Model limits**: Enforce context length and parameter limits
+**Effective max_tokens invariant**: Effective max_tokens must be positive after clamping; if the residual window is exhausted, the engine must either clamp to 1 or fail early with a clear error (intended; current code may compute negative max_tokens)
 **Feature support**: Error on unsupported features (tools, streaming)
 **Rate limiting**: Handle and propagate provider rate limit errors
 
@@ -101,7 +102,7 @@ Authoritative rules for message coalescing behavior (referenced from data-model.
 
 **Intended behavior**: Do not coalesce assistant messages that include tool_calls; do not coalesce across tool messages. Only coalesce adjacent user/assistant messages with text content.
 
-**Implementation gap**: Current coalesceMessages function coalesces purely by role adjacency without checking tool_calls. This is tracked as a known gap requiring future refinement.
+**Implementation gap**: Current coalesceMessages function coalesces purely by role adjacency without checking tool_calls. This is tracked as a known gap requiring future refinement. Note: GUI visual coalescing for display purposes is separate and does not affect engine coalescing rules.
 
 ### Matching Rules
 **Exact matching**: Message equality requires exact content match

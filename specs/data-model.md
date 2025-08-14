@@ -66,8 +66,8 @@ Optional structured data attached to nodes:
 Messages considered equal when:
 - Same role
 - Same content (including null handling)
-- Same tool_calls structure (for assistant messages)
-- Tool results match by tool_call_id
+- Same tool_calls structure with deep equality (for assistant messages)
+- Tool results match by tool_call_id (for tool messages)
 
 ### Message Ordering
 - **Conversation flow**: User → Assistant → Tool (if applicable) → Assistant (continuation)

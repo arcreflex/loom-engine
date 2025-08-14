@@ -14,7 +14,7 @@ Central registry for managing tool availability and execution.
 ### JSON Schema Constraint
 **Current requirement**: All tools must provide JSON Schema for parameters
 **Object schemas only**: Tools must accept object parameters (not primitives)
-**Validation status**: JSON Schema validation is planned and will be enforced before invoking handlers (TODO in ToolRegistry.execute)
+**Validation status**: JSON schema validation required by contract; not implemented, tracked as a gap
 **Current validation**: Basic parameter validation only
 
 ### Execution Result Format
@@ -71,8 +71,8 @@ Central registry for managing tool availability and execution.
 
 ### Long-lived Client Connections
 **Connection management**: One long-lived Stdio connection per configured server
-**Error handling**: Errors are logged and discovery continues (no automatic reconnection)
-**Resource cleanup**: Proper shutdown and cleanup of MCP connections
+**No restart supervision**: No restart supervision or connection lifecycle management is implemented; discovery failures are logged and ignored
+**Resource cleanup**: Connections maintained until process exit
 
 ### Error Isolation
 **Server failures**: Individual MCP server failures don't affect other tools
@@ -89,7 +89,7 @@ Central registry for managing tool availability and execution.
 ## MCP Communication Protocols
 
 ### stdio vs http (Future)
-**Current**: Only transport: "stdio" is implemented; "http" transport throws "not implemented"
+**Current**: stdio only - "http" transport throws "not yet implemented"
 **Future**: HTTP transport for MCP servers
 **Protocol abstraction**: Internal tool interface remains unchanged
 **Configuration**: Server-specific transport configuration

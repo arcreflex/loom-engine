@@ -121,6 +121,7 @@ When model not in catalog:
 2. Subtract from model's known context limit (if available)
 3. Clamp max_tokens by model capabilities and estimated residual window
 4. Enforce provider-specific maximum output limits
+5. **Parameter constraint**: Unknown models use conservative caps; if residual capacity is ≤ 0, generation should fail early or clamp to 1 (intended; code gap)
 
 ### Safety Limits
 - **Prevent runaway generation**: Cap max_tokens at reasonable levels
@@ -184,7 +185,6 @@ Examples:
 1. Split model string on first `/`
 2. Use first part as provider identifier
 3. Pass remainder as model name to provider
-4. Handle legacy formats and aliases
 
 ### Unknown Provider Handling
 - Error on completely unknown providers

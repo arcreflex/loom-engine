@@ -45,9 +45,9 @@ Central mechanism for ensuring deterministic ordering of Forest mutations.
 Manages concurrent generation requests and ensures proper resource allocation.
 
 ### Per-node Request Tracking
-**Multiple requests allowed**: Multiple generations can run concurrently for the same node
+**Multiple requests allowed**: Multiple generations can run concurrently for the same node; no single-flight, no cancel
 **Request tracking**: Keeps a Set of requests per node for SSE fan-out
-**No queuing/cancellation**: No request queuing or cancellation mechanisms implemented
+**No queuing/cancellation**: No request queuing or cancellation mechanisms implemented; desired single-flight is a tracked gap
 
 ### SSE Fan-out
 **Multiple clients**: Single generation can stream to multiple SSE connections

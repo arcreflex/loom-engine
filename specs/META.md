@@ -51,6 +51,8 @@ Agreed gaps between current implementation and intended behavior:
 - **Generation concurrency**: Should enforce single-flight generation per node (currently allows concurrent)
 - **MCP HTTP transport**: Only stdio implemented; http throws "not implemented"
 - **Tool execution limits**: No recursion depth limits or timeouts for tool calls
+- **Effective max_tokens lower bound**: Engine should clamp to minimum 1 or fail early when context exhausted
+- **MCP lifecycle management**: No restart supervision or connection cleanup for MCP servers
 
 ## Decisions
 

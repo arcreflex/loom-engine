@@ -108,6 +108,9 @@ Editing system prompt creates/selects new Root via Forest.getOrCreateRoot rather
 
 **Toggle Behavior**: Per-message or global mode switching
 
+### ContextView and Visual Coalescing
+**Display vs. Storage**: The UI may visually coalesce adjacent messages for display; this is purely presentational and does not affect engine's coalescing rules or stored message structure.
+
 ## Error/Status Display Patterns
 
 ### Error Categories

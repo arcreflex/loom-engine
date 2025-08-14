@@ -193,20 +193,15 @@ args = ["-m", "mcp.server.web"]
 
 ### Server Management
 **Lifecycle**: MCP servers started when configuration loaded
-**Restart behavior**: Servers restarted if they crash
-**Shutdown**: Clean shutdown when application exits
+**Connection management**: Single stdio client created; no restart supervision or connection lifecycle management
+**Error handling**: Discovery failures are logged and ignored
 
 ## Logging Configuration
 
-### Log Scope
-**Primary logger**: `loom.log` namespace for all application logging
-**Sub-loggers**: Component-specific loggers (e.g., `loom.log.engine`, `loom.log.mcp`)
-**External libraries**: Separate log streams, configurable levels
-
 ### Log Output
 **File destination**: `{DATA_DIR}/loom.log`
-**Format**: Simple append-only logging (no rotation, no levels)
-**Implementation**: Single log file with basic timestamped entries
+**Format**: Append-only file with timestamped lines
+**Implementation**: Single process, single log file, no rotation, no levels
 
 ## Configuration Validation
 
