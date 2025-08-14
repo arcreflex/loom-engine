@@ -194,7 +194,27 @@ Adding a new provider typically requires:
 
 ---
 
-## 10. Contribution Protocol for Automated Agents
+## 10. Specification
+
+Detailed specifications for each domain live in the `specs/` directory.
+
+| Topic | Description | Link |
+| --------------- | ------------------------------------------------ | ------------------------------------------- |
+| Architecture | Overall system architecture and design decisions | [Architecture](specs/architecture.md) |
+| Data model and tree semantics | Roots, nodes, messages, metadata, invariants | [Data model](specs/data-model.md) |
+| Persistence (FileSystemStore) | On-disk layout, IDs, caching, consistency | [Persistence](specs/persistence.md) |
+| Engine (LoomEngine and Forest) | Responsibilities, generate/edit/delete flows | [Engine](specs/engine.md) |
+| Providers and models | Provider abstraction, model caps, tool-calls mapping | [Providers and models](specs/providers-and-models.md) |
+| Tools and MCP | ToolRegistry, JSON schema, built-ins, MCP discovery | [Tools and MCP](specs/tools-and-mcp.md) |
+| Configuration | Config layering, env var promotion, presets, bookmarks | [Configuration](specs/configuration.md) |
+| GUI | UI architecture, state flows, graph view, generation UX, server interactions | [GUI](specs/gui.md) |
+| Concurrency and ordering | Serial queue, request sequencing, consistency | [Concurrency](specs/concurrency.md) |
+| Error handling and invariants | Where we fail loudly, constraints to preserve | [Errors and invariants](specs/errors-and-invariants.md) |
+| Glossary | Canonical terms used across specs | [Glossary](specs/glossary.md) |
+
+---
+
+## 11. Contribution Protocol for Automated Agents
 
 1. Fork or create a branch.
    * Naming convention: `feat/<subject>` or `fix/<bug>`.  Keep scope tight.
