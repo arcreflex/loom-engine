@@ -81,14 +81,14 @@ UI architecture and flows, including server interactions.
 - Tool execution results in conversation
 
 ### Graph View Modes
-**Tree Mode**: Traditional hierarchical tree display
-**Conversation Mode**: Linear conversation view with branch indicators
-**Compact Mode**: Condensed view for large conversations
+**single-root**: Display single conversation tree
+**multi-root**: Display multiple conversation trees
+**compact**: Condensed view for large conversations
 
 **Hover Preview**:
 - Node content preview without navigation
 - Metadata display (generation parameters, timestamps)
-- Quick actions (delete, edit, bookmark)
+- Note: Quick actions in hover are not implemented
 
 ## Rendering Modes
 
@@ -126,13 +126,16 @@ UI architecture and flows, including server interactions.
 
 ## Server Interaction (Moved from server-api)
 
-### High-level Endpoint Roles
-**GET /conversations**: List all conversation roots
-**GET /conversations/:rootId**: Get conversation tree structure
-**GET /conversations/:rootId/nodes/:nodeId**: Get specific node content
-**POST /conversations/:rootId/append**: Add user input to conversation
-**POST /conversations/:rootId/generate**: Trigger AI generation
-**DELETE /conversations/:rootId/nodes/:nodeId**: Delete node
+### Actual Endpoints
+See server.ts for complete list. Key endpoints include:
+- `/api/state` (GET/PUT) - Application state management
+- `/api/nodes/:id` (+/path +/children +/siblings +/generation SSE) - Node operations
+- `/api/nodes/:id/append` (POST) - Add messages
+- `/api/nodes/:id/generate` (POST) - Trigger generation
+- `/api/nodes/:id/content` (PUT) - Edit content
+- `/api/roots` (GET/POST) - Root management
+- `/api/bookmarks`, `/api/models`, `/api/tools` - Resource management
+- `/api/graph/topology`, `/api/config/*` - Configuration and topology
 
 ### SSE Subscription Lifecycle
 **Connection Establishment**:
@@ -142,9 +145,9 @@ UI architecture and flows, including server interactions.
 
 **Event Streaming**:
 1. Generation requests trigger SSE events
-2. Partial responses streamed as `generation-chunk` events
-3. Completion signaled with `generation-complete` event
-4. Error conditions sent as `generation-error` events
+2. Event payload: `{ status: 'pending' | 'idle' | 'error', added?: NodeData[], error?: string }`
+3. Not chunked token streams - discrete status updates with complete nodes
+4. Tool-calling recursion handled via GenerateResult.next promise chain
 
 **Connection Management**:
 - Automatic reconnection on connection loss
@@ -159,27 +162,12 @@ UI architecture and flows, including server interactions.
 ## State Management (Zustand)
 
 ### Store Structure
-```typescript
-interface AppState {
-  // Current conversation state
-  currentRootId: RootId | null;
-  currentNodeId: NodeId | null;
-  
-  // Conversation data
-  conversations: ConversationSummary[];
-  currentConversation: ConversationTree | null;
-  
-  // UI state
-  sidebarOpen: boolean;
-  viewMode: 'conversation' | 'graph';
-  renderMode: 'markdown' | 'raw';
-  
-  // Generation state
-  isGenerating: boolean;
-  activeTools: string[];
-  generationParameters: GenerationParams;
-}
-```
+Zustand store is used as single source of truth for UI state. See `state/types.ts` for complete interface definitions. Key state includes:
+- Current conversation state (currentRootId, currentNodeId)
+- Conversation data and tree structure
+- UI state (sidebar, view modes, rendering preferences)
+- Generation state and active tools
+- Graph view state and hover previews
 
 ### Actions and Updates
 **Navigation**: Update current node/root with optimistic updates

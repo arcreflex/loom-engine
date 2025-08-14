@@ -8,19 +8,23 @@ The Forest class manages the conversation tree structure and provides core tree 
 
 ### Core Operations
 
-**getOrCreateRoot(rootId?: RootId)**
-- Creates new conversation root or retrieves existing
-- Generates unique RootId if not provided
-- Initializes root node with system message
+**getOrCreateRoot(systemPrompt?: string): Promise<RootData>**
+- Creates new conversation root or retrieves existing with matching systemPrompt
+- Generates unique RootId if creating new root
+- Initializes root node with system message config
 - Returns root handle for subsequent operations
 
-**getPath(rootId: RootId, nodeId: NodeId)**
-- Retrieves complete path from root to specified node
-- Returns array of nodes representing conversation history
+**getRoot(rootId: RootId): Promise<RootData | null>**
+- Retrieves existing root by ID
+- Returns null if root doesn't exist
+
+**getPath({ from?: NodeId, to: NodeId }): Promise<{ root: RootData, path: NodeData[] }>**
+- Retrieves complete path from root (or from node) to specified target node
+- Returns root data and array of nodes representing conversation history
 - Validates node existence and reachability
 - Throws error if path is invalid or broken
 
-**append(rootId: RootId, parentNodeId: NodeId, messages: Message[])**
+**append(parentId: NodeId, messages: Message[], metadata: Omit<NodeMetadata, 'timestamp' | 'original_root_id'>): Promise<NodeData>**
 - Adds new messages to conversation tree
 - Implements prefix-aware appending logic
 - May reuse existing nodes for identical message sequences
@@ -28,32 +32,31 @@ The Forest class manages the conversation tree structure and provides core tree 
 
 ### Tree Modification Operations
 
-**split(rootId: RootId, nodeId: NodeId, splitIndex: number)**
+**splitNode(nodeId: NodeId, position: number): Promise<NodeData>**
 - Splits node content at specified message index
-- Creates new node for messages after split point
+- Creates new node for content after split point
 - Updates parent/child relationships accordingly
 - Enables fine-grained conversation editing
 
-**edit(rootId: RootId, nodeId: NodeId, newMessages: Message[])**
-- Replaces node content using LCP (Longest Common Prefix) algorithm
-- Finds divergence point between old and new content
-- Creates branch at divergence point if necessary
+**editNodeContent(nodeId: NodeId, newContent: string): Promise<NodeData>**
+- Replaces node message content
+- Creates new node with updated content
 - Preserves conversation history through branching
 
-**delete(rootId: RootId, nodeId: NodeId, strategy: 'cascade' | 'reparent')**
+**deleteNode(nodeId: NodeId, reparentToGrandparent = false): Promise<Node | null>**
 - Removes node from conversation tree
-- Cascade: deletes node and all descendants
-- Reparent: attaches children to deleted node's parent
+- reparentToGrandparent=false: cascade deletes node and all descendants
+- reparentToGrandparent=true: attaches children to deleted node's parent
 - Updates bookmarks and references
 
 ### Navigation Operations
 
-**getChildren(rootId: RootId, nodeId: NodeId)**
+**getChildren(nodeId: NodeId): Promise<NodeData[]>**
 - Returns array of direct child nodes
 - Used for tree navigation and branch exploration
 - May return empty array for leaf nodes
 
-**getSiblings(rootId: RootId, nodeId: NodeId)**
+**getSiblings(nodeId: NodeId): Promise<NodeData[]>**
 - Returns nodes sharing same parent
 - Enables horizontal navigation within conversation level
 - Excludes the specified node from results
@@ -61,6 +64,23 @@ The Forest class manages the conversation tree structure and provides core tree 
 ## LoomEngine Responsibilities
 
 The LoomEngine orchestrates providers, parameters, and generation flows.
+
+### Key Operations
+
+**generate(rootId: RootId, providerName: ProviderName, modelName: string, contextMessages: Message[], options: GenerateOptions, activeTools?: string[]): Promise<GenerateResult>**
+- Core generation method that handles the full flow
+- options: { n, temperature, max_tokens }
+- result: { childNodes, next?: Promise<GenerateResult> } for tool-calling recursion
+- Coalesces context with coalesceMessages before provider call
+- Shapes max_tokens based on KNOWN_MODELS and rough token estimate
+
+**getMessages(nodeId: NodeId): Promise<{ root: RootConfig, messages: Message[] }>**
+- Wrapper method that retrieves conversation path and converts to messages
+- Used by generate to construct context
+
+**editNode(nodeId: NodeId, newContent: string): Promise<NodeData>**
+- Handles bookmark move if configStore present
+- Delegates to Forest.editNodeContent
 
 ### Provider Orchestration
 
@@ -161,15 +181,14 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 4. Prepare for tree insertion
 
 ### Tool Call Execution Loop
+Current implementation uses recursive GenerateResult.next pattern:
 ```
-while (response contains tool_calls) {
-  for each tool_call {
-    execute_tool(tool_call)
-    append_tool_result_to_conversation()
-  }
-  generate_next_response_with_tool_results()
-}
+1. Assistant message with tool_calls is generated
+2. Tool calls are executed and appended to conversation
+3. Next generation is triggered recursively via GenerateResult.next Promise
+4. Process continues until no more tool_calls are generated
 ```
+The GenerateResult.next design enables streaming tool execution to UI.
 
 ### Recursion Termination
 - Maximum recursion depth to prevent infinite loops

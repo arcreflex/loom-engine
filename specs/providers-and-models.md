@@ -16,6 +16,14 @@ All provider implementations must conform to a common behavioral interface for c
 - Preserve tool call structure and IDs
 - Apply provider-specific message constraints
 
+### Tool Choice Semantics
+**Supported values**:
+- `'auto'`: Model decides whether to call tools
+- `'none'`: Model must not call any tools 
+- `{ type: 'function', function: { name: string } }`: Model must call specific named tool
+
+**Note**: `'required'` tool choice is not supported in current implementation.
+
 ### Tool Call Mapping
 
 **Assistant Tool Calls → Provider Format**
@@ -74,7 +82,7 @@ interface ToolCall {
 ## Model Catalog (KNOWN_MODELS)
 
 ### Model Capabilities Database
-**Purpose**: Centralized knowledge of model capabilities and limits
+**Purpose**: Best-effort catalog used to cap max_tokens; entries are advisory, not exhaustive
 
 **Model entries include**:
 - Context window size (max input tokens)
@@ -85,15 +93,15 @@ interface ToolCall {
 
 ### Capability Detection
 **Known models**: Use catalog data for parameter selection
-**Unknown models**: Apply conservative fallback limits
+**Unknown models**: Fall back to conservative limits
 **Provider detection**: Infer capabilities from model string format
 
 ### Fallback Behavior
 When model not in catalog:
-- Use provider default context limits
+- Use conservative fallback limits
 - Assume basic tool calling support
 - Apply conservative token estimation
-- Log unknown model for future catalog addition
+- Entries are advisory for optimization, not restrictive
 
 ## Parameter Shaping Rules
 
@@ -119,9 +127,10 @@ When model not in catalog:
 - **Rate limiting awareness**: Back off on provider rate limits
 
 ### Provider-specific Parameter Mappings
-**OpenAI**: Direct parameter mapping
-**Anthropic**: Maps max_tokens to max_tokens_to_sample
-**Google**: Converts to generationConfig format
+**OpenAI**: Uses `max_completion_tokens` parameter
+**Anthropic**: Uses `max_tokens` parameter
+**Google**: Uses `maxOutputTokens` in generationConfig
+**OpenRouter**: Piggybacks on OpenAIProvider with baseURL override and OPENROUTER_API_KEY
 
 ## Adding a Provider
 
@@ -166,6 +175,11 @@ Examples:
 - `openai/gpt-4o`
 - `anthropic/claude-3-sonnet`
 - `google/gemini-pro`
+- `openrouter/moonshotai/kimi-k2`
+
+### Supported Providers
+**Current providers**: openai, anthropic, google, openrouter
+**OpenRouter note**: Uses OpenAIProvider implementation with custom baseURL and API key
 
 ### Provider Detection
 1. Split model string on first `/`

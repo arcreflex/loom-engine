@@ -90,9 +90,9 @@ The system fails loudly when referencing non-existent entities to maintain data 
 **Content type validation**: Ensure content is string or null
 
 ### Coalescing Rules
-**Role consistency**: Only coalesce messages with same role
-**Tool call preservation**: Never coalesce across tool call boundaries
-**Content merging**: Properly combine content when coalescing
+**Desired behavior**: Do not coalesce assistant messages that include tool_calls, and do not coalesce across tool messages
+**Current implementation**: Coalesces purely by role - gaps exist between intended and actual behavior
+**Content merging**: When coalescing is appropriate, combine content properly
 
 ### Matching Rules
 **Exact matching**: Message equality requires exact content match

@@ -5,10 +5,10 @@ Canonical vocabulary for humans and agents collaborating on the loom-engine syst
 ## Core Entities
 
 ### Root
-A top-level container for a conversation tree. Each Root has a unique RootId and contains an associated system node that serves as the tree root. Roots are listed in the `roots.json` index file.
+A top-level container for a conversation tree. RootData is a special node with no message; it has config.systemPrompt and child_ids. In serialization, root is rendered as role=system with message equal to the systemPrompt. Each Root has a unique RootId and is listed in the `roots.json` index file.
 
 ### Node
-An individual point in a conversation tree that contains an array of Messages. Each Node has a unique NodeId (scoped within its Root) and maintains parent/child relationships that form the tree structure.
+An individual point in a conversation tree that contains exactly one Message. Forest represents each role turn as a node; the path from root to a node is the conversation history. Each Node has a unique NodeId (scoped within its Root) and maintains parent/child relationships that form the tree structure.
 
 ### Message
 Individual communication units within a Node. Three types exist:
@@ -47,7 +47,7 @@ A saved reference to a specific Node in a conversation, allowing quick navigatio
 ## Navigation and Structure
 
 ### Path
-A sequence of nodes from a Root to a target Node, representing the complete conversation history. Paths are deterministic and used for message history construction during generation.
+A sequence of nodes (messages) from a Root to a target Node, representing the complete conversation history. Paths are deterministic and used for message history construction during generation.
 
 ### Prefix Matching
 The algorithm used when appending new content to existing conversations. Finds the longest common prefix between new and existing message sequences, enabling efficient tree reuse and branching.

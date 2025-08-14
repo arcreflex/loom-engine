@@ -11,10 +11,11 @@ Conceptual model and invariants of roots, nodes, messages, and metadata.
 - **Special node**: Every root has an associated system node that serves as the tree root
 
 ### Node
-- **Purpose**: Individual point in conversation tree, contains messages
+- **Purpose**: Individual point in conversation tree, contains exactly one message
 - **Identity**: Unique NodeId (branded string), scoped within root
 - **Relationships**: Parent/child links forming tree structure
-- **Content**: Array of Message objects
+- **Content**: Exactly one Message object
+- **Representation**: Forest represents each role turn as a node; the path from root to a node is the conversation history
 
 ### Message
 Three distinct message types:
@@ -44,20 +45,21 @@ Optional structured data attached to nodes:
 - **ID uniqueness**: NodeId unique within root, RootId globally unique
 
 ### Root Node Behavior
-- **System role**: Root node contains system message or initial context
+- **Special structure**: RootData is a special node with no message; it has config.systemPrompt and child_ids
+- **System role rendering**: In serialization, root is rendered as role=system with message equal to the systemPrompt
 - **Cannot be deleted**: Root node deletion would orphan entire tree
-- **Cannot be edited**: Root content modification affects entire conversation context
+- **Immutable content**: Root content isn't edited in place; "editing the system prompt" is implemented by creating/selecting a new Root, not by mutating an existing Root
 
 ### Path Traversal
 - **Deterministic paths**: Path from root to any node is unique
-- **Node reuse**: Nodes with identical message content may be shared across paths
+- **Node reuse**: Prefix matching reuses existing child nodes with identical message (role, content, tool calls) under the same parent. Nodes are not shared across different parents/roots
 - **Prefix matching**: Navigation follows longest common prefix principle
 
 ## Message Semantics
 
 ### Content Handling
 - **Null content**: Assistant messages may have null content when only tool calls present
-- **Coalescing intent**: Multiple consecutive messages of same role should be merged when possible
+- **Coalescing rules**: Only coalesce adjacent user/assistant messages with text content and no tool_calls; do not coalesce across tool messages or assistant messages that include tool_calls
 - **Tool call structure**: Assistant tool calls followed by corresponding tool results
 
 ### Message Equality

@@ -14,10 +14,9 @@ Config resolution and intended behavior.
 ```
 ~/.loom/
 ├── config.toml           # Main configuration file
-├── config.development.toml # Environment-specific overrides
-├── config.production.toml  # Production settings
+├── config.*.toml         # Additional config files (merged lexically)
 ├── loom.log              # Application logs
-└── conversations/        # Conversation data
+└── <rootId>/             # Conversation data (no conversations/ folder)
 ```
 
 ## Default Config File Provisioning
@@ -31,32 +30,35 @@ When `config.toml` doesn't exist:
 
 ### Stub Config Content
 ```toml
-[providers.openai]
-# apiKey = "sk-..."  # Uncomment and add your API key
-baseURL = "https://api.openai.com/v1"
-
 [providers.anthropic]
-# apiKey = "sk-ant-..."  # Uncomment and add your API key
+apiKey = "your API key"  # Concrete placeholder, not commented
+
+[providers.openai]
+apiKey = "your API key"
+
+[providers.google]
+apiKey = "your API key"
+projectId = "your project id"
 
 [defaults]
 model = "openai/gpt-4o"
-temperature = 1.0
+temperature = 1
 maxTokens = 1024
-n = 1
+n = 5
 systemPrompt = "You are a helpful assistant."
 ```
 
 ## Configuration Layering
 
 ### File Precedence (Highest to Lowest)
-1. **Environment-specific config**: `config.{NODE_ENV}.toml`
-2. **Main config file**: `config.toml`
+1. **Main config file**: `config.toml`
+2. **Additional config files**: All other `config.*.toml` files merged in lexicographic order
 3. **Built-in defaults**: Hardcoded fallback values
 
 ### Merge Strategy
+**Lexical merge**: Load main config.toml, then merge all other config.*.toml files in lexicographic order
 **Deep merge**: Nested objects combined, not replaced
-**Array replacement**: Arrays completely replaced, not merged
-**Type preservation**: Maintain data types across layers
+**No NODE_ENV-specific precedence**: Current behavior merges all config files lexically
 
 ### Example Layering
 Base `config.toml`:
@@ -66,13 +68,13 @@ model = "openai/gpt-4o"
 temperature = 1.0
 ```
 
-Environment `config.development.toml`:
+Additional `config.custom.toml`:
 ```toml
 [defaults]
-temperature = 0.7  # Override for development
+temperature = 0.7  # Override applied lexically
 ```
 
-Result: Development uses gpt-4o model with 0.7 temperature.
+Result: Merged configuration uses gpt-4o model with 0.7 temperature.
 
 ## Environment Variable Promotion
 
@@ -102,15 +104,17 @@ Result: Development uses gpt-4o model with 0.7 temperature.
 **User parameters**: Request-specific parameters (highest priority)
 
 ### Preset Structure
+Presets only support n, temperature, and maxTokens (not model or systemPrompt):
 ```toml
 [presets.creative]
 temperature = 1.5
 maxTokens = 2048
-systemPrompt = "You are a creative writing assistant."
+n = 3
 
 [presets.analytical]
 temperature = 0.3
-model = "anthropic/claude-3-sonnet"
+maxTokens = 512
+n = 1
 ```
 
 ### activePresetName Switching
@@ -138,12 +142,23 @@ model = "anthropic/claude-3-sonnet"
 **Fallback**: Default to root node if bookmark invalid
 
 ### Data Structure
+Bookmarks are stored as an array of objects, not a TOML map:
 ```toml
-currentNodeId = "root_123_node_456"
+currentNodeId = "root-1/node-2"
 
-[bookmarks]
-"Conversation 1" = "root_123_node_789"
-"Debug Session" = "root_456_node_123"
+[[bookmarks]]
+title = "Conversation 1"
+rootId = "root-1"
+nodeId = "root-1/node-3"
+createdAt = "2024-01-01T00:00:00Z"
+updatedAt = "2024-01-01T00:00:00Z"
+
+[[bookmarks]]
+title = "Debug Session"
+rootId = "root-2"
+nodeId = "root-2/node-1"
+createdAt = "2024-01-01T00:00:00Z"
+updatedAt = "2024-01-01T00:00:00Z"
 ```
 
 ## MCP Servers Configuration

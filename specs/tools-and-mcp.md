@@ -32,10 +32,10 @@ Central registry for managing tool availability and execution.
 **Constraints**: No system modification, read-only operation
 
 ### introspect
-**Purpose**: Allow models to examine available tools and capabilities
-**Intent**: Enable dynamic tool discovery and usage planning
-**Parameters**: Optional tool name for detailed information
-**Constraints**: Metadata only, no execution of other tools
+**Purpose**: Introspects the loom-engine codebase (overview or all) by walking the repo
+**Intent**: Returns a formatted string of the codebase structure and content
+**Parameters**: level: 'overview' | 'all' - determines depth of introspection
+**Constraints**: Read-only repository analysis, does not enumerate tools/capabilities
 
 ### Tool Implementation Guidelines
 - **Read-only preference**: Favor information retrieval over system modification
@@ -52,8 +52,9 @@ Central registry for managing tool availability and execution.
 ### tool_choice Semantics
 **auto**: Provider chooses whether to use tools based on context
 **none**: Force provider to respond without tool usage
-**required**: Provider must use at least one tool in response
-**specific tool**: Force usage of particular tool
+**specific tool**: Force usage of particular tool ({ type: 'function', function: { name: string } })
+
+**Note**: 'required' tool choice is not currently supported.
 
 ### Provider Compatibility
 **OpenAI**: Native tool calling support
@@ -88,7 +89,7 @@ Central registry for managing tool availability and execution.
 ## MCP Communication Protocols
 
 ### stdio vs http (Future)
-**Current**: stdio-based communication with MCP servers
+**Current**: stdio transport only - HTTP transport is not implemented
 **Future**: HTTP transport for MCP servers
 **Protocol abstraction**: Internal tool interface remains unchanged
 **Configuration**: Server-specific transport configuration
