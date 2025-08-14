@@ -13,7 +13,7 @@ The data directory (default `~/.loom/`) contains:
 ├── roots.json               # Registry of all conversation roots
 └── <rootId>/
     └── nodes/
-        └── node-<n>.json    # Individual node files
+        └── <nodeId>.json    # Individual node files
 ```
 
 ### File Purposes
