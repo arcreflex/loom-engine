@@ -14,8 +14,8 @@ Central registry for managing tool availability and execution.
 ### JSON Schema Constraint
 **Current requirement**: All tools must provide JSON Schema for parameters
 **Object schemas only**: Tools must accept object parameters (not primitives)
-**Validation approach**: Schema validation is pending implementation
-**Expected direction**: Full JSON Schema validation for tool calls
+**Validation status**: JSON Schema validation is planned (TODO in ToolRegistry.execute)
+**Current validation**: Basic parameter validation only
 
 ### Execution Result Format
 **Return type**: String only - all tool results converted to string representation
@@ -35,7 +35,7 @@ Central registry for managing tool availability and execution.
 **Purpose**: Introspects the loom-engine codebase (overview or all) by walking the repo
 **Intent**: Returns a formatted string of the codebase structure and content
 **Parameters**: level: 'overview' | 'all' - determines depth of introspection
-**Constraints**: Read-only repository analysis, does not enumerate tools/capabilities
+**Constraints**: Read-only repository analysis, excludes node_modules and .git, only includes text-like files by extension
 
 ### Tool Implementation Guidelines
 - **Read-only preference**: Favor information retrieval over system modification
@@ -70,8 +70,8 @@ Central registry for managing tool availability and execution.
 **Example**: `filesystem_readFile`, `web_search`
 
 ### Long-lived Client Connections
-**Connection management**: Maintain persistent connections to MCP servers
-**Reconnection logic**: Automatic reconnection on connection failure
+**Connection management**: One long-lived Stdio connection per configured server
+**Error handling**: Errors are logged and discovery continues (no automatic reconnection)
 **Resource cleanup**: Proper shutdown and cleanup of MCP connections
 
 ### Error Isolation
@@ -84,12 +84,12 @@ Central registry for managing tool availability and execution.
 2. **Connection establishment**: Connect to configured MCP servers
 3. **Tool enumeration**: Discover available tools from each server
 4. **Registration**: Add discovered tools to ToolRegistry with namespace prefix
-5. **Health monitoring**: Ongoing connection health checks
+5. **Error handling**: Connection failures logged, discovery continues with other servers
 
 ## MCP Communication Protocols
 
 ### stdio vs http (Future)
-**Current**: stdio transport only - HTTP transport is not implemented
+**Current**: Only transport: "stdio" is implemented - "http" throws "not yet implemented"
 **Future**: HTTP transport for MCP servers
 **Protocol abstraction**: Internal tool interface remains unchanged
 **Configuration**: Server-specific transport configuration

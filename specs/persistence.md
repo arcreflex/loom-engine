@@ -13,7 +13,7 @@ The data directory (default `~/.loom/`) contains:
 ├── roots.json               # Registry of all conversation roots
 └── <rootId>/
     └── nodes/
-        └── <rootId>/node-<n>.json # Individual node files
+        └── node-<n>.json    # Individual node files
 ```
 
 ### File Purposes
@@ -51,12 +51,12 @@ The data directory (default `~/.loom/`) contains:
 
 **Cache structure**: Single in-memory array across all roots, invalidated on save/delete
 
-### Invalidation Triggers
+### Cache Invalidation
 Cache invalidation occurs on:
-- **Node creation**: New nodes added to tree
-- **Node deletion**: Nodes removed from tree
-- **Tree modifications**: Parent/child relationship changes
-- **Root operations**: Root creation or deletion
+- **saveNode**: New nodes added or modified
+- **deleteNode**: Nodes removed from tree
+- **saveRootInfo**: Root creation or updates
+Matches current FileSystemStore implementation.
 
 ### Cache Expectations
 - **Performance**: Tree navigation without filesystem access
@@ -66,18 +66,14 @@ Cache invalidation occurs on:
 ## Consistency
 
 ### Write Ordering
-**Atomic writes**: Individual file operations are atomic at filesystem level
-
-**Operation sequence**:
-1. Write node content to temporary file
-2. Update parent/child relationships in separate files
-3. Atomic rename/move to final location
-4. Update index files (roots.json) last
+**Direct writes**: Files written directly with fs.writeFile (no temp-file/rename sequence)
+**Cache invalidation**: NodeStructure cache invalidated after writes
+**No transactional guarantees**: No multi-file transaction or locking mechanisms
 
 ### Acceptable Failure Modes
-- **Partial writes**: Temporary files may exist after crash
 - **Stale cache**: Cache may be outdated after external modifications
 - **Index inconsistency**: roots.json may briefly lag behind node creation
+- **No crash recovery**: No temporary file cleanup needed
 
 **Recovery behavior**:
 - Ignore temporary files on startup
@@ -88,6 +84,7 @@ Cache invalidation occurs on:
 - **Single file**: Each node write is atomic (relies on filesystem atomicity of single-file writes)
 - **Multiple files**: No multi-file transaction or locking
 - **Single process**: This store is intended for single-process use. Multi-process access may cause conflicts
+- **No file locking**: Relies on single-process assumption; suggest DB store for multi-user/multi-process scenarios
 
 ## Migration Considerations
 

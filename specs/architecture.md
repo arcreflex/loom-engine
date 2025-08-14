@@ -78,6 +78,11 @@ The Express server is intentionally thin:
 - **Static serving**: Frontend assets and development proxy
 - **No business logic**: All conversation logic remains in Engine
 
+## Trust Boundaries
+
+**Built-in introspect tool**: Walks the loom-engine repo but explicitly excludes .git and node_modules; read-only analysis only
+**Single-process assumption**: FileSystemStore assumes single-process access (no file locking); multi-process scenarios require alternative store implementation
+
 API contracts are minimal HTTP/JSON with SSE for real-time updates.
 
 ## Extensibility Seams

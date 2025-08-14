@@ -115,9 +115,8 @@ UI architecture and flows, including server interactions.
 
 ### Display Strategies
 **Inline Errors**: Show errors in context where they occurred
-**Toast Notifications**: Temporary notifications for transient errors
 **Status Bar**: Persistent status for ongoing operations
-**Error Boundaries**: Graceful handling of React component errors
+**Error handling**: Basic error display (toast notifications and error boundaries not implemented)
 
 ### Recovery Actions
 **Retry Mechanisms**: Automatic and manual retry options
@@ -139,9 +138,9 @@ See server.ts for complete list. Key endpoints include:
 
 ### SSE Subscription Lifecycle
 **Connection Establishment**:
-1. Frontend connects to `/events` SSE endpoint
+1. Frontend connects to `/api/nodes/:nodeId/generation` SSE endpoint
 2. Backend maintains client connection registry
-3. Client sends heartbeat pings to maintain connection
+3. No client heartbeat pings
 
 **Event Streaming**:
 1. Generation requests trigger SSE events

@@ -31,7 +31,7 @@ When `config.toml` doesn't exist:
 ### Stub Config Content
 ```toml
 [providers.anthropic]
-apiKey = "your API key"  # Concrete placeholder, not commented
+apiKey = "your API key"
 
 [providers.openai]
 apiKey = "your API key"
@@ -47,6 +47,8 @@ maxTokens = 1024
 n = 5
 systemPrompt = "You are a helpful assistant."
 ```
+
+**Note**: Default config is created without comments. Does not include presets or openrouter section by default.
 
 ## Configuration Layering
 
@@ -137,8 +139,8 @@ n = 1
 
 ### Bookmark Behaviors
 **Automatic updates**: Current node tracked as user navigates
-**Validation**: Bookmarks verified to exist before use
-**Cleanup**: Invalid bookmarks removed during validation
+**Validation**: Bookmarks validated during delete flows (no global startup validation)
+**Cleanup**: Invalid bookmarks removed during node deletion operations
 **Fallback**: Default to root node if bookmark invalid
 
 ### Data Structure
@@ -165,24 +167,27 @@ updatedAt = "2024-01-01T00:00:00Z"
 
 ### Server Definition
 ```toml
-[[mcpServers]]
+[[mcp_servers]]
 name = "filesystem"
+transport = "stdio"
 command = "npx"
-args = ["@modelcontextprotocol/server-filesystem", "/path/to/allowed/directory"]
+args = ["@modelcontextprotocol/server-filesystem", "/path/to/dir"]
+env = { SOME_ENV = "value" }
 
-[[mcpServers]]
+[[mcp_servers]]
 name = "web"
+transport = "stdio"
 command = "python"
 args = ["-m", "mcp.server.web"]
-env = { WEB_API_KEY = "..." }
 ```
 
 ### Configuration Fields
 **name**: Unique identifier for MCP server (used in tool naming)
+**transport**: Must be "stdio" (only transport currently implemented; "http" throws "not yet implemented")
 **command**: Executable command to start MCP server
 **args**: Command line arguments array
-**env**: Environment variables for MCP server process
-**cwd**: Working directory for MCP server (optional)
+**env**: Environment variables for MCP server process (optional)
+**Note**: Working directory is pinned to the data directory
 
 ### Server Management
 **Lifecycle**: MCP servers started when configuration loaded
@@ -198,14 +203,8 @@ env = { WEB_API_KEY = "..." }
 
 ### Log Output
 **File destination**: `{DATA_DIR}/loom.log`
-**Rotation**: Basic size-based rotation (implementation pending)
-**Levels**: Standard levels (error, warn, info, debug)
-**Format**: Structured logging with timestamps and context
-
-### Debug Mode
-**Environment trigger**: `DEBUG=loom.log` enables debug logging
-**Verbose output**: Additional context and trace information
-**Performance impact**: Debug mode may affect performance
+**Format**: Simple append-only logging (no rotation, no levels)
+**Implementation**: Single log file with basic timestamped entries
 
 ## Configuration Validation
 

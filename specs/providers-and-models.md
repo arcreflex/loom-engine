@@ -51,7 +51,7 @@ All provider implementations must conform to a common behavioral interface for c
 ### Internal Tool Call Structure
 ```typescript
 interface ToolCall {
-  id: string;           // Correlation ID
+  id: string;           // Correlation ID from provider responses (preserved, not synthesized)
   name: string;         // Tool function name
   parameters: object;   // JSON parameters
 }
@@ -62,7 +62,7 @@ interface ToolCall {
 **OpenAI Format**
 - Direct mapping to `tool_calls` array format
 - Function name and arguments preserved
-- Tool call IDs generated if not provided
+- Tool call IDs come from provider responses and are preserved
 
 **Anthropic Format**
 - Maps to `tool_use` content blocks
@@ -98,10 +98,10 @@ interface ToolCall {
 
 ### Fallback Behavior
 When model not in catalog:
-- Use conservative fallback limits
+- Apply conservative fallback limits (model capabilities unknown)
 - Assume basic tool calling support
-- Apply conservative token estimation
-- Entries are advisory for optimization, not restrictive
+- Use conservative token estimation with character-based heuristic
+- Catalog entries are advisory for optimization, not restrictive
 
 ## Parameter Shaping Rules
 
@@ -115,10 +115,11 @@ When model not in catalog:
 **Lower bounds**: Minimum viable response length
 **Safety margins**: Account for provider token counting variations
 
+**Token estimation**: Heuristic of approximately 0.3 tokens per input character
 **Calculation process**:
-1. Estimate input token count from message history
-2. Subtract from model's known context limit
-3. Apply safety margin (10-20% buffer)
+1. Estimate input token count from message history using character-based heuristic
+2. Subtract from model's known context limit (if available)
+3. Clamp max_tokens by model capabilities and estimated residual window
 4. Enforce provider-specific maximum output limits
 
 ### Safety Limits

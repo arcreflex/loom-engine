@@ -59,7 +59,7 @@ Optional structured data attached to nodes:
 
 ### Content Handling
 - **Null content**: Assistant messages may have null content when only tool calls present
-- **Coalescing rules**: Only coalesce adjacent user/assistant messages with text content and no tool_calls; do not coalesce across tool messages or assistant messages that include tool_calls
+- **Coalescing behavior**: Current implementation coalesces adjacent messages with same role (tool messages break adjacency naturally); intended behavior would avoid coalescing assistant messages with tool_calls
 - **Tool call structure**: Assistant tool calls followed by corresponding tool results
 
 ### Message Equality
@@ -103,6 +103,7 @@ The editing process:
 When splitting existing conversation:
 - **New branch creation**: Divergent content becomes new branch
 - **Parent preservation**: Common prefix remains unchanged
+- **Tool message restriction**: Tool messages cannot be split (Forest.splitNode throws for role 'tool')
 - **Child reparenting**: Nodes following split point may need reparenting
 
 ### Branch Creation Outcomes

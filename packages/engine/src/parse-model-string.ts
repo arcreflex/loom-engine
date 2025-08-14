@@ -27,7 +27,7 @@ export function parseModelString(modelString: string): {
       };
     default:
       throw new Error(
-        `Unsupported provider "${parts[0]}". Supported providers: openai, anthropic, google.`
+        `Unsupported provider "${parts[0]}". Supported providers: openai, anthropic, google, openrouter.`
       );
   }
 }

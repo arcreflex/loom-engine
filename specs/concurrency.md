@@ -44,10 +44,10 @@ Central mechanism for ensuring deterministic ordering of Forest mutations.
 
 Manages concurrent generation requests and ensures proper resource allocation.
 
-### Per-node Pending Generation
-**Single generation limit**: Only one active generation per node at a time
-**Request queuing**: Multiple requests for same node queued sequentially
-**Cancellation support**: Ability to cancel ongoing generation requests
+### Per-node Request Tracking
+**Multiple requests allowed**: Multiple generations can run concurrently for the same node
+**Request tracking**: Keeps a Set of requests per node for SSE fan-out
+**No queuing/cancellation**: No request queuing or cancellation mechanisms implemented
 
 ### SSE Fan-out
 **Multiple clients**: Single generation can stream to multiple SSE connections
@@ -55,16 +55,16 @@ Manages concurrent generation requests and ensures proper resource allocation.
 **Connection management**: Handle client disconnections gracefully
 
 ### Tool-call Recursion Management
-**Recursive generation**: Tool calls trigger additional generation requests
-**Depth limiting**: Prevent infinite recursion loops
-**Resource tracking**: Monitor tool execution time and resource usage
+**Recursive generation**: Tool calls trigger additional generation requests via GenerateResult.next
+**No depth limiting**: No explicit recursion depth limits currently implemented
+**No resource tracking**: No tool execution timeouts or resource monitoring currently
 
 ### Request Lifecycle
 1. **Validation**: Check generation parameters and node existence
-2. **Queuing**: Add to per-node generation queue
+2. **Tracking**: Add to per-node request Set (no queuing)
 3. **Execution**: Process through provider with SSE streaming
-4. **Tool handling**: Execute tool calls and recurse if needed
-5. **Completion**: Append results and notify clients
+4. **Tool handling**: Execute tool calls and recurse via GenerateResult.next promise
+5. **Completion**: Remove from tracking Set and notify clients via SSE
 
 ## Multi-process Considerations
 

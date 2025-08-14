@@ -92,12 +92,13 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 **Parameter Shaping**
 - Applies default parameters from configuration
 - Enforces provider-specific parameter limits
-- Validates parameter combinations for compatibility
+- Clamps max_tokens using: min(options.max_tokens, model.capabilities.max_output_tokens, residual_input_window)
+- Uses ~0.3 tokens per input character heuristic for token estimation
 
 **Message Coalescing**
-- Combines consecutive messages of same role when beneficial
-- Handles provider-specific message format requirements
-- Preserves tool call structure and ordering
+- Combines adjacent messages with the same role using separator (default empty string)
+- No special handling for tool_calls - tool messages naturally break adjacency
+- Current behavior coalesces purely by role adjacency
 
 ### Generation Flows
 
@@ -110,7 +111,7 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 
 #### Multi-completion Generation (n>1)
 1. Prepare shared message context
-2. Make parallel provider API calls with same parameters
+2. Make parallel provider API calls using Promise.all
 3. Collect multiple response variants
 4. Create separate branches for each completion
 5. Return array of generated nodes
@@ -191,10 +192,10 @@ Current implementation uses recursive GenerateResult.next pattern:
 The GenerateResult.next design enables streaming tool execution to UI.
 
 ### Recursion Termination
-- Maximum recursion depth to prevent infinite loops
-- Tool execution timeout limits
-- Provider API rate limiting consideration
-- User cancellation handling
+- No explicit recursion depth limits currently implemented
+- No tool execution timeout limits currently
+- Provider API rate limiting handled by provider SDK
+- User cancellation not implemented (planned future enhancement)
 
 ## Error Handling and Recovery
 

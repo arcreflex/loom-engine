@@ -39,7 +39,7 @@ An adapter class that interfaces with specific AI services (OpenAI, Anthropic, G
 A specific AI model offered by a provider (e.g., "gpt-4o", "claude-3-sonnet"). Models are referenced using the format "{provider}/{model-name}" and have associated capabilities like context length and tool support.
 
 ### Preset
-A named collection of generation parameters (temperature, max_tokens, system prompt) that can be selected to override default settings. Presets enable quick switching between different generation modes.
+A named collection of generation parameters (n, temperature, maxTokens) that can be selected to override default settings. Presets enable quick switching between different generation modes. Note: presets do not include model or systemPrompt.
 
 ### Bookmark
 A saved reference to a specific Node in a conversation, allowing quick navigation. Bookmarks are validated before use and automatically updated or removed when referenced nodes are deleted.
