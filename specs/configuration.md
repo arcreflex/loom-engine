@@ -48,7 +48,9 @@ n = 5
 systemPrompt = "You are a helpful assistant."
 ```
 
-**Note**: Default config is created without comments. Does not include presets or openrouter section by default.
+**Note**: Default config is created without comments and may be overwritten by user edits. No schema validation beyond basic type/shape checking. Does not include presets or openrouter section by default.
+
+**Preset scope**: Presets change n/temperature/maxTokens only (not model or systemPrompt).
 
 ## Configuration Layering
 

@@ -6,81 +6,39 @@ Define responsibilities and core behaviors of Forest and LoomEngine.
 
 The Forest class manages the conversation tree structure and provides core tree operations.
 
-### Core Operations
+### Forest Capabilities
 
-**getOrCreateRoot(systemPrompt?: string): Promise<RootData>**
-- Creates new conversation root or retrieves existing with matching systemPrompt
-- Generates unique RootId if creating new root
-- Initializes root node with system message config
-- Returns root handle for subsequent operations
+**Core Operations**: Create/get roots; get path/messages; append with prefix matching; split with position; edit-with-branching; delete (cascade or reparent); navigation (children/siblings).
 
-**getRoot(rootId: RootId): Promise<RootData | null>**
-- Retrieves existing root by ID
-- Returns null if root doesn't exist
+**Guarantees**: Serialized mutations via SerialQueue; errors on missing nodes/invalid operations; prefix matching reuses existing nodes with identical content; tree structure consistency maintained.
 
-**getPath({ from?: NodeId, to: NodeId }): Promise<{ root: RootData, path: NodeData[] }>**
-- Retrieves complete path from root (or from node) to specified target node
-- Returns root data and array of nodes representing conversation history
-- Validates node existence and reachability
-- Throws error if path is invalid or broken
+**See code for exact method signatures.**
 
-**append(parentId: NodeId, messages: Message[], metadata: Omit<NodeMetadata, 'timestamp' | 'original_root_id'>): Promise<NodeData>**
-- Adds new messages to conversation tree
-- Implements prefix-aware appending logic
-- May reuse existing nodes for identical message sequences
-- Creates new branches when content diverges
-
-### Tree Modification Operations
-
-**splitNode(nodeId: NodeId, position: number): Promise<NodeData>**
-- Splits node content at specified message index
-- Creates new node for content after split point
-- Updates parent/child relationships accordingly
-- Enables fine-grained conversation editing
-
-**editNodeContent(nodeId: NodeId, newContent: string): Promise<NodeData>**
-- Replaces node message content
-- Creates new node with updated content
-- Preserves conversation history through branching
-
-**deleteNode(nodeId: NodeId, reparentToGrandparent = false): Promise<Node | null>**
-- Removes node from conversation tree
-- reparentToGrandparent=false: cascade deletes node and all descendants
-- reparentToGrandparent=true: attaches children to deleted node's parent
-- Updates bookmarks and references
-
-### Navigation Operations
-
-**getChildren(nodeId: NodeId): Promise<NodeData[]>**
-- Returns array of direct child nodes
-- Used for tree navigation and branch exploration
-- May return empty array for leaf nodes
-
-**getSiblings(nodeId: NodeId): Promise<NodeData[]>**
-- Returns nodes sharing same parent
-- Enables horizontal navigation within conversation level
-- Excludes the specified node from results
+### Key Behaviors
+- **Root management**: getOrCreateRoot finds existing or creates new based on systemPrompt matching
+- **Prefix matching**: append operations reuse existing child nodes with identical messages
+- **Branching**: edit operations with children create new branches; edit without children modifies in-place
+- **Deletion strategies**: cascade removes descendants; reparent attaches children to grandparent
+- **Path traversal**: validates reachability and throws on broken chains
 
 ## LoomEngine Responsibilities
 
 The LoomEngine orchestrates providers, parameters, and generation flows.
 
-### Key Operations
+### LoomEngine Capabilities
 
-**generate(rootId: RootId, providerName: ProviderName, modelName: string, contextMessages: Message[], options: GenerateOptions, activeTools?: string[]): Promise<GenerateResult>**
-- Core generation method that handles the full flow
-- options: { n, temperature, max_tokens }
-- result: { childNodes, next?: Promise<GenerateResult> } for tool-calling recursion
-- Coalesces context with coalesceMessages before provider call
-- Shapes max_tokens based on KNOWN_MODELS and rough token estimate
+**Core Operations**: Generate with n>1 fanout and tool-calling recursion via GenerateResult.next; editNode with bookmark management; getMessages wrapper for context construction.
 
-**getMessages(nodeId: NodeId): Promise<{ root: RootConfig, messages: Message[] }>**
-- Wrapper method that retrieves conversation path and converts to messages
-- Used by generate to construct context
+**Guarantees**: Conservative max_tokens clamping based on model capabilities and token estimation; coalesces adjacent same-role messages (current behavior); surfaces provider/tool errors; appends results with model/tool source_info metadata.
 
-**editNode(nodeId: NodeId, newContent: string): Promise<NodeData>**
-- Handles bookmark move if configStore present
-- Delegates to Forest.editNodeContent
+**See code for exact method signatures.**
+
+### Key Behaviors
+- **Generation flow**: Context construction → provider call → tool execution loop → result appending
+- **Multi-completion**: Parallel generation using Promise.all for n>1 requests
+- **Token estimation**: ~0.3 tokens per character heuristic with model capability clamping
+- **Tool recursion**: GenerateResult.next enables streaming tool execution to UI
+- **Bookmark integration**: editNode moves bookmarks when creating new nodes
 
 ### Provider Orchestration
 

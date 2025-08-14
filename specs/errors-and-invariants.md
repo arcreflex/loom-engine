@@ -36,12 +36,16 @@ The system fails loudly when referencing non-existent entities to maintain data 
 ### Split Constraints
 **Minimum content**: Cannot split nodes with insufficient content
 **Split boundaries**: Splits must occur at valid message boundaries
-**Tool message handling**: Tool messages cannot be split (atomic units)
+**Tool message restriction**: Node.message.role 'tool' messages cannot be split; splitNode throws (see data-model.md editing semantics)
 
 ### Content Validation
 **Message structure**: Enforce proper message role sequences
 **Tool call correlation**: Ensure tool results reference valid tool calls
 **Content consistency**: Validate message content matches expected format
+
+### Edit Contracts
+**If node has children**: editNodeContent may split or branch depending on content changes
+**If node has no children**: editNodeContent edits in-place and updates source_info to {type: 'user'}
 
 ## Delete Constraints
 
@@ -89,10 +93,15 @@ The system fails loudly when referencing non-existent entities to maintain data 
 **Empty message prevention**: Prevent completely empty messages
 **Content type validation**: Ensure content is string or null
 
-### Coalescing Rules
-**Desired behavior**: Do not coalesce assistant messages that include tool_calls, and do not coalesce across tool messages
-**Current implementation**: Coalesces purely by role - gaps exist between intended and actual behavior
-**Content merging**: When coalescing is appropriate, combine content properly
+## Message Coalescing
+
+Authoritative rules for message coalescing behavior (referenced from data-model.md and engine.md).
+
+**Current behavior**: Adjacent messages with the same role are concatenated with separator (default empty string). Tool messages naturally break adjacency by having different roles.
+
+**Intended behavior**: Do not coalesce assistant messages that include tool_calls; do not coalesce across tool messages. Only coalesce adjacent user/assistant messages with text content.
+
+**Implementation gap**: Current coalesceMessages function coalesces purely by role adjacency without checking tool_calls. This is tracked as a known gap requiring future refinement.
 
 ### Matching Rules
 **Exact matching**: Message equality requires exact content match

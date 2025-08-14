@@ -57,6 +57,9 @@ UI architecture and flows, including server interactions.
 3. UI updates to show new branch
 4. Navigation automatically follows new branch
 
+**System Prompt Editing**:
+Editing system prompt creates/selects new Root via Forest.getOrCreateRoot rather than mutating existing Root (see Root immutability in data-model.md). Server's POST /api/roots uses this behavior to find matching roots or create new ones.
+
 **Metadata Modal**:
 - Edit node metadata (tags, custom data)
 - View generation parameters and source info
@@ -125,16 +128,10 @@ UI architecture and flows, including server interactions.
 
 ## Server Interaction (Moved from server-api)
 
-### Actual Endpoints
-See server.ts for complete list. Key endpoints include:
-- `/api/state` (GET/PUT) - Application state management
-- `/api/nodes/:id` (+/path +/children +/siblings +/generation SSE) - Node operations
-- `/api/nodes/:id/append` (POST) - Add messages
-- `/api/nodes/:id/generate` (POST) - Trigger generation
-- `/api/nodes/:id/content` (PUT) - Edit content
-- `/api/roots` (GET/POST) - Root management
-- `/api/bookmarks`, `/api/models`, `/api/tools` - Resource management
-- `/api/graph/topology`, `/api/config/*` - Configuration and topology
+### Server API
+The server exposes a thin `/api` surface for nodes, roots, bookmarks, models, tools, topology, and SSE updates. The server is a pass-through to Engine with minimal business logic. See server.ts for the exact endpoint list.
+
+**SSE payload shape** (stable contract): `{ status: 'pending' | 'idle' | 'error', added?: NodeData[], error?: string }`
 
 ### SSE Subscription Lifecycle
 **Connection Establishment**:

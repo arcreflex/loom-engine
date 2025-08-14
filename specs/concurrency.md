@@ -66,26 +66,16 @@ Manages concurrent generation requests and ensures proper resource allocation.
 4. **Tool handling**: Execute tool calls and recurse via GenerateResult.next promise
 5. **Completion**: Remove from tracking Set and notify clients via SSE
 
-## Multi-process Considerations
+## Assumptions
 
-### FileSystemStore Assumptions
-**Single process**: Current design assumes single process access
-**File locking**: No explicit file locking mechanism
-**Atomic writes**: Relies on filesystem atomic write guarantees
+### Single-Process Constraint
+**Current design assumes single process access** to the FileSystemStore. No file locking mechanism is implemented. Relies on filesystem atomic write guarantees for individual files.
 
-### Hazards of Multi-process Access
-**Race conditions**: Concurrent file modifications can cause corruption
-**Cache inconsistency**: NodeStructure cache may become stale
-**Index corruption**: roots.json may become inconsistent
+**Multi-process hazards**: Concurrent access can cause race conditions, cache inconsistency, and index corruption.
 
-### Mitigation Strategies
-**Process coordination**: External coordination mechanisms (file locks, etc.)
-**Conflict detection**: Verify file modification times before writes
-**Recovery mechanisms**: Detect and recover from corruption
+**Alternative stores**: Database backends or distributed systems can provide proper ACID transactions and multi-process coordination.
 
-### Alternative Store Implementations
-**Database backends**: Proper ACID transaction support
-**Distributed systems**: Coordination through consensus protocols
+*This constraint is referenced from persistence.md and architecture.md to avoid duplication.*
 **Lock services**: External coordination for multi-process scenarios
 
 ## Request Sequencing

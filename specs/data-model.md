@@ -8,7 +8,7 @@ Conceptual model and invariants of roots, nodes, messages, and metadata.
 - **Purpose**: Top-level container for a conversation tree
 - **Identity**: Unique RootId (branded string)
 - **Properties**: Creation timestamp, optional metadata
-- **Special node**: Every root has an associated system node that serves as the tree root
+- **Structure**: RootData is a special node with no message; systemPrompt is rendered as system role during serialization
 
 ### Node
 - **Purpose**: Individual point in conversation tree, contains exactly one message
@@ -59,7 +59,7 @@ Optional structured data attached to nodes:
 
 ### Content Handling
 - **Null content**: Assistant messages may have null content when only tool calls present
-- **Coalescing behavior**: Current implementation coalesces adjacent messages with same role (tool messages break adjacency naturally); intended behavior would avoid coalescing assistant messages with tool_calls
+- **Coalescing behavior**: See Message Coalescing section in errors-and-invariants.md for authoritative rules
 - **Tool call structure**: Assistant tool calls followed by corresponding tool results
 
 ### Message Equality

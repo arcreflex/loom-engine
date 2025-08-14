@@ -34,7 +34,7 @@ The data directory (default `~/.loom/`) contains:
 - **Scope**: Globally unique, includes root prefix
 
 ### ID Generation Characteristics
-- **Monotonic**: IDs are monotonic per process and collision-checked against disk
+- **Monotonic per-process**: IDs are monotonic per process; IdCache collision-checks against disk across restarts
 - **Collision avoidance**: IdCache ensures no collision with existing files on disk
 - **Human readable**: IDs contain enough context for debugging and root association
 
@@ -83,8 +83,7 @@ Matches current FileSystemStore implementation.
 ### Atomicity Assumptions
 - **Single file**: Each node write is atomic (relies on filesystem atomicity of single-file writes)
 - **Multiple files**: No multi-file transaction or locking
-- **Single process**: This store is intended for single-process use. Multi-process access may cause conflicts
-- **No file locking**: Relies on single-process assumption; suggest DB store for multi-user/multi-process scenarios
+- **Single process**: See Single-Process Constraint in concurrency.md
 
 ## Migration Considerations
 

@@ -35,6 +35,23 @@ Detailed specifications for each domain live in the `specs/` directory.
 
 And all spec documents should live in a `specs/` dir at the root of the repo.
 
+## Style Guidelines
+
+- **Prefer contracts and invariants** over code signatures and request/response schemas
+- **Mark implementation gaps**: If current behavior differs from intended, mark as "current vs intended" with reference to tracking issue
+- **Avoid brittle details**: Parameter names, exact endpoints, and type signatures belong in code
+- **Link to avoid duplication**: Reference authoritative sections rather than repeating information
+
+## Known Gaps
+
+Agreed gaps between current implementation and intended behavior:
+
+- **Message coalescing**: Should not coalesce assistant messages with tool_calls (see errors-and-invariants.md)
+- **JSON Schema validation**: ToolRegistry should validate tool parameters before execution
+- **Generation concurrency**: Should enforce single-flight generation per node (currently allows concurrent)
+- **MCP HTTP transport**: Only stdio implemented; http throws "not implemented"
+- **Tool execution limits**: No recursion depth limits or timeouts for tool calls
+
 ## Decisions
 
 Use this space to log meta-level decisions we've made.

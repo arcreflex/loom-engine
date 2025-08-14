@@ -78,10 +78,27 @@ The Express server is intentionally thin:
 - **Static serving**: Frontend assets and development proxy
 - **No business logic**: All conversation logic remains in Engine
 
+## Assumptions
+
+- **Single-process store**: See Single-Process Constraint in concurrency.md
+- **Local dev environment**: No authentication; localhost-only intended
+- **Built-in tools are read-only**: introspect tool excludes .git and node_modules; no system modification
+- **MCP transport limitation**: Only stdio supported; http throws "not implemented"
+
+## Determinism
+
+**Forest mutations are serialized** via SerialQueue ensuring same operation sequence produces same tree state.
+
+## Security
+
+- **No authentication**: Localhost-only intended; no auth system
+- **Secrets handling**: API keys promoted from config.toml to environment variables; never written to logs
+- **Tool execution**: Built-in and MCP tools run with application privileges
+- **Trust boundaries**: Built-in introspect tool excludes .git and node_modules; read-only analysis only
+
 ## Trust Boundaries
 
 **Built-in introspect tool**: Walks the loom-engine repo but explicitly excludes .git and node_modules; read-only analysis only
-**Single-process assumption**: FileSystemStore assumes single-process access (no file locking); multi-process scenarios require alternative store implementation
 
 API contracts are minimal HTTP/JSON with SSE for real-time updates.
 

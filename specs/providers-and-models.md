@@ -82,7 +82,7 @@ interface ToolCall {
 ## Model Catalog (KNOWN_MODELS)
 
 ### Model Capabilities Database
-**Purpose**: Best-effort catalog used to cap max_tokens; entries are advisory, not exhaustive
+**Purpose**: Best-effort catalog used to cap max_tokens; entries are advisory, not exhaustive. KNOWN_MODELS is not a restrictive list - unknown models fall back to conservative limits.
 
 **Model entries include**:
 - Context window size (max input tokens)
@@ -128,10 +128,7 @@ When model not in catalog:
 - **Rate limiting awareness**: Back off on provider rate limits
 
 ### Provider-specific Parameter Mappings
-**OpenAI**: Uses `max_completion_tokens` parameter
-**Anthropic**: Uses `max_tokens` parameter
-**Google**: Uses `maxOutputTokens` in generationConfig
-**OpenRouter**: Piggybacks on OpenAIProvider with baseURL override and OPENROUTER_API_KEY
+Each provider adapter maps the internal parameter set {temperature, max_tokens, ...} to its native API format. Conservative max_tokens clamping rules are enforced uniformly across providers. See code for exact parameter names and mappings.
 
 ## Adding a Provider
 
@@ -180,6 +177,7 @@ Examples:
 
 ### Supported Providers
 **Current providers**: openai, anthropic, google, openrouter
+**Model string format**: `{provider}/{model-name}` (e.g., "openai/gpt-4o", "openrouter/anthropic/claude-3-sonnet")
 **OpenRouter note**: Uses OpenAIProvider implementation with custom baseURL and API key
 
 ### Provider Detection

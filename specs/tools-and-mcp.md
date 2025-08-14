@@ -14,7 +14,7 @@ Central registry for managing tool availability and execution.
 ### JSON Schema Constraint
 **Current requirement**: All tools must provide JSON Schema for parameters
 **Object schemas only**: Tools must accept object parameters (not primitives)
-**Validation status**: JSON Schema validation is planned (TODO in ToolRegistry.execute)
+**Validation status**: JSON Schema validation is planned and will be enforced before invoking handlers (TODO in ToolRegistry.execute)
 **Current validation**: Basic parameter validation only
 
 ### Execution Result Format
@@ -89,7 +89,7 @@ Central registry for managing tool availability and execution.
 ## MCP Communication Protocols
 
 ### stdio vs http (Future)
-**Current**: Only transport: "stdio" is implemented - "http" throws "not yet implemented"
+**Current**: Only transport: "stdio" is implemented; "http" transport throws "not implemented"
 **Future**: HTTP transport for MCP servers
 **Protocol abstraction**: Internal tool interface remains unchanged
 **Configuration**: Server-specific transport configuration
