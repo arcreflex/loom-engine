@@ -50,16 +50,32 @@ Optional structured data attached to nodes:
 - **Cannot be deleted**: Root node deletion would orphan entire tree
 - **Immutable content**: Root content isn't edited in place; "editing the system prompt" is implemented by creating/selecting a new Root, not by mutating an existing Root
 
+### Design Rationale: Root Immutability
+**Why immutable roots**: Preserves conversation integrity and history
+**Benefits**:
+- Audit trail - system prompt changes are trackable
+- Experimentation - different system prompts create different roots
+- Consistency - conversations always retain their original context
+**Trade-offs**: More roots to manage, but enables better prompt engineering
+
 ### Path Traversal
 - **Deterministic paths**: Path from root to any node is unique
 - **Node reuse**: Prefix matching reuses existing child nodes with identical message (role, content, tool calls) under the same parent. Nodes are not shared across different parents/roots
 - **Prefix matching**: Navigation follows longest common prefix principle
 
+### Design Rationale: Prefix Matching
+**Why prefix matching**: This core optimization enables efficient reuse of existing conversation branches
+**Benefits**:
+- Memory efficiency - avoids duplicating identical message sequences
+- Natural branching - exploration of alternatives shares common context
+- User experience - seamless navigation between conversation variants
+**Trade-offs**: Complexity in tree management, but worth it for branching UX
+
 ## Message Semantics
 
 ### Content Handling
 - **Null content**: Assistant messages may have null content when only tool calls present
-- **Coalescing behavior**: See Message Coalescing section in errors-and-invariants.md for authoritative rules
+- **Coalescing behavior**: See errors-and-invariants.md for Message Coalescing rules
 - **Tool call structure**: Assistant tool calls followed by corresponding tool results
 
 ### Message Equality
@@ -103,7 +119,7 @@ The editing process:
 When splitting existing conversation:
 - **New branch creation**: Divergent content becomes new branch
 - **Parent preservation**: Common prefix remains unchanged
-- **Tool message restriction**: Tool messages cannot be split (Forest.splitNode throws for role 'tool')
+- **Tool message restriction**: Tool messages cannot be split (operation fails for role 'tool')
 - **Child reparenting**: Nodes following split point may need reparenting
 
 ### Branch Creation Outcomes

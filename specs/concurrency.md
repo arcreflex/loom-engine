@@ -45,9 +45,12 @@ Central mechanism for ensuring deterministic ordering of Forest mutations.
 Manages concurrent generation requests and ensures proper resource allocation.
 
 ### Per-node Request Tracking
-**Multiple requests allowed**: Multiple generations can run concurrently for the same node; no single-flight, no cancel
+**Current**: Multiple generations can run concurrently for the same node; no single-flight, no cancel
+**Intended**: Should enforce single-flight generation per node
+**Gap**: Generation concurrency control not implemented
+
 **Request tracking**: Keeps a Set of requests per node for SSE fan-out
-**No queuing/cancellation**: No request queuing or cancellation mechanisms implemented; desired single-flight is a tracked gap
+**No queuing/cancellation**: No request queuing or cancellation mechanisms implemented
 
 ### SSE Fan-out
 **Multiple clients**: Single generation can stream to multiple SSE connections
@@ -56,8 +59,10 @@ Manages concurrent generation requests and ensures proper resource allocation.
 
 ### Tool-call Recursion Management
 **Recursive generation**: Tool calls trigger additional generation requests via GenerateResult.next
-**No depth limiting**: No explicit recursion depth limits currently implemented
-**No resource tracking**: No tool execution timeouts or resource monitoring currently
+
+**Current**: No explicit recursion depth limits or tool execution timeouts
+**Intended**: Should have recursion depth limits and timeouts for tool calls
+**Gap**: Tool execution limits not implemented
 
 ### Request Lifecycle
 1. **Validation**: Check generation parameters and node existence
@@ -69,7 +74,7 @@ Manages concurrent generation requests and ensures proper resource allocation.
 ## Assumptions
 
 ### Single-Process Constraint
-**Current design assumes single process access** to the FileSystemStore. No file locking mechanism is implemented. Relies on filesystem atomic write guarantees for individual files.
+**Current design assumes single process access** to the filesystem store. No file locking mechanism is implemented. Relies on filesystem atomic write guarantees for individual files.
 
 **Multi-process hazards**: Concurrent access can cause race conditions, cache inconsistency, and index corruption.
 
@@ -115,7 +120,7 @@ Manages concurrent generation requests and ensures proper resource allocation.
 ## Performance Implications
 
 ### Queue Throughput
-**Sequential bottleneck**: SerialQueue limits concurrent tree modifications
+**Sequential bottleneck**: Serial execution limits concurrent tree modifications
 **Read optimization**: Read operations bypass queue for better performance
 **Batch operations**: Group related operations for efficiency
 

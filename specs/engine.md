@@ -10,12 +10,10 @@ The Forest class manages the conversation tree structure and provides core tree 
 
 **Core Operations**: Create/get roots; get path/messages; append with prefix matching; split with position; edit-with-branching; delete (cascade or reparent); navigation (children/siblings).
 
-**Guarantees**: Serialized mutations via SerialQueue; errors on missing nodes/invalid operations; prefix matching reuses existing nodes with identical content; tree structure consistency maintained.
-
-**See code for exact method signatures.**
+**Guarantees**: Mutations are serialized to ensure consistency; errors on missing nodes/invalid operations; prefix matching reuses existing nodes with identical content; tree structure consistency maintained.
 
 ### Key Behaviors
-- **Root management**: getOrCreateRoot finds existing or creates new based on systemPrompt matching
+- **Root management**: Finds existing or creates new roots based on system prompt matching
 - **Prefix matching**: append operations reuse existing child nodes with identical messages
 - **Branching**: edit operations with children create new branches; edit without children modifies in-place
 - **Deletion strategies**: cascade removes descendants; reparent attaches children to grandparent
@@ -27,17 +25,15 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 
 ### LoomEngine Capabilities
 
-**Core Operations**: Generate with n>1 fanout and tool-calling recursion via GenerateResult.next; editNode with bookmark management; getMessages wrapper for context construction.
+**Core Operations**: Generate with n>1 fanout and tool-calling recursion; edit nodes with bookmark management; message retrieval for context construction.
 
-**Guarantees**: Conservative max_tokens clamping based on model capabilities and token estimation; coalesces adjacent same-role messages (current behavior); surfaces provider/tool errors; appends results with model/tool source_info metadata.
-
-**See code for exact method signatures.**
+**Guarantees**: Conservative token limit clamping based on model capabilities and estimation; coalesces adjacent same-role messages (current behavior); surfaces provider/tool errors; appends results with model/tool metadata.
 
 ### Key Behaviors
 - **Generation flow**: Context construction → provider call → tool execution loop → result appending
 - **Multi-completion**: Parallel generation using Promise.all for n>1 requests
-- **Tool calling constraint**: When activeTools are provided, n must be 1; LoomEngine.generate throws if n > 1
-- **Token estimation**: ~0.3 tokens per character heuristic with model capability clamping
+- **Tool calling constraint**: When tools are active, multiple completions are not supported
+- **Token estimation**: Character-based heuristic with model capability clamping
 - **Tool recursion**: GenerateResult.next enables streaming tool execution to UI
 - **Bookmark integration**: editNode moves bookmarks when creating new nodes
 - **Append filtering**: Empty text messages are dropped on append unless they carry tool_calls
@@ -52,13 +48,12 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 **Parameter Shaping**
 - Applies default parameters from configuration
 - Enforces provider-specific parameter limits
-- Clamps max_tokens using: min(options.max_tokens, model.capabilities.max_output_tokens, residual_input_window)
-- **Invariant**: Effective max_tokens must be ≥ 1 after clamping (intended; current code may pass negative values)
-- Uses ~0.3 tokens per input character heuristic for token estimation
+- **Token clamping**: Applies minimum of requested tokens, model output limit, and available context window
+- **Invariant**: Effective token limit must be positive after clamping
+- **Gap**: Current implementation may pass negative values
 
 **Message Coalescing**
-- Combines adjacent messages with the same role using separator (default empty string)
-- No special handling for tool_calls - tool messages naturally break adjacency
+- See errors-and-invariants.md for Message Coalescing rules
 - Current behavior coalesces purely by role adjacency
 
 ### Generation Flows
@@ -97,6 +92,10 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 - Calculates remaining tokens for generation
 - Applies safety margins for provider variations
 - Falls back to conservative estimates for unknown models
+
+**Current**: Token estimation excludes system prompt; ignores capabilities.max_total_tokens
+**Intended**: Should include system prompt in estimation; should consider max_total_tokens cap
+**Gap**: Token estimation and max_total_tokens enforcement not fully implemented
 
 **Parameter Validation**
 - Enforces temperature ranges per provider
@@ -143,14 +142,12 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 4. Prepare for tree insertion
 
 ### Tool Call Execution Loop
-Current implementation uses recursive GenerateResult.next pattern:
-```
-1. Assistant message with tool_calls is generated
-2. Tool calls are executed and appended to conversation
-3. Next generation is triggered recursively via GenerateResult.next Promise
-4. Process continues until no more tool_calls are generated
-```
-The GenerateResult.next design enables streaming tool execution to UI.
+1. Assistant message with tool calls is generated
+2. Tool calls are executed and results appended to conversation
+3. Next generation is triggered recursively
+4. Process continues until no more tool calls are generated
+
+The recursive design enables streaming tool execution to UI.
 
 ### Recursion Termination
 - No explicit recursion depth limits currently implemented

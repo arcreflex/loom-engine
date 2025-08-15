@@ -41,7 +41,7 @@ Tests must assert these system invariants:
 
 ### Tree Structure
 - Root immutability: roots cannot be edited in-place
-- Serialized mutations via SerialQueue
+- Serialized mutations ensure consistency
 - Path traversal produces deterministic message sequences
 - Node deletion maintains tree consistency
 
@@ -73,8 +73,87 @@ Pre-commit hooks enforce this locally and reject failing commits.
 - Test parameter mapping and error propagation
 - Validate tool choice semantics per provider
 
+## Async Operations and Promises
+
+### Testing Strategy
+- **Await all promises**: Ensure all async operations complete before assertions
+- **Promise rejection handling**: Test both resolution and rejection paths
+- **Timeout management**: Set appropriate timeouts for long-running operations
+- **Concurrent operations**: Test race conditions with parallel async calls
+
+### Common Patterns
+- **Queue testing**: Verify operations execute in correct order
+- **SSE streaming**: Mock event emitters for testing real-time updates
+- **Provider responses**: Use promise-based mocks for API calls
+- **Tool execution**: Test async tool calls with proper error handling
+
+## Mocking Strategy
+
+### When to Mock
+**Mock external dependencies when**:
+- Testing in isolation (unit tests)
+- External service unavailable or unreliable
+- Need deterministic results for edge cases
+- Testing error conditions difficult to reproduce
+
+**Use real implementations when**:
+- Testing integration points
+- Validating actual provider behavior
+- Testing full end-to-end workflows
+- Performance characteristics matter
+
+### Mock Guidelines
+- **Interface compliance**: Mocks must match actual interface exactly
+- **Behavior fidelity**: Mock responses should mirror real service behavior
+- **Error simulation**: Include realistic error scenarios in mocks
+- **State management**: Mocks should maintain internal state when needed
+
+### Mock vs Real Decision Criteria
+1. **Speed**: Unit tests use mocks for speed; integration tests use real services
+2. **Reliability**: Mock flaky external services; use real for stable ones
+3. **Cost**: Mock expensive API calls in development/testing
+4. **Complexity**: Mock complex setup requirements; use real for simple ones
+
+## Integration Test Requirements
+
+### Required Integration Tests
+**Provider Integration**:
+- At least one real provider test when API keys available
+- Tool calling flow with actual tool execution
+- Error handling from real provider responses
+
+**Store Integration**:
+- FileSystemStore with actual filesystem operations
+- Cache invalidation with real file changes
+- Concurrent access patterns (within single-process constraint)
+
+**End-to-End Workflows**:
+- Complete generation flow: input → provider → tools → response
+- Edit flow with branching and bookmark updates
+- Delete operations with cascade/reparent strategies
+
+### Integration Test Guidelines
+- **Environment setup**: Document required environment variables
+- **Cleanup**: Always clean up test data after completion
+- **Isolation**: Each test should be independent and idempotent
+- **Timeouts**: Set generous timeouts for network operations
+
+## Test Data Management
+
+### Fixtures
+- **Minimal examples**: Use smallest data sets that exercise functionality
+- **Edge cases**: Include boundary conditions and error scenarios
+- **Realistic data**: Some tests should use production-like data volumes
+
+### Temporary Data
+- **Automatic cleanup**: Use test framework's cleanup hooks
+- **Unique namespaces**: Prevent collision between parallel test runs
+- **Resource limits**: Monitor and limit disk/memory usage in tests
+
 ## Non-goals
 
 - Performance benchmarking (not in core test suite)
 - UI/browser testing (GUI tests use different framework)
 - Load testing or stress testing
+- Cross-browser compatibility testing
+- Security penetration testing

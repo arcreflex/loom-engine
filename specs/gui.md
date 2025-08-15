@@ -58,7 +58,7 @@ UI architecture and flows, including server interactions.
 4. Navigation automatically follows new branch
 
 **System Prompt Editing**:
-Editing system prompt creates/selects new Root via Forest.getOrCreateRoot rather than mutating existing Root (see Root immutability in data-model.md). Server's POST /api/roots uses this behavior to find matching roots or create new ones.
+Editing system prompt creates/selects new Root rather than mutating existing Root (see Root immutability in data-model.md). Server finds matching roots or creates new ones.
 
 **Metadata Modal**:
 - Edit node metadata (tags, custom data)
@@ -132,21 +132,20 @@ Editing system prompt creates/selects new Root via Forest.getOrCreateRoot rather
 ## Server Interaction (Moved from server-api)
 
 ### Server API
-The server exposes a thin `/api` surface for nodes, roots, bookmarks, models, tools, topology, and SSE updates. The server is a pass-through to Engine with minimal business logic. See server.ts for the exact endpoint list.
+The server exposes a thin API surface for nodes, roots, bookmarks, models, tools, topology, and SSE updates. The server is a pass-through to Engine with minimal business logic.
 
-**SSE payload shape** (stable contract): `{ status: 'pending' | 'idle' | 'error', added?: NodeData[], error?: string }`
+**SSE contract**: Status updates with node data and error information
 
 ### SSE Subscription Lifecycle
 **Connection Establishment**:
-1. Frontend connects to `/api/nodes/:nodeId/generation` SSE endpoint
+1. Frontend connects to generation SSE endpoint
 2. Backend maintains client connection registry
 3. No client heartbeat pings
 
 **Event Streaming**:
 1. Generation requests trigger SSE events
-2. Event payload: `{ status: 'pending' | 'idle' | 'error', added?: NodeData[], error?: string }`
-3. Not chunked token streams - discrete status updates with complete nodes
-4. Tool-calling recursion handled via GenerateResult.next promise chain
+2. Discrete status updates with complete nodes (not chunked token streams)
+3. Tool-calling recursion handled via promise chain
 
 **Connection Management**:
 - Automatic reconnection on connection loss
@@ -161,8 +160,8 @@ The server exposes a thin `/api` surface for nodes, roots, bookmarks, models, to
 ## State Management (Zustand)
 
 ### Store Structure
-Zustand store is used as single source of truth for UI state. See `state/types.ts` for complete interface definitions. Key state includes:
-- Current conversation state (currentRootId, currentNodeId)
+Zustand store is used as single source of truth for UI state. Key state includes:
+- Current conversation state (root and node IDs)
 - Conversation data and tree structure
 - UI state (sidebar, view modes, rendering preferences)
 - Generation state and active tools

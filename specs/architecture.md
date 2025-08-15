@@ -80,14 +80,40 @@ The Express server is intentionally thin:
 
 ## Assumptions
 
-- **Single-process store**: See Single-Process Constraint in concurrency.md
+- **Single-process store**: See concurrency.md for Single-Process Constraint
 - **Local dev environment**: No authentication; localhost-only intended
 - **Built-in tools are read-only**: introspect tool excludes .git and node_modules; no system modification
 - **MCP transport limitation**: Only stdio supported; http throws "not implemented"
 
+## Architectural Decisions
+
+### Concurrency Model: SerialQueue
+**Decision**: Use a single-threaded queue for all mutations
+**Rationale**: 
+- Simplicity over performance - avoids complex locking mechanisms
+- Deterministic execution order - same operations produce same tree
+- Easier debugging - predictable state transitions
+**Trade-offs**: No parallel mutations, but acceptable for single-user tool
+
+### Default Store: FileSystemStore
+**Decision**: JSON files on local filesystem as default persistence
+**Rationale**:
+- Zero external dependencies - works out of the box
+- Human-readable format - easy debugging and data recovery
+- Simple backup - just copy directory
+**Trade-offs**: Single-process only, no multi-user support
+
+### Authentication: None
+**Decision**: No authentication or authorization system
+**Rationale**:
+- Local development tool - not meant for production deployment
+- Simplicity - no user management complexity
+- Trust model - user owns their own data
+**Trade-offs**: Cannot be safely exposed to network
+
 ## Determinism
 
-**Forest mutations are serialized** via SerialQueue ensuring same operation sequence produces same tree state.
+**Forest mutations are serialized** ensuring same operation sequence produces same tree state.
 
 ## Security
 
@@ -105,9 +131,9 @@ API contracts are minimal HTTP/JSON with SSE for real-time updates.
 ## Extensibility Seams
 
 ### Provider Addition
-1. Implement provider interface in `packages/engine/src/providers/`
-2. Add to ProviderName union type
-3. Register in LoomEngine.getProvider()
+1. Implement provider interface in providers directory
+2. Add to provider name registry
+3. Register in engine's provider lookup
 4. Add configuration section to config.toml
 
 ### Store Implementation

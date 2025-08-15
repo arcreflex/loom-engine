@@ -16,8 +16,10 @@ Central registry for managing tool availability and execution.
 
 **Current requirement**: All tools must provide JSON Schema for parameters
 **Object schemas only**: Tools must accept object parameters (not primitives)
-**Validation status**: JSON schema validation required by contract; not implemented, tracked as a gap
-**Current validation**: Basic parameter validation only
+
+**Current**: Basic parameter validation only
+**Intended**: Full JSON Schema validation before tool execution
+**Gap**: JSON Schema validation not implemented
 
 ### Execution Result Format
 
@@ -25,6 +27,14 @@ Central registry for managing tool availability and execution.
 **Structured data**: Complex objects serialized to JSON strings
 **Error handling**: Errors returned as descriptive error strings
 **Provider consumption**: String results passed to AI providers as-is
+
+### Design Rationale: String-Only Results
+**Why string results**: Simplifies provider interface and ensures compatibility
+**Benefits**:
+- Universal provider support - all providers handle text
+- Debugging transparency - results are human-readable
+- Simpler error handling - no complex type negotiations
+**Trade-offs**: Loss of structure, but providers can parse JSON when needed
 
 ## Built-in Tools
 
@@ -85,8 +95,11 @@ Introspects the loom-engine codebase (overview or all) by walking the repo, retu
 ### Long-lived Client Connections
 
 **Connection management**: One long-lived Stdio connection per configured server
-**No restart supervision**: No restart supervision or connection lifecycle management is implemented; discovery failures are logged and ignored
 **Resource cleanup**: Connections maintained until process exit
+
+**Current**: No restart supervision or connection lifecycle management; discovery failures are logged and ignored
+**Intended**: Should have restart supervision and connection cleanup for MCP servers
+**Gap**: MCP lifecycle management not implemented
 
 ### Error Isolation
 
@@ -111,6 +124,14 @@ Introspects the loom-engine codebase (overview or all) by walking the repo, retu
 **Protocol abstraction**: Internal tool interface remains unchanged
 **Configuration**: Server-specific transport configuration
 
+### Design Rationale: stdio Priority
+**Why stdio first**: Most MCP servers use stdio, simpler to implement
+**Benefits**:
+- Direct process communication - no network overhead
+- Security - no network exposure by default
+- Simplicity - no authentication/TLS complexity
+**Trade-offs**: Limited to local servers, but covers main use cases
+
 ### Message Handling
 
 **Request serialization**: Convert tool calls to MCP protocol format
@@ -129,9 +150,17 @@ Introspects the loom-engine codebase (overview or all) by walking the repo, retu
 ### Execution Environment
 
 **Isolation**: Tools executed in controlled environment
-**Timeout limits**: Prevent long-running tool executions
-**Resource limits**: Memory and CPU constraints for tool execution
+**Timeout limits**: Prevent long-running tool executions (not yet implemented)
+**Resource limits**: Memory and CPU constraints for tool execution (not yet implemented)
 **Error boundaries**: Exceptions contained within tool execution context
+
+### Design Rationale: Tool Execution Order
+**Sequential execution**: Tools within a generation executed one at a time
+**Benefits**:
+- Predictable order - results can depend on previous tools
+- Simpler debugging - linear execution trace
+- Resource management - no concurrent resource contention
+**Trade-offs**: Slower than parallel, but safer and more predictable
 
 ### Security Considerations
 
