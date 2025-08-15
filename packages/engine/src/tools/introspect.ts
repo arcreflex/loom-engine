@@ -127,6 +127,10 @@ async function getFileTree(): Promise<{
       if (dir.split('/')[0] === '.git') {
         continue;
       }
+      // Also exclude '.git' file present in worktrees
+      if (filename === '.git') {
+        continue;
+      }
       if (filename === 'pnpm-lock.yaml') {
         continue;
       }
