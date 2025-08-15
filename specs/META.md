@@ -53,6 +53,8 @@ Agreed gaps between current implementation and intended behavior:
 - **Tool execution limits**: No recursion depth limits or timeouts for tool calls
 - **Effective max_tokens lower bound**: Engine should clamp to minimum 1 or fail early when context exhausted
 - **MCP lifecycle management**: No restart supervision or connection cleanup for MCP servers
+- **Token estimation excludes the system prompt**: engine clamps max_tokens without counting systemMessage (current); intended should include system prompt in estimation.
+- **max_total_tokens cap not enforced**: engine ignores capabilities.max_total_tokens when present; intended should consider this (or explicitly decide not to).
 
 ## Decisions
 
