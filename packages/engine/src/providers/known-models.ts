@@ -76,6 +76,12 @@ export const KNOWN_MODELS: {
     capabilities: { max_input_tokens: 200000, max_output_tokens: 4096 },
     cost: { input: 15, output: 75 }
   },
+  'anthropic/claude-opus-4-1-20250805': {
+    provider: 'anthropic',
+    model: 'claude-opus-4-1-20250805',
+    capabilities: { max_input_tokens: 200000, max_output_tokens: 32000 },
+    cost: { input: 15, output: 75 }
+  },
   'anthropic/claude-opus-4-20250514': {
     provider: 'anthropic',
     model: 'claude-opus-4-20250514',
