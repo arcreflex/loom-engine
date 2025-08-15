@@ -1,20 +1,38 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
 import { getCodebaseContext } from './introspect.ts';
+import { readFile } from 'node:fs/promises';
+import * as path from 'path';
 
-function assertGitAndNodeModulesExcluded(str: string) {
-  // Use join for these paths so that the source code doesn't cause a false positive, heh.
-  if (str.includes(['node_modules', 'typescript'].join('/'))) {
-    console.log(str);
-  }
+const __dirname = new URL('.', import.meta.url).pathname;
+const repoRoot = path.join(__dirname, '../../../../');
+
+function assertExcludedFiles(result: string) {
+  const tree = getFileTreeSection(result);
+
+  // Make sure it includes something to validate the test
   assert.ok(
-    !str.includes(['node_modules', 'typescript'].join('/')),
-    'Should not include node_modules'
+    tree.includes('introspect.test.ts'),
+    'Does include introspect.test.ts'
   );
-  assert.ok(
-    !str.includes(['.git', 'HEAD'].join('/')),
-    'Should not include .git dir'
+
+  // Check that node_modules is excluded
+  assert.ok(!tree.includes('node_modules'), 'Does not include node_modules');
+  const containingDotGit = tree
+    .split('\n')
+    .filter(line => /\.git/.test(line))
+    .map(line => line.trim());
+  assert.deepEqual(
+    [...new Set(containingDotGit)],
+    ['.gitignore'],
+    'Does not include .git dir contents'
   );
+}
+
+function getFileTreeSection(s: string) {
+  const start = s.indexOf('<files>') + '<files>'.length;
+  const end = s.indexOf('</files>');
+  return s.slice(start, end).trim();
 }
 
 test('getCodebaseContext - overview level', async () => {
@@ -23,7 +41,7 @@ test('getCodebaseContext - overview level', async () => {
   assert.ok(result.includes('<loom-engine-overview>'));
   assert.ok(result.includes('<readme>'));
   assert.ok(result.includes('<files>'));
-  assertGitAndNodeModulesExcluded(result);
+  assertExcludedFiles(result);
 });
 
 test('getCodebaseContext - all level', async () => {
@@ -31,10 +49,46 @@ test('getCodebaseContext - all level', async () => {
 
   assert.ok(result.includes('<loom-engine-codebase>'));
   assert.ok(result.includes('<files>'));
-  assert.ok(result.includes('<file path="packages/engine/src/engine.ts">'));
-  assert.ok(result.includes('<file path="README.md">'));
+  assertExcludedFiles(result);
+  const overview = await getCodebaseContext('overview');
+  assert.equal(
+    getFileTreeSection(result),
+    getFileTreeSection(overview),
+    'file tree is identical to overview file tree'
+  );
 
-  assertGitAndNodeModulesExcluded(result);
+  const fileContentEntries = [];
+  // match every file path="..." tag and extract paths
+  const regex = /<file path="([^"]+)">/g;
+  let match;
+  while ((match = regex.exec(result)) !== null) {
+    fileContentEntries.push(match[1]);
+  }
+
+  assert.ok(
+    fileContentEntries.includes('README.md'),
+    'file content entry for README.md exists'
+  );
+  assert.ok(
+    fileContentEntries.includes('packages/engine/src/engine.ts'),
+    'file content entry for engine.ts exists'
+  );
+  const readme = await readFile(
+    `${repoRoot}/packages/engine/src/engine.ts`,
+    'utf-8'
+  );
+  assert.ok(
+    result.includes(readme),
+    'actual file content for engine.ts is included'
+  );
+
+  assert.ok(
+    !fileContentEntries.includes('pnpm-lock.yaml'),
+    'no file content entry for pnpm-lock.yaml'
+  );
+  const pnpmLock = await readFile(`${repoRoot}/pnpm-lock.yaml`, 'utf-8');
+  assert.ok(pnpmLock.includes('lockfileVersion'), 'pnpm-lock looks reasonable');
+  assert.ok(!result.includes(pnpmLock.trim()));
 });
 
 test('getCodebaseContext - invalid level throws error', async () => {

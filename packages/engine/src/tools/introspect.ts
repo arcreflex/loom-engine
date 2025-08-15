@@ -118,10 +118,19 @@ async function getFileTree(): Promise<{
     });
 
     const grouped: Record<string, string[]> = {};
+
     for (const file of files) {
-      if (file.startsWith('.git')) continue;
       const dir = path.dirname(file);
       const filename = path.basename(file);
+
+      // Exclude anything in the .git dir and pnpm-lock.yaml
+      if (dir.split('/')[0] === '.git') {
+        continue;
+      }
+      if (filename === 'pnpm-lock.yaml') {
+        continue;
+      }
+
       if (!grouped[dir]) {
         grouped[dir] = [];
       }
@@ -135,11 +144,19 @@ async function getFileTree(): Promise<{
     const dirs = Object.keys(grouped).sort();
 
     const directories: Record<string, string[]> = {};
-    let formattedTree = '';
+    let formattedTree = '<files>\n';
     for (const dir of dirs) {
       directories[dir] = grouped[dir];
       formattedTree += `${dir}:\n  ${grouped[dir].join('\n  ')}\n\n`;
     }
+    formattedTree += `</files>
+<note>
+Some files intentionally excluded:
+ - all gitignored files
+ - .git directory
+ - pnpm-lock.yaml
+</note>
+`;
 
     return {
       directories,
@@ -187,9 +204,7 @@ async function getOverview(): Promise<string> {
 
   return `
 <loom-engine-overview>
-<files>
 ${tree.formattedTree}
-</files>
 <readme>
 ${readme}
 </readme>
@@ -208,9 +223,7 @@ async function getAll(): Promise<string> {
 
   return `
 <loom-engine-codebase>
-<files>
 ${tree.formattedTree}
-</files>
 
 ${Object.entries(fileContents)
   .map(
