@@ -46,7 +46,7 @@ And all spec documents should live in a `specs/` dir at the root of the repo.
 
 Agreed gaps between current implementation and intended behavior:
 
-- **Message coalescing**: Should not coalesce assistant messages with tool_calls (see errors-and-invariants.md)
+- **Message coalescing**: Should not coalesce messages that contain `tool-use` blocks (see errors-and-invariants.md)
 - **JSON Schema validation**: ToolRegistry should validate tool parameters before execution
 - **Generation concurrency**: Should enforce single-flight generation per node (currently allows concurrent)
 - **MCP HTTP transport**: Only stdio implemented; http throws "not implemented"
