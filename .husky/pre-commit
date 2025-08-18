@@ -3,4 +3,4 @@ set -eo pipefail
 npx lint-staged
 pnpm test
 pnpm typecheck
-npx agent-precommit --sandbox-only
+npx agent-precommit --sandbox-only --project-context AGENTS.md --project-context 'specs/**/*.md'
