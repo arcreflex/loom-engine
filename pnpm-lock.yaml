@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@arcreflex/agent-precommit':
-        specifier: ^1.0.3
-        version: 1.0.3(@types/node@22.17.0)(typescript@5.8.3)(ws@8.18.1)(zod@3.25.76)
+        specifier: ^1.0.7
+        version: 1.0.7(@types/node@22.17.0)(typescript@5.8.3)(ws@8.18.1)(zod@3.25.76)
       '@eslint/js':
         specifier: ^9.24.0
         version: 9.32.0
@@ -217,8 +217,8 @@ packages:
     resolution: {integrity: sha512-d4c+fg+xy9e46c8+YnrrgIQR45CZlAi7PwdzIfDXDM6ACxEZli1/fxhURsq30ZpMZy6LvSkr41jGq5aF5TD7rQ==}
     hasBin: true
 
-  '@arcreflex/agent-precommit@1.0.3':
-    resolution: {integrity: sha512-3N2Z74CoB+2ALwTjM4aTRWDuUyXYbE5gfikzI/6qU9OEosex9xaox0WBDWawl99kN4hngN6fPL0yOb9s8dJ/VQ==}
+  '@arcreflex/agent-precommit@1.0.7':
+    resolution: {integrity: sha512-iJoORzsQdu5/hy0fqH8G7MMqRuo8uj6VvVVLoOqPRpx9Q17kTosmjLDBaeg+NCw1cCIxSyBa7jVDY1NKDtzeJA==}
     hasBin: true
 
   '@babel/code-frame@7.27.1':
@@ -2331,6 +2331,7 @@ packages:
   node-domexception@1.0.0:
     resolution: {integrity: sha512-/jKZoMpw0F8GRwl4/eLROPA3cfcXtLApP0QzLmUT/HuPCZWyB7IY9ZrMeKw2O/nFIqPQB3PVM9aYm0F312AXDQ==}
     engines: {node: '>=10.5.0'}
+    deprecated: Use your platform's native DOMException instead
 
   node-fetch@2.7.0:
     resolution: {integrity: sha512-c4FRfUm/dbcWZ7U+1Wq0AwCyFL+3nt2bEw05wfxSz+DWpWsitgmSgYmy2dQdWyKC1694ELPqMs/YzUSNozLt8A==}
@@ -2395,8 +2396,8 @@ packages:
       zod:
         optional: true
 
-  openai@5.12.1:
-    resolution: {integrity: sha512-26s536j4Fi7P3iUma1S9H33WRrw0Qu8pJ2nYJHffrlKHPU0JK4d0r3NcMgqEcAeTdNLGYNyoFsqN4g4YE9vutg==}
+  openai@5.12.2:
+    resolution: {integrity: sha512-xqzHHQch5Tws5PcKR2xsZGX9xtch+JQFz5zb14dGqlshmmDAFBFEWmeIpf7wVqWV+w7Emj7jRgkNJakyKE0tYQ==}
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
@@ -3257,9 +3258,9 @@ snapshots:
 
   '@anthropic-ai/sdk@0.52.0': {}
 
-  '@arcreflex/agent-precommit@1.0.3(@types/node@22.17.0)(typescript@5.8.3)(ws@8.18.1)(zod@3.25.76)':
+  '@arcreflex/agent-precommit@1.0.7(@types/node@22.17.0)(typescript@5.8.3)(ws@8.18.1)(zod@3.25.76)':
     dependencies:
-      openai: 5.12.1(ws@8.18.1)(zod@3.25.76)
+      openai: 5.12.2(ws@8.18.1)(zod@3.25.76)
       ts-node: 10.9.2(@types/node@22.17.0)(typescript@5.8.3)
       zx: 8.8.0
     transitivePeerDependencies:
@@ -5863,7 +5864,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  openai@5.12.1(ws@8.18.1)(zod@3.25.76):
+  openai@5.12.2(ws@8.18.1)(zod@3.25.76):
     optionalDependencies:
       ws: 8.18.1
       zod: 3.25.76
