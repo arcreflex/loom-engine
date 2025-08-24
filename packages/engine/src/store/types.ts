@@ -4,6 +4,7 @@ import type {
   RootData,
   Node,
   NodeData,
+  NodeDataV2,
   Role
 } from '../types.ts';
 
@@ -87,6 +88,27 @@ export interface ILoomStore {
    * @returns An array of NodeStructure objects
    */
   listAllNodeStructures: () => Promise<NodeStructure[]>;
+
+  /**
+   * Loads a node from the store by its ID and normalizes its message to V2 format.
+   * Only accepts node IDs, not root IDs.
+   * @param nodeId - The ID of the node to load (must be a node, not a root)
+   * @returns The node data with V2 message format, or null if not found
+   * @throws {Error} if nodeId refers to a root, or if message normalization fails
+   * @experimental This method is part of the V2 message format migration.
+   *               Currently only implemented by FileSystemStore.
+   */
+  loadNodeNormalized: (nodeId: NodeId) => Promise<NodeDataV2 | null>;
+
+  /**
+   * Finds nodes matching criteria and normalizes their messages to V2 format.
+   * @param criteria - The criteria to match
+   * @returns An array of matching node data with V2 message format
+   * @throws {Error} if any message normalization fails (indicates corrupted data)
+   * @experimental This method is part of the V2 message format migration.
+   *               Currently only implemented by FileSystemStore.
+   */
+  findNodesNormalized: (criteria: NodeQueryCriteria) => Promise<NodeDataV2[]>;
 
   log(msg: unknown): void;
 }

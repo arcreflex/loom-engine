@@ -1,9 +1,17 @@
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
-import type { NodeData, NodeId, RootId, RootData, Node } from '../types.ts';
+import type {
+  NodeData,
+  NodeId,
+  RootId,
+  RootData,
+  Node,
+  NodeDataV2
+} from '../types.ts';
 import type { ILoomStore, NodeQueryCriteria, NodeStructure } from './types.ts';
 import { initializeLog, log } from '../log.ts';
+import { normalizeMessage } from '../content-blocks.ts';
 
 class IdCache<T extends string> {
   known = new Set<T>();
@@ -166,8 +174,18 @@ export class FileSystemStore implements ILoomStore {
       try {
         const data = await fs.readFile(nodePath, 'utf-8');
         return JSON.parse(data) as NodeData;
-      } catch (_error) {
-        this.log(`Could not load node ${nodeId}: ${_error}`);
+      } catch (error) {
+        // Check if this is a file not found error (return null) vs JSON parse error (fail loudly)
+        if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
+          // File doesn't exist - this is expected for non-existent nodes
+          return null;
+        }
+
+        // For JSON parse errors and other unexpected errors, fail loudly
+        // This follows specs/errors-and-invariants.md requirement
+        const errorMessage = `Failed to load node ${nodeId}: ${error instanceof Error ? error.message : String(error)}`;
+        this.log(errorMessage);
+        throw new Error(errorMessage, { cause: error });
       }
     }
 
@@ -355,5 +373,93 @@ export class FileSystemStore implements ILoomStore {
     // Cache the result before returning
     this.nodeStructuresCache = allStructures;
     return allStructures;
+  }
+
+  /**
+   * Helper to create an error with cause for normalization failures.
+   * @private
+   */
+  private createNormalizationError(
+    context: string,
+    originalError: unknown
+  ): Error {
+    const errorMessage = `Failed to normalize message for ${context}: ${
+      originalError instanceof Error
+        ? originalError.message
+        : String(originalError)
+    }`;
+    this.log(errorMessage);
+
+    // Use native error cause - ES2022 feature
+    return new Error(errorMessage, { cause: originalError });
+  }
+
+  /**
+   * Loads a node from the store by its ID and normalizes its message to V2 format.
+   * Only accepts node IDs, not root IDs.
+   * @param nodeId - The ID of the node to load (must be a node, not a root)
+   * @returns The node data with V2 message format, or null if not found
+   * @throws {Error} if nodeId refers to a root, or if message normalization fails
+   */
+  async loadNodeNormalized(nodeId: NodeId): Promise<NodeDataV2 | null> {
+    // Fast-fail on obvious root IDs (format: 'root-<number>')
+    if (/^root-\d+$/.test(nodeId)) {
+      throw new Error(
+        `loadNodeNormalized called with root ID ${nodeId}. Use loadNode for roots.`
+      );
+    }
+
+    const node = await this.loadNode(nodeId);
+    if (!node) return null;
+
+    // Double-check this is a node, not a root (in case of other root ID formats)
+    if (!('message' in node)) {
+      throw new Error(
+        `loadNodeNormalized called with root ID ${nodeId}. Use loadNode for roots.`
+      );
+    }
+
+    const nodeData = node as NodeData;
+    try {
+      // Normalize message to V2 format - this validates and converts
+      const normalizedMessage = normalizeMessage(nodeData.message);
+
+      const result: NodeDataV2 = {
+        ...nodeData,
+        message: normalizedMessage
+      };
+      return result;
+    } catch (error) {
+      throw this.createNormalizationError(`node ${nodeId}`, error);
+    }
+  }
+
+  /**
+   * Finds nodes matching criteria and normalizes their messages to V2 format.
+   * @param criteria - The criteria to match
+   * @returns An array of matching node data with V2 message format
+   * @throws {Error} if any message normalization fails (indicates corrupted data)
+   */
+  async findNodesNormalized(
+    criteria: NodeQueryCriteria
+  ): Promise<NodeDataV2[]> {
+    const nodes = await this.findNodes(criteria);
+    const normalized: NodeDataV2[] = [];
+
+    for (const node of nodes) {
+      try {
+        // Normalize each message to V2 format
+        const normalizedMessage = normalizeMessage(node.message);
+        const result: NodeDataV2 = {
+          ...node,
+          message: normalizedMessage
+        };
+        normalized.push(result);
+      } catch (error) {
+        throw this.createNormalizationError(`node ${node.id}`, error);
+      }
+    }
+
+    return normalized;
   }
 }

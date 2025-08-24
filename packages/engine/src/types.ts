@@ -191,6 +191,13 @@ export interface NodeData {
 
 export type Node = RootData | NodeData;
 
+// V2 types for nodes with normalized messages
+export interface NodeDataV2 extends Omit<NodeData, 'message'> {
+  message: MessageV2;
+}
+
+export type NodeV2 = RootData | NodeDataV2;
+
 export function getToolCalls(message: Message) {
   return message.role === 'assistant' ? message.tool_calls : undefined;
 }

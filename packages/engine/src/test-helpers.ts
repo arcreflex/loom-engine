@@ -94,7 +94,16 @@ export function createMockStore() {
       return [...rootStructures, ...nodeStructures];
     }),
 
-    log: console.log.bind(console)
+    log: console.log.bind(console),
+
+    // V2 normalized methods - not implemented in mock
+    loadNodeNormalized: mock.fn(async (_nodeId: NodeId) => {
+      throw new Error('loadNodeNormalized not implemented in mock store');
+    }),
+
+    findNodesNormalized: mock.fn(async (_criteria: NodeQueryCriteria) => {
+      throw new Error('findNodesNormalized not implemented in mock store');
+    })
   };
 
   mockStore satisfies ILoomStore;

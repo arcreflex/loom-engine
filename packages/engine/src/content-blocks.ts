@@ -154,20 +154,14 @@ export class ToolArgumentParseError extends Error {
     parseError: Error
   ) {
     super(
-      `Failed to parse tool arguments for ${toolName} (${toolCallId}): ${parseError.message}`
+      `Failed to parse tool arguments for ${toolName} (${toolCallId}): ${parseError.message}`,
+      { cause: parseError }
     );
     this.name = 'ToolArgumentParseError';
     this.toolCallId = toolCallId;
     this.toolName = toolName;
     this.rawArguments = rawArguments;
     this.parseError = parseError;
-    // Set cause property directly for ES2022 compatibility
-    Object.defineProperty(this, 'cause', {
-      value: parseError,
-      writable: true,
-      enumerable: false,
-      configurable: true
-    });
   }
 }
 

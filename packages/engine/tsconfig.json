@@ -12,7 +12,7 @@
     "noEmit": true,
     "verbatimModuleSyntax": true,
     "erasableSyntaxOnly": true,
-    "lib": ["ES2022"]
+    "lib": ["ES2022", "ES2022.Error"]
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
