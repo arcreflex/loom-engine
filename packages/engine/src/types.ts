@@ -1,5 +1,28 @@
 import type { ProviderRequest } from './providers/types.ts';
 
+// =====================
+// ContentBlock (V2) types
+// =====================
+
+/**
+ * Non-empty array type to enforce at compile-time that arrays have at least one element
+ */
+export type NonEmptyArray<T> = [T, ...T[]];
+
+export type ContentBlock = TextBlock | ToolUseBlock;
+
+export interface TextBlock {
+  type: 'text';
+  text: string;
+}
+
+export interface ToolUseBlock {
+  type: 'tool-use';
+  id: string;
+  name: string;
+  parameters: Record<string, unknown>;
+}
+
 /**
  * Represents a unique identifier for a node in the loom.
  */
@@ -42,6 +65,36 @@ export interface ToolMessage {
 }
 
 export type Message = UserMessage | AssistantMessage | ToolMessage;
+
+// =====================
+// V2 message types (ContentBlock-based)
+// =====================
+export interface UserMessageV2 {
+  role: 'user';
+  // User messages can only contain text blocks
+  content: NonEmptyArray<TextBlock>;
+}
+
+export interface AssistantMessageV2 {
+  role: 'assistant';
+  // Assistant messages can contain both text and tool-use blocks
+  content: NonEmptyArray<ContentBlock>;
+}
+
+export interface ToolMessageV2 {
+  role: 'tool';
+  // Tool messages can only contain text blocks
+  content: NonEmptyArray<TextBlock>;
+  tool_call_id: string;
+}
+
+export type MessageV2 = UserMessageV2 | AssistantMessageV2 | ToolMessageV2;
+
+// Legacy aliases for clarity at call-sites during migration
+export type LegacyUserMessage = UserMessage;
+export type LegacyAssistantMessage = AssistantMessage;
+export type LegacyToolMessage = ToolMessage;
+export type LegacyMessage = Message;
 
 /**
  * Configuration for a conversation root.

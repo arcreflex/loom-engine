@@ -12,11 +12,30 @@ export type {
   ProviderName,
   RootConfig,
   Message,
+  // V2 content-block message types
+  NonEmptyArray,
+  ContentBlock,
+  TextBlock,
+  ToolUseBlock,
+  MessageV2,
+  UserMessageV2,
+  AssistantMessageV2,
+  ToolMessageV2,
   NodeData,
   Node,
   RootData,
   Role
 } from './types.ts';
+export {
+  isMessageV2,
+  isContentBlock,
+  isTextBlock,
+  isNonEmptyTextBlock,
+  isToolUseBlock,
+  legacyToContentBlocks,
+  normalizeMessage,
+  ToolArgumentParseError
+} from './content-blocks.ts';
 export * from './tools/types.ts';
 export { coalesceMessages } from './coalesce-messages.ts';
 export { Forest } from './forest.ts';

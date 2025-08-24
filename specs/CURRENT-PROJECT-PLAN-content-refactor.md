@@ -1,6 +1,6 @@
 # ContentBlock Refactor Implementation Plan
 
-CURRENT STATUS: Not started.
+CURRENT STATUS: Phase 1 (types + utilities) COMPLETED.
 
 ## Overview
 
@@ -68,19 +68,25 @@ interface ToolMessage {
 
 ## Implementation Phases
 
-### Phase 1: Core Type Updates
+### Phase 1: Core Type Updates ✅ COMPLETED
 
 **Goal**: Update type definitions while maintaining backward compatibility
 
-1. **Update types.ts**
-   - Add ContentBlock type definitions
-   - Update Message interfaces to use ContentBlock[]
-   - Use separate types to represent legacy formats (prefer keeping the new types clean / unpolluted by legacy cruft)
-   - Add useful helpers, e.g. probably want one for narrowing a given `LegacyMessage | Message` (or whatever they're called) to the correct type
+1. **Update types.ts** ✅
+   - Added ContentBlock type definitions (TextBlock, ToolUseBlock)
+   - Added MessageV2 interfaces using NonEmptyArray<ContentBlock> for strong typing
+   - Created separate types for legacy formats (LegacyMessage, etc.)
+   - Added NonEmptyArray<T> type for compile-time non-empty guarantees
+   - User/Tool messages restricted to NonEmptyArray<TextBlock> at type level
+   - Assistant messages allow NonEmptyArray<ContentBlock> (mixed content)
+   - ToolUseBlock.parameters tightened to Record<string, unknown>
 
-2. **Create conversion utilities**
-   - `legacyToContentBlocks()`: Convert old format to new
-   - `normalizeMessage()`: Ensure message is in canonical format
+2. **Create conversion utilities** ✅
+   - `legacyToContentBlocks()`: Converts old format to new with proper error handling
+   - `normalizeMessage()`: Ensures message is in canonical V2 format
+   - `isMessageV2()`: Type guard with role-specific validation
+   - `ToolArgumentParseError`: Custom error for invalid tool arguments
+   - Comprehensive test coverage including edge cases
 
 ### Phase 2: Persistence Layer
 
