@@ -149,20 +149,142 @@ interface ToolMessage {
 
 OUT OF SCOPE: increased validation, error handling, or other changes to how we're holding the provider APIs that aren't directly relevant to these changes. This is a tight refactor focused on generalizing the content block structure.
 
-### Phase 4: Engine Updates
+### Phase 4: Engine Updates (Incremental, In‑Place)
 
-**Goal**: Update LoomEngine and Forest to work with new format
+Goal: Update LoomEngine and Forest to work with the ContentBlock format using incremental, in‑place changes. Avoid parallel class hierarchies (`*V2`) to reduce boundary conversions and index drift.
 
-1. **Update Forest**
-   - Message equality checks using ContentBlock comparison
-   - Prefix matching with new format
-   - Node reuse logic
+Guiding principles:
 
-2. **Update LoomEngine**
-   - Message coalescing rules (only coalesce text-only messages)
-   - Tool execution flow with tool-use blocks
-   - Generation flow updates
-   - Empty content handling
+- No parallel classes: update existing `Forest` and `LoomEngine` in place
+- Public API stability: keep current method signatures while migrating internals
+- Spec compliance gates: changes must satisfy explicit invariants (see below)
+- Type safety first: no unsafe casts; introduce precise types/guards instead
+- Test‑first per sub‑phase: land targeted tests before code changes
+
+#### Phase 4a — Foundations (Utilities + Tests)
+
+Create shared utilities and tests; no behavior change to public APIs yet.
+
+1. Equality utilities
+   - `stableDeepEqual(a, b)`: deep equality for ContentBlocks and `MessageV2`
+     - Arrays are order‑sensitive
+     - Objects are key‑order agnostic (stable key ordering)
+   - Replace any `JSON.stringify` equality checks in engine code paths
+
+2. Coalescing utilities
+   - `coalesceTextOnlyAdjacent(messages)`
+     - Only coalesce adjacent user/assistant messages where every block is `text`
+     - Never coalesce messages that contain any `tool-use` block
+     - Never coalesce tool messages
+     - Preserve existing join separator behavior (no scope change)
+
+3. Normalization for comparison
+   - `normalizeForComparison(message)`
+     - Drop empty text blocks (trim then filter empties)
+     - Allow assistant messages with only `tool-use` blocks
+     - Drop messages that become entirely empty after filtering
+
+4. Token estimation and clamping
+   - `estimateInputTokens(messages, systemPrompt)` includes the system prompt per spec
+   - `clampMaxTokens(requested, caps, estimated)`
+     - Subtract estimated input from model context caps
+     - Enforce integer (floor) and lower‑bound ≥ 1
+     - For unknown models, use conservative fallback caps
+
+5. Tests (add before implementation)
+   - Equality: parameter key order variance; nested objects; array order sensitivity
+   - Coalescing: tool‑use present; adjacent text‑only; tool messages never coalesced
+   - Normalization: empty text filtering; assistant tool‑use only allowed
+   - Tokens: residual ≤ 0, exact boundary, rounding semantics, unknown model caps
+
+#### Phase 4b — Forest In‑Place Updates (Public API unchanged)
+
+Update internal comparison logic; do not coalesce at the Forest layer.
+
+1. Prefix matching
+   - Compute LCP over `normalizeForComparison(message)` sequences
+   - Use `stableDeepEqual` for message equality checks
+   - Maintain an index map from normalized to original arrays to avoid index drift
+
+2. Node reuse
+   - Reuse existing children when normalized messages are equal
+   - Preserve exact stored `content` for persisted nodes
+
+3. Tests
+   - Prefix match with filtered empty messages (index alignment preserved)
+   - Mixed text/tool‑use sequences
+   - Adjacent text messages not coalesced at Forest layer
+
+#### Phase 4c — LoomEngine In‑Place Updates (Public API unchanged)
+
+Migrate context construction, token shaping, and tool loop to V2 internals.
+
+1. Context construction
+   - Build provider input from Forest path
+   - Apply `coalesceTextOnlyAdjacent` per spec
+   - Include system prompt in token estimation
+
+2. Token shaping
+   - Use `estimateInputTokens` + `clampMaxTokens`
+   - Enforce invariant: effective `max_tokens` ≥ 1
+   - Configuration option for residual ≤ 0: default clamp to 1; allow fail‑early mode
+
+3. Tool loop
+   - Preserve tool correlation IDs; validate `tool_call_id` references an existing prior `tool-use.id`
+   - Never coalesce tool messages; do not coalesce across tool boundaries
+   - Continue existing recursion semantics
+
+4. Append filtering
+   - Drop messages that become empty after normalization
+   - Allow assistant messages with only `tool-use` blocks
+
+5. Tests
+   - Tool calling: single and multiple `tool-use` blocks
+   - Coalescing boundaries in context building
+   - Token boundary conditions and rounding
+
+#### Phase 4d — Persistence Write Cutover
+
+Switch write path to canonical V2 while keeping legacy read normalization.
+
+1. FileSystemStore writes
+   - Persist only `content: ContentBlock[]`; omit legacy fields (`tool_calls`, string `content`)
+
+2. Reads
+   - Continue using normalized read methods for legacy compatibility
+
+3. Tests
+   - Round‑trip write/read consistency in V2 form
+   - Legacy on‑disk files remain readable via normalization
+
+#### Explicit Spec Checkpoints (must validate)
+
+- Coalescing: only adjacent text‑only user/assistant; never messages with `tool-use`; never tool messages
+- Token estimation: include system prompt in estimates
+- Token clamping: integer floor; enforce ≥ 1; respect provider caps and residual window
+- Equality: deep equality; object key order must not affect equality; exact match for `tool-use.id` and `name`; arrays are order‑sensitive
+- Message validity: non‑empty `content`; assistant may be tool‑use only; tool messages require `tool_call_id`
+- Prefix semantics: LCP computed over normalized forms with stable index alignment
+
+#### Type Safety Requirements
+
+- Avoid `as any`/`as unknown`; if a cast seems necessary, revisit the types
+- Use `NonEmptyArray<T>` for message `content` where applicable
+- Provide role‑specific type guards for ContentBlocks and Messages
+- Example: `const content: NonEmptyArray<TextBlock> = [{ type: 'text', text: combinedText }];`
+
+#### High‑Risk Areas and Mitigations
+
+- Prefix matching with normalization: use index maps; add exhaustive tests
+- Coalescing with tool‑use: explicit predicates; include mixed content test cases
+- Token clamping negativity: centralize clamp; add boundary tests; assert invariant in engine path
+
+#### Test‑First Checklist (per sub‑phase)
+
+- Coalescing: tool‑use present; adjacent text‑only; role changes; tool messages never coalesced
+- Equality: parameter key order; nested objects/arrays; id/name mismatches; array order differences
+- Tokens: residual ≤ 0, exact boundary, rounding; unknown model fallback caps
+- Append/Prefix: empty‑text filtering; multi‑tool‑use batches; index alignment preserved
 
 ### Phase 5: UI Updates
 
@@ -214,10 +336,11 @@ To minimize risk and maintain functionality throughout the refactor:
    - Test thoroughly before moving to next
    - Use conversion utilities for compatibility
 
-4. **Update engine** (Phase 4)
-   - Modify internal handling
-   - Use conversion at boundaries
-   - Maintain API compatibility
+4. **Update engine** (Phase 4a–4d)
+   - 4a: Land utilities and tests (equality, coalescing, normalization, tokens)
+   - 4b: Update Forest internals (prefix/equality; no coalescing in Forest)
+   - 4c: Update LoomEngine internals (context/coalescing/tokens/tool loop)
+   - 4d: Switch persistence write path to V2
 
 5. **Update UI last** (Phase 5)
    - Can use conversion utilities initially
