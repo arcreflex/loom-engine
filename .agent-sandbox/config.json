@@ -2,6 +2,7 @@
   "ports": [],
   "readonly": [
     ".git/hooks",
+    ".git/config",
     ".husky",
     ".agent-sandbox",
     ".agent-precommit/user-context.json"
