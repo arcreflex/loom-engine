@@ -21,6 +21,7 @@ import { discoverMcpTools } from './mcp/client.ts';
 import { KNOWN_MODELS } from './browser.ts';
 import type { ProviderRequest } from './providers/types.ts';
 import { getCodebaseContext } from './tools/introspect.ts';
+import { v2ToLegacyMessage } from './providers/provider-utils.ts';
 
 export interface GenerateOptions {
   n: number;
@@ -136,9 +137,11 @@ export class LoomEngine {
           parameters,
           tools: undefined
         });
+        // Convert V2 message back to legacy format for forest
+        const legacyResponseMessage = v2ToLegacyMessage(response.message);
         const responseNode = await this.forest.append(
           root.id,
-          [...contextMessages, response.message],
+          [...contextMessages, legacyResponseMessage],
           {
             source_info: {
               type: 'model',
@@ -216,7 +219,8 @@ export class LoomEngine {
       ...toolParameters
     });
 
-    const assistantMessage = response.message;
+    // Convert V2 message back to legacy format for forest
+    const assistantMessage = v2ToLegacyMessage(response.message);
 
     // Append the assistant's response (which may or may not have tool calls)
     const assistantNode = await this.forest.append(

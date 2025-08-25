@@ -1,6 +1,20 @@
 import type { Logger } from '../log.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
+import { normalizeMessagesToV2, extractTextContent } from './provider-utils.ts';
+import type {
+  ToolUseBlock,
+  AssistantMessageV2,
+  NonEmptyArray,
+  ContentBlock
+} from '../types.ts';
+import {
+  EmptyProviderResponseError,
+  MalformedToolMessageError,
+  MissingMessageContentError,
+  GoogleDuplicateFunctionError
+} from './errors.ts';
 import { GoogleGenAI, type Content } from '@google/genai';
+import { randomUUID } from 'node:crypto';
 
 /**
  * Implements IProvider for Google's Gemini API.
@@ -31,6 +45,11 @@ export class GoogleProvider implements IProvider {
    * @returns A Promise resolving to the provider's response
    */
   async generate(request: ProviderRequest): Promise<ProviderResponse> {
+    // Map to track tool-use ID to function name for tool results
+    const toolIdToName = new Map<string, string>();
+    // Track function names to detect collisions
+    const functionNameCounts = new Map<string, number>();
+
     if (!this.apiKey) {
       throw new Error(
         'Google API key is required. Provide it explicitly or set GOOGLE_API_KEY environment variable.'
@@ -41,18 +60,53 @@ export class GoogleProvider implements IProvider {
       // Prepare messages, including system message if provided
       const messages: Content[] = [];
 
-      // Add conversation history
-      for (const msg of request.messages) {
+      // Normalize messages to V2 format
+      const v2Messages = normalizeMessagesToV2(request.messages);
+
+      // Convert V2 messages to Google format
+      for (let i = 0; i < v2Messages.length; i++) {
+        const msg = v2Messages[i];
         if (msg.role === 'tool') {
           // For tool messages, create a model message with function response
-          if (msg.content != null && msg.tool_call_id) {
+          const textContent = extractTextContent(msg.content);
+          if (!msg.tool_call_id) {
+            throw new MalformedToolMessageError(
+              'Tool message is missing required tool_call_id',
+              { index: i }
+            );
+          }
+          if (textContent == null) {
+            throw new MalformedToolMessageError(
+              'Tool message has no text content',
+              { index: i, tool_call_id: msg.tool_call_id }
+            );
+          }
+          if (textContent != null && msg.tool_call_id) {
+            // Look up the original function name from the tool call ID
+            const functionName = toolIdToName.get(msg.tool_call_id);
+            if (!functionName) {
+              throw new MalformedToolMessageError(
+                `No function name found for tool_call_id. Ensure the assistant's tool-use block with this ID appeared earlier in the conversation.`,
+                { tool_call_id: msg.tool_call_id }
+              );
+            }
+
+            // Google Gemini API expects functionResponse.response to be an object.
+            // Since our tools return strings, we wrap the string result in an object
+            // with a 'result' key. This is a standard mapping that preserves the
+            // tool's string output while conforming to Google's API requirements.
+            //
+            // IMPORTANT: Function responses are sent with role 'user' in Google's model,
+            // as they represent the user-side providing results back to the model.
+            const responsePayload = { result: textContent };
+
             messages.push({
-              role: 'model',
+              role: 'user',
               parts: [
                 {
                   functionResponse: {
-                    name: msg.tool_call_id, // Use tool_call_id as function name reference
-                    response: JSON.parse(msg.content)
+                    name: functionName,
+                    response: responsePayload
                   }
                 }
               ]
@@ -62,19 +116,32 @@ export class GoogleProvider implements IProvider {
         }
 
         if (msg.role === 'assistant') {
-          // Handle assistant messages with tool calls
+          // Handle assistant messages with ContentBlocks
           const parts: Content['parts'] = [];
 
-          if (msg.content != null) {
-            parts.push({ text: msg.content });
-          }
+          // Reset function name counts for this message
+          functionNameCounts.clear();
 
-          if (msg.tool_calls) {
-            for (const tc of msg.tool_calls) {
+          // Process each content block
+          for (const block of msg.content) {
+            if (block.type === 'text') {
+              parts.push({ text: block.text });
+            } else if (block.type === 'tool-use') {
+              // Track the mapping from tool ID to function name
+              toolIdToName.set(block.id, block.name);
+
+              // Detect function name collisions - Google's API doesn't preserve tool call IDs
+              // so we can't disambiguate multiple calls to the same function
+              const count = functionNameCounts.get(block.name) || 0;
+              functionNameCounts.set(block.name, count + 1);
+              if (count > 0) {
+                throw new GoogleDuplicateFunctionError(block.name);
+              }
+
               parts.push({
                 functionCall: {
-                  name: tc.function.name,
-                  args: JSON.parse(tc.function.arguments)
+                  name: block.name,
+                  args: block.parameters
                 }
               });
             }
@@ -87,14 +154,15 @@ export class GoogleProvider implements IProvider {
             });
           }
         } else if (msg.role === 'user') {
-          // Skip messages with null content
-          if (msg.content == null) {
-            continue;
+          // User messages have text content
+          const textContent = extractTextContent(msg.content);
+          if (textContent == null) {
+            throw new MissingMessageContentError('User', i);
           }
 
           messages.push({
             role: 'user',
-            parts: [{ text: msg.content }]
+            parts: [{ text: textContent }]
           });
         }
       }
@@ -148,23 +216,46 @@ export class GoogleProvider implements IProvider {
       const response = await this.ai.models.generateContent(req);
       this.logger.log('Google response:\n' + JSON.stringify(response, null, 2));
 
-      // Extract text and function calls from response
-      const textContent = response.text;
-      const functionCalls = response.functionCalls?.map(fc => ({
-        id: fc.id || '',
-        type: 'function' as const,
-        function: {
-          name: fc.name || '', // Ensure name is not undefined
-          arguments: JSON.stringify(fc.args)
-        }
-      }));
+      // Convert Google response to V2 message format.
+      // ORDERING LIMITATION: Google's SDK returns text and functionCalls as separate fields,
+      // not as an interleaved array. We append text first, then tool-use blocks.
+      // This means we cannot preserve the exact interleaving if the model intended
+      // text/tool/text ordering. This is a known limitation of the Google SDK structure.
+      // See specs/providers-and-models.md for details.
+      const toolUseBlocks: ToolUseBlock[] | undefined =
+        response.functionCalls?.map(fc => ({
+          type: 'tool-use' as const,
+          // Generate deterministic ID if not provided using crypto.randomUUID
+          id: fc.id || `google-tool-${randomUUID()}`,
+          name: fc.name || '',
+          parameters: fc.args as Record<string, unknown>
+        }));
+
+      // Build content blocks with available ordering information
+      const contentBlocks: ContentBlock[] = [];
+
+      // Add text content if present
+      if (response.text && response.text.trim().length > 0) {
+        contentBlocks.push({ type: 'text', text: response.text });
+      }
+
+      // Add tool-use blocks if present
+      if (toolUseBlocks && toolUseBlocks.length > 0) {
+        contentBlocks.push(...toolUseBlocks);
+      }
+
+      // Ensure we have at least one block
+      if (contentBlocks.length === 0) {
+        throw new EmptyProviderResponseError('Google');
+      }
+
+      const v2Message: AssistantMessageV2 = {
+        role: 'assistant',
+        content: contentBlocks as NonEmptyArray<ContentBlock>
+      };
 
       return {
-        message: {
-          role: 'assistant',
-          content: textContent || null,
-          tool_calls: functionCalls?.length ? functionCalls : undefined
-        },
+        message: v2Message,
         usage: {
           input_tokens: response.usageMetadata?.promptTokenCount,
           output_tokens: response.usageMetadata?.candidatesTokenCount,

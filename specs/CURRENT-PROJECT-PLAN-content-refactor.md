@@ -1,6 +1,6 @@
 # ContentBlock Refactor Implementation Plan
 
-CURRENT STATUS: Phase 2 (Persistence Layer) COMPLETED.
+CURRENT STATUS: Phase 3 (Provider Adapters) COMPLETED.
 
 ## Overview
 
@@ -120,24 +120,32 @@ interface ToolMessage {
 
 **Revised Approach**: Following review feedback, implemented explicit `loadNodeNormalized` and `findNodesNormalized` methods that return properly typed V2 data, avoiding type system lies while maintaining backward compatibility.
 
-### Phase 3: Provider Adapters
+### Phase 3: Provider Adapters ✅ COMPLETED
 
 **Goal**: Update providers to work with ContentBlock format
 
-1. **Update provider base interface**
-   - Accept ContentBlock[] in generate method
-   - Return ContentBlock[] from responses
+1. **Update provider base interface** ✅
+   - Updated ProviderRequest to accept Message[] | MessageV2[]
+   - Updated ProviderResponse to return MessageV2
+   - Maintained backward compatibility during transition
 
-2. **Update each provider (OpenAI, Anthropic, Google)**
-   - Convert ContentBlock[] to provider-specific format on request
-   - Convert provider responses to ContentBlock[] format
-   - Preserve tool correlation IDs
-   - Handle edge cases (empty content, tool-only messages)
+2. **Update each provider (OpenAI, Anthropic, Google)** ✅
+   - Created provider-utils.ts with shared conversion utilities
+   - All providers now normalize input messages to V2 format
+   - Convert V2 ContentBlock[] to provider-specific format on request
+   - Convert provider responses back to V2 MessageV2 format
+   - Preserve tool correlation IDs throughout
 
-3. **Provider-specific considerations**
-   - **OpenAI**: Map tool-use blocks to tool_calls array
-   - **Anthropic**: Already uses similar content block structure
-   - **Google**: Convert to function call format
+3. **Provider-specific implementations** ✅
+   - **OpenAI**: Maps tool-use blocks to/from tool_calls array
+   - **Anthropic**: Maps ContentBlocks to/from native content blocks
+   - **Google**: Converts to/from function call format
+
+4. **Backward compatibility** ✅
+   - Added v2ToLegacyMessage() for converting V2 back to legacy when needed
+   - Engine converts provider V2 responses to legacy for Forest compatibility
+   - All existing tests pass with minimal modifications
+   - Type safety maintained throughout
 
 OUT OF SCOPE: increased validation, error handling, or other changes to how we're holding the provider APIs that aren't directly relevant to these changes. This is a tight refactor focused on generalizing the content block structure.
 

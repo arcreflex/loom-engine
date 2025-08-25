@@ -218,6 +218,34 @@ Examples:
 - Suggest closest matching provider
 - Provide list of supported providers
 
+## Known Limitations
+
+### Content Block Ordering
+
+**OpenAI and Google Providers**: These providers' APIs return text content and tool calls as separate fields rather than as an interleaved array of content blocks. As a result:
+
+- We append text blocks first, then tool-use blocks when converting responses to V2 format
+- The exact interleaving of text/tool/text content cannot be preserved if that was the model's intent
+- This is a limitation of the underlying provider APIs, not our implementation
+- Anthropic's API natively supports interleaved content blocks and preserves ordering correctly
+
+**Text Block Concatenation**: When multiple text blocks need to be joined (e.g., for providers that expect a single text string):
+
+- Text blocks are joined with newline characters (`\n`) to preserve formatting
+- This is important for code blocks, paragraphs, and other formatted content
+- User and tool messages should ideally contain only a single text block
+
+**Google Tool Results**: The Google Gemini API expects function responses to be objects. Since our tools return strings, we wrap string results in `{ result: <string> }` format to conform to Google's API requirements while preserving the tool output. Additionally, Google expects function responses to be sent with role `'user'` (not `'model'`), as they represent the user-side providing results back to the model.
+
+**Google Tool Name Collisions**: The Google Gemini API does not preserve tool call IDs in its responses, making it impossible to correlate tool results when multiple calls to the same function occur in a single message. The provider will fail loudly if this scenario is detected, throwing a `GoogleDuplicateFunctionError` that explains the limitation.
+
+**Google UUID Generation**: When Google's API returns function calls without IDs, the provider generates deterministic UUIDs using `crypto.randomUUID()` for correlation. These IDs are:
+
+- Ephemeral and only valid within the single request/response cycle
+- Used solely for correlating the immediate tool result back to the function call
+- Not persisted or relied upon in subsequent conversation turns
+- Generated with format: `google-tool-{uuid}`
+
 ## Non-goals
 
 This specification does not cover:

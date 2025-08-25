@@ -118,7 +118,10 @@ describe('LoomEngine', () => {
       let i = 0;
       mockProviderInstance.generate.mock.mockImplementation(() =>
         Promise.resolve({
-          message: { role: 'assistant', content: `response ${i++}` },
+          message: {
+            role: 'assistant',
+            content: [{ type: 'text', text: `response ${i++}` }]
+          },
           finish_reason: 'stop',
           usage: { input_tokens: 10, output_tokens: 5 }
         })
@@ -461,15 +464,12 @@ describe('LoomEngine', () => {
           return {
             message: {
               role: 'assistant',
-              content: null,
-              tool_calls: [
+              content: [
                 {
+                  type: 'tool-use',
                   id: 'call_123',
-                  type: 'function',
-                  function: {
-                    name: 'echo',
-                    arguments: '{"message": "Hello World"}'
-                  }
+                  name: 'echo',
+                  parameters: { message: 'Hello World' }
                 }
               ]
             },
@@ -481,7 +481,9 @@ describe('LoomEngine', () => {
           return {
             message: {
               role: 'assistant',
-              content: 'I echoed your message successfully!'
+              content: [
+                { type: 'text', text: 'I echoed your message successfully!' }
+              ]
             },
             finish_reason: 'stop',
             usage: { input_tokens: 15, output_tokens: 8 }
@@ -558,7 +560,7 @@ describe('LoomEngine', () => {
             type: 'function',
             function: {
               name: 'echo',
-              arguments: '{"message": "Hello World"}'
+              arguments: '{"message":"Hello World"}'
             }
           }
         ],
@@ -618,15 +620,12 @@ describe('LoomEngine', () => {
           return {
             message: {
               role: 'assistant',
-              content: null,
-              tool_calls: [
+              content: [
                 {
+                  type: 'tool-use',
                   id: 'call_456',
-                  type: 'function',
-                  function: {
-                    name: 'echo',
-                    arguments: '{"message": "Hello Progress"}'
-                  }
+                  name: 'echo',
+                  parameters: { message: 'Hello Progress' }
                 }
               ]
             },
@@ -638,7 +637,7 @@ describe('LoomEngine', () => {
           return {
             message: {
               role: 'assistant',
-              content: 'Progress tracking works!'
+              content: [{ type: 'text', text: 'Progress tracking works!' }]
             },
             finish_reason: 'stop',
             usage: { input_tokens: 15, output_tokens: 8 }
@@ -719,6 +718,127 @@ describe('LoomEngine', () => {
         result.childNodes[0],
         progressNodes[1],
         'Final result matches last progress node'
+      );
+    });
+
+    it('handles tool-only assistant messages correctly through round-trip', async () => {
+      const root = createTestRoot('root_tool_only', { systemPrompt: 'Test' });
+      const providerName: ProviderName = 'openai' as ProviderName;
+      const modelName = 'gpt-4';
+
+      const mockProviderInstance = mockProviders();
+      let callCount = 0;
+
+      mockProviderInstance.generate.mock.mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // First call: return tool-only message (no text content)
+          return Promise.resolve({
+            message: {
+              role: 'assistant',
+              content: [
+                {
+                  type: 'tool-use',
+                  id: 'call_tool_only',
+                  name: 'test_echo',
+                  parameters: { message: 'Tool-only message test' }
+                }
+              ]
+            },
+            finish_reason: 'tool_calls',
+            usage: { input_tokens: 10, output_tokens: 5 }
+          });
+        } else {
+          // Second call: after tool execution
+          return Promise.resolve({
+            message: {
+              role: 'assistant',
+              content: [
+                { type: 'text', text: 'Tool execution completed successfully!' }
+              ]
+            },
+            finish_reason: 'stop',
+            usage: { input_tokens: 20, output_tokens: 10 }
+          });
+        }
+      });
+
+      (engine as any).getProvider = () => mockProviderInstance;
+
+      // Register the test_echo tool
+      engine.toolRegistry.register(
+        'test_echo',
+        'Echo the message for testing',
+        {
+          type: 'object',
+          properties: {
+            message: { type: 'string' }
+          },
+          required: ['message']
+        },
+        async (args: any) => `Echo: ${args.message}`
+      );
+
+      const userMessages: Message[] = [
+        { role: 'user', content: 'Use the echo tool' }
+      ];
+
+      const options = { n: 1, temperature: 0.7, max_tokens: 100 };
+      const activeTools = ['test_echo'];
+
+      const result = await engine.generate(
+        root.id,
+        providerName,
+        modelName,
+        userMessages,
+        options,
+        activeTools
+      );
+
+      // For a tool-only message, the first response creates an assistant node with tool calls
+      // The test primarily verifies that V2 tool-only messages are properly converted to legacy format
+
+      // Check that we got a result
+      assert(
+        result.childNodes.length > 0,
+        'Should have at least one child node'
+      );
+
+      // The first node should be an assistant message (after tool-only conversion)
+      const firstNode = result.childNodes[0];
+
+      // If it's a tool message, get its parent which should be the assistant node
+      let assistantNode: any;
+      if (firstNode.message.role === 'tool') {
+        assistantNode = mockStoreWrapper.nodes.get(firstNode.parent_id);
+      } else if (firstNode.message.role === 'assistant') {
+        assistantNode = firstNode;
+      } else {
+        assert.fail(`Unexpected first node role: ${firstNode.message.role}`);
+      }
+
+      // Verify the assistant node has the expected tool-only structure
+      assert(assistantNode, 'Assistant node should exist');
+      assert.strictEqual(assistantNode.message.role, 'assistant');
+      // After v2ToLegacyMessage conversion, tool-only message should have null content
+      assert.strictEqual(
+        assistantNode.message.content,
+        null,
+        'Tool-only assistant should have null content'
+      );
+      assert(assistantNode.message.tool_calls, 'Should have tool_calls');
+      assert.strictEqual(assistantNode.message.tool_calls.length, 1);
+      assert.strictEqual(
+        assistantNode.message.tool_calls[0].id,
+        'call_tool_only'
+      );
+      assert.strictEqual(
+        assistantNode.message.tool_calls[0].function.name,
+        'test_echo'
+      );
+      assert.strictEqual(
+        assistantNode.message.tool_calls[0].function.arguments,
+        '{"message":"Tool-only message test"}'
       );
     });
   });

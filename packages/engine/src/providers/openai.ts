@@ -1,6 +1,22 @@
 import type { Logger } from '../log.ts';
 import { KNOWN_MODELS } from './known-models.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
+import {
+  normalizeMessagesToV2,
+  extractTextContent,
+  extractToolUseBlocks,
+  toolCallsToToolUseBlocks
+} from './provider-utils.ts';
+import type {
+  ContentBlock,
+  AssistantMessageV2,
+  NonEmptyArray
+} from '../types.ts';
+import {
+  EmptyProviderResponseError,
+  MalformedToolMessageError,
+  MissingMessageContentError
+} from './errors.ts';
 import OpenAI from 'openai';
 
 /**
@@ -53,55 +69,74 @@ export class OpenAIProvider implements IProvider {
         });
       }
 
-      // Add conversation history
-      for (const msg of request.messages) {
+      // Normalize messages to V2 format
+      const v2Messages = normalizeMessagesToV2(request.messages);
+
+      // Convert V2 messages to OpenAI format
+      for (let i = 0; i < v2Messages.length; i++) {
+        const msg = v2Messages[i];
         if (msg.role === 'tool') {
-          // Tool messages require tool_call_id and content
-          if (!msg.tool_call_id || msg.content == null) {
-            continue; // Skip tool messages without tool_call_id or content
+          // Tool messages have text content and tool_call_id
+          const textContent = extractTextContent(msg.content);
+          if (!msg.tool_call_id) {
+            throw new MalformedToolMessageError(
+              'Tool message is missing required tool_call_id',
+              { index: i }
+            );
+          }
+          if (textContent == null) {
+            throw new MalformedToolMessageError(
+              'Tool message has no text content',
+              { index: i, tool_call_id: msg.tool_call_id }
+            );
           }
           messages.push({
             role: 'tool',
-            content: msg.content,
+            content: textContent,
             tool_call_id: msg.tool_call_id
           });
         } else if (msg.role === 'assistant') {
-          // Assistant messages can have tool_calls and/or content
+          // Assistant messages can have text and/or tool-use blocks
           const assistantMessage: OpenAI.ChatCompletionAssistantMessageParam = {
             role: 'assistant'
           };
 
-          // Add content if it exists
-          if (msg.content != null) {
-            assistantMessage.content = msg.content;
+          // Extract text content
+          const textContent = extractTextContent(msg.content);
+          if (textContent != null) {
+            assistantMessage.content = textContent;
           }
 
-          // Add tool_calls if they exist
-          if (msg.tool_calls) {
-            assistantMessage.tool_calls = msg.tool_calls.map(tc => ({
-              id: tc.id,
-              type: tc.type,
+          // Extract and convert tool-use blocks to OpenAI tool_calls
+          const toolUseBlocks = extractToolUseBlocks(msg.content);
+          if (toolUseBlocks) {
+            assistantMessage.tool_calls = toolUseBlocks.map(tb => ({
+              id: tb.id,
+              type: 'function' as const,
               function: {
-                name: tc.function.name,
-                arguments: tc.function.arguments
+                name: tb.name,
+                arguments: JSON.stringify(tb.parameters)
               }
             }));
           }
 
-          // Skip if neither content nor tool_calls exist
-          if (msg.content == null && !msg.tool_calls) {
-            continue;
+          // Throw if neither content nor tool_calls exist - this should not happen
+          if (textContent == null && !toolUseBlocks) {
+            throw new Error(
+              `Assistant message has neither text content nor tool-use blocks. This indicates a malformed message.`
+            );
           }
 
           messages.push(assistantMessage);
         } else {
-          // User messages require content
-          if (msg.content == null) {
-            continue;
+          // User messages have text content
+          const textContent = extractTextContent(msg.content);
+          if (textContent == null) {
+            throw new MissingMessageContentError('User', i);
           }
           messages.push({
             role: 'user',
-            content: msg.content
+            content: textContent
           });
         }
       }
@@ -165,21 +200,43 @@ export class OpenAIProvider implements IProvider {
       const choice = response.choices[0];
       const responseMessage = choice.message;
 
+      // Convert OpenAI response to V2 message format.
+      // ORDERING LIMITATION: OpenAI's API returns text content and tool_calls as separate fields,
+      // not as an interleaved array. We append text first, then tool-use blocks.
+      // This means we cannot preserve the exact interleaving if the model intended
+      // text/tool/text ordering. This is a known limitation of the OpenAI API structure.
+      // See specs/providers-and-models.md for details.
+      const contentBlocks: ContentBlock[] = [];
+
+      // Add text content if present
+      if (
+        responseMessage.content !== null &&
+        responseMessage.content.trim().length > 0
+      ) {
+        contentBlocks.push({ type: 'text', text: responseMessage.content });
+      }
+
+      // Add tool-use blocks if present
+      if (responseMessage.tool_calls && responseMessage.tool_calls.length > 0) {
+        const toolUseBlocks = toolCallsToToolUseBlocks(
+          responseMessage.tool_calls
+        );
+        contentBlocks.push(...toolUseBlocks);
+      }
+
+      // Ensure we have at least one block
+      if (contentBlocks.length === 0) {
+        throw new EmptyProviderResponseError('OpenAI');
+      }
+
+      const v2Message: AssistantMessageV2 = {
+        role: 'assistant',
+        content: contentBlocks as NonEmptyArray<ContentBlock>
+      };
+
       // Map response to our expected format
       return {
-        message: {
-          role: 'assistant',
-          content: responseMessage.content,
-          // Map the tool_calls from OpenAI's response back to our format
-          tool_calls: responseMessage.tool_calls?.map(tc => ({
-            id: tc.id,
-            type: tc.type,
-            function: {
-              name: tc.function.name,
-              arguments: tc.function.arguments
-            }
-          }))
-        },
+        message: v2Message,
         usage: {
           input_tokens: response.usage?.prompt_tokens,
           output_tokens: response.usage?.completion_tokens,

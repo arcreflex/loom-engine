@@ -1,6 +1,17 @@
 import type { Logger } from '../log.ts';
 import { KNOWN_MODELS } from './known-models.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
+import { normalizeMessagesToV2, extractTextContent } from './provider-utils.ts';
+import type {
+  ContentBlock,
+  AssistantMessageV2,
+  NonEmptyArray
+} from '../types.ts';
+import {
+  EmptyProviderResponseError,
+  MalformedToolMessageError,
+  MissingMessageContentError
+} from './errors.ts';
 import Anthropic from '@anthropic-ai/sdk';
 
 /**
@@ -45,48 +56,67 @@ export class AnthropicProvider implements IProvider {
         timeout: 10 * 60 * 1000 // see https://github.com/anthropics/anthropic-sdk-typescript?tab=readme-ov-file#long-requests
       });
 
-      // Map parameters to Anthropic's expected format
+      // Normalize messages to V2 format
+      const v2Messages = normalizeMessagesToV2(request.messages);
+
+      // Convert V2 messages to Anthropic format
       const anthropicMessages: Anthropic.MessageParam[] = [];
-      for (let i = 0; i < request.messages.length; i++) {
-        const msg = request.messages[i];
+      for (let i = 0; i < v2Messages.length; i++) {
+        const msg = v2Messages[i];
 
         if (msg.role === 'tool') {
           // For tool messages, create a user message with tool result content
-          if (msg.content != null && msg.tool_call_id) {
-            anthropicMessages.push({
-              role: 'user',
-              content: [
-                {
-                  type: 'tool_result',
-                  tool_use_id: msg.tool_call_id,
-                  content: msg.content
-                }
-              ]
-            });
+          const textContent = extractTextContent(msg.content);
+          if (!msg.tool_call_id) {
+            throw new MalformedToolMessageError(
+              'Tool message is missing required tool_call_id',
+              { index: i }
+            );
           }
+          if (textContent == null) {
+            throw new MalformedToolMessageError(
+              'Tool message has no text content',
+              { index: i, tool_call_id: msg.tool_call_id }
+            );
+          }
+          anthropicMessages.push({
+            role: 'user',
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: msg.tool_call_id,
+                content: textContent
+              }
+            ]
+          });
           continue;
         }
 
         if (msg.role === 'assistant') {
-          // Handle assistant messages with tool calls
+          // Handle assistant messages with ContentBlocks
           const content: Anthropic.MessageParam['content'] = [];
 
-          if (msg.content != null) {
-            let textContent = msg.content;
-            if (i === request.messages.length - 1) {
-              // last message isn't allowed to end with whitespace
-              textContent = textContent.replace(/[\s\n]+$/, '');
-            }
-            content.push({ type: 'text', text: textContent });
-          }
-
-          if (msg.tool_calls) {
-            for (const tc of msg.tool_calls) {
+          // Process each content block
+          const blocks = msg.content;
+          for (let j = 0; j < blocks.length; j++) {
+            const block = blocks[j];
+            if (block.type === 'text') {
+              let text = block.text;
+              // Only trim trailing whitespace from the last text block of the last message
+              const isLastMessage = i === v2Messages.length - 1;
+              const isLastTextBlock =
+                j === blocks.length - 1 ||
+                blocks.slice(j + 1).every(b => b.type !== 'text');
+              if (isLastMessage && isLastTextBlock) {
+                text = text.replace(/[\s\n]+$/, '');
+              }
+              content.push({ type: 'text', text });
+            } else if (block.type === 'tool-use') {
               content.push({
                 type: 'tool_use',
-                id: tc.id,
-                name: tc.function.name,
-                input: JSON.parse(tc.function.arguments)
+                id: block.id,
+                name: block.name,
+                input: block.parameters
               });
             }
           }
@@ -98,13 +128,14 @@ export class AnthropicProvider implements IProvider {
             });
           }
         } else if (msg.role === 'user') {
-          // Skip messages with null content
-          if (msg.content == null) {
-            continue;
+          // User messages have text content
+          const textContent = extractTextContent(msg.content);
+          if (textContent == null) {
+            throw new MissingMessageContentError('User', i);
           }
 
-          let content = msg.content;
-          if (i === request.messages.length - 1) {
+          let content = textContent;
+          if (i === v2Messages.length - 1) {
             // last message isn't allowed to end with whitespace
             content = content.replace(/[\s\n]+$/, '');
           }
@@ -182,30 +213,37 @@ export class AnthropicProvider implements IProvider {
         'Anthropic response:\n' + JSON.stringify(response, null, 2)
       );
 
-      // Extract text content and tool calls from response
-      const textContent = response.content
-        .filter(c => c.type === 'text')
-        .map(c => c.text)
-        .join('');
+      // Convert Anthropic response to V2 message format preserving order
+      const contentBlocks: ContentBlock[] = [];
 
-      const toolCalls = response.content
-        .filter(c => c.type === 'tool_use')
-        .map(c => ({
-          id: c.id,
-          type: 'function' as const,
-          function: {
-            name: c.name,
-            arguments: JSON.stringify(c.input)
-          }
-        }));
+      // Process response content blocks in order
+      for (const block of response.content) {
+        if (block.type === 'text') {
+          contentBlocks.push({ type: 'text', text: block.text });
+        } else if (block.type === 'tool_use') {
+          contentBlocks.push({
+            type: 'tool-use',
+            id: block.id,
+            name: block.name,
+            parameters: block.input as Record<string, unknown>
+          });
+        }
+      }
+
+      // Ensure we have at least one block
+      if (contentBlocks.length === 0) {
+        throw new EmptyProviderResponseError('Anthropic');
+      }
+
+      // Return V2 message with content blocks in original order
+      const v2Message: AssistantMessageV2 = {
+        role: 'assistant',
+        content: contentBlocks as NonEmptyArray<ContentBlock>
+      };
 
       // Map response to our expected format
       return {
-        message: {
-          role: 'assistant',
-          content: textContent || null,
-          tool_calls: toolCalls.length > 0 ? toolCalls : undefined
-        },
+        message: v2Message,
         usage: {
           input_tokens: response.usage?.input_tokens,
           output_tokens: response.usage?.output_tokens,
