@@ -9,8 +9,8 @@ importers:
   .:
     devDependencies:
       '@arcreflex/agent-precommit':
-        specifier: ^1.0.7
-        version: 1.0.7(@types/node@22.17.0)(typescript@5.8.3)(ws@8.18.1)(zod@3.25.76)
+        specifier: ^1.0.9
+        version: 1.0.9(@types/node@22.17.0)(typescript@5.8.3)(ws@8.18.1)(zod@3.25.76)
       '@eslint/js':
         specifier: ^9.24.0
         version: 9.32.0
@@ -217,8 +217,8 @@ packages:
     resolution: {integrity: sha512-d4c+fg+xy9e46c8+YnrrgIQR45CZlAi7PwdzIfDXDM6ACxEZli1/fxhURsq30ZpMZy6LvSkr41jGq5aF5TD7rQ==}
     hasBin: true
 
-  '@arcreflex/agent-precommit@1.0.7':
-    resolution: {integrity: sha512-iJoORzsQdu5/hy0fqH8G7MMqRuo8uj6VvVVLoOqPRpx9Q17kTosmjLDBaeg+NCw1cCIxSyBa7jVDY1NKDtzeJA==}
+  '@arcreflex/agent-precommit@1.0.9':
+    resolution: {integrity: sha512-B7JSP0u1Px7tytxykXImf8V3q0mIhbatG2+SuvfgykIHKxCIQsroIhU0NlKnmKOz5WfnO2or7tHkrbKzGkLlfw==}
     hasBin: true
 
   '@babel/code-frame@7.27.1':
@@ -3258,7 +3258,7 @@ snapshots:
 
   '@anthropic-ai/sdk@0.52.0': {}
 
-  '@arcreflex/agent-precommit@1.0.7(@types/node@22.17.0)(typescript@5.8.3)(ws@8.18.1)(zod@3.25.76)':
+  '@arcreflex/agent-precommit@1.0.9(@types/node@22.17.0)(typescript@5.8.3)(ws@8.18.1)(zod@3.25.76)':
     dependencies:
       openai: 5.12.2(ws@8.18.1)(zod@3.25.76)
       ts-node: 10.9.2(@types/node@22.17.0)(typescript@5.8.3)
