@@ -9,6 +9,8 @@ import {
   type NodeMetadata,
   getToolCalls
 } from './types.ts';
+import { normalizeMessage } from './content-blocks.ts';
+import { normalizeForComparison, stableDeepEqual } from './engine-utils.ts';
 import type { ILoomStore, NodeStructure } from './store/types.ts';
 import { SerialQueue } from './queue.ts';
 import type { ConfigStore } from './config.ts';
@@ -249,18 +251,36 @@ export class Forest {
 
     // Implement prefix matching
     while (true) {
+      if (messageIndex >= messages.length) {
+        const nodeAtParent = await this.store.loadNode(currentParentId);
+        if (!nodeAtParent) {
+          throw new Error(`Current parent node not found: ${currentParentId}`);
+        }
+        return nodeAtParent;
+      }
       // Get children of current parent
       const children = await this.getChildren(currentParentId);
 
-      // Look for a child that matches the current message
+      // Skip messages that normalize to empty for comparison
       const currentMessage = messages[messageIndex];
-      const matchingChild = children.find(
-        child =>
-          child.message.role === currentMessage.role &&
-          child.message.content === currentMessage.content &&
-          JSON.stringify(getToolCalls(child.message)) ===
-            JSON.stringify(getToolCalls(currentMessage))
+      const normalizedCurrent = normalizeForComparison(
+        normalizeMessage(currentMessage)
       );
+      if (!normalizedCurrent) {
+        messageIndex++;
+        continue;
+      }
+
+      // Look for a child that matches the current message (V2-normalized, deep equality)
+      const matchingChild = children.find(child => {
+        const normalizedChild = normalizeForComparison(
+          normalizeMessage(child.message)
+        );
+        return (
+          !!normalizedChild &&
+          stableDeepEqual(normalizedChild, normalizedCurrent)
+        );
+      });
 
       if (matchingChild) {
         // Found a match, move to the next message and continue with this child as the new parent

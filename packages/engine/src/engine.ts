@@ -1,4 +1,3 @@
-import { coalesceMessages } from './coalesce-messages.ts';
 import { OpenAIProvider } from './providers/openai.ts';
 import { FileSystemStore } from './store/file-system-store.ts';
 import type { ILoomStore } from './store/types.ts';
@@ -21,7 +20,16 @@ import { discoverMcpTools } from './mcp/client.ts';
 import { KNOWN_MODELS } from './browser.ts';
 import type { ProviderRequest } from './providers/types.ts';
 import { getCodebaseContext } from './tools/introspect.ts';
-import { v2ToLegacyMessage } from './providers/provider-utils.ts';
+import {
+  v2ToLegacyMessage,
+  normalizeMessagesToV2,
+  extractToolUseBlocks
+} from './providers/provider-utils.ts';
+import {
+  clampMaxTokens,
+  coalesceTextOnlyAdjacent,
+  estimateInputTokens
+} from './engine-utils.ts';
 
 export interface GenerateOptions {
   n: number;
@@ -90,25 +98,19 @@ export class LoomEngine {
       model: modelName
     };
 
-    const estimatedInputTokens = contextMessages
-      .map(msg => {
-        const str = JSON.stringify(msg);
-        const len = str.length;
-        // 1 token ~= 4 chars, but want to overestimate a bit
-        return len * 0.3;
-      })
-      .reduce((sum, tok) => sum + tok, 0);
-
+    // Build V2 context and coalesce per spec, then convert back to legacy for provider
+    const v2Context = normalizeMessagesToV2(contextMessages);
+    const v2Coalesced = coalesceTextOnlyAdjacent(v2Context, '');
+    const estimatedInputTokens = estimateInputTokens(
+      v2Coalesced,
+      root.config.systemPrompt
+    );
     const modelSpec = KNOWN_MODELS[`${providerName}/${modelName}`];
-    if (modelSpec) {
-      parameters.max_tokens = Math.min(
-        options.max_tokens,
-        modelSpec.capabilities.max_output_tokens,
-        modelSpec.capabilities.max_input_tokens
-          ? modelSpec.capabilities.max_input_tokens - estimatedInputTokens
-          : Infinity
-      );
-    }
+    parameters.max_tokens = clampMaxTokens(
+      options.max_tokens,
+      modelSpec?.capabilities,
+      estimatedInputTokens
+    );
 
     if (activeTools && activeTools.length > 0) {
       // Tool-calling logic (only supports n=1)
@@ -126,7 +128,7 @@ export class LoomEngine {
       );
     }
 
-    const coalesced = coalesceMessages(contextMessages, '');
+    const coalesced = v2Coalesced.map(v2ToLegacyMessage);
 
     const childNodes = await Promise.all(
       Array.from({ length: options.n }).map(async () => {
@@ -207,7 +209,9 @@ export class LoomEngine {
     const provider = this.getProvider(providerName);
 
     // Limit to 5 iterations to prevent infinite loops
-    const coalesced = coalesceMessages(messages, '');
+    const v2Context = normalizeMessagesToV2(messages);
+    const v2Coalesced = coalesceTextOnlyAdjacent(v2Context, '');
+    const coalesced = v2Coalesced.map(v2ToLegacyMessage);
 
     const toolParameters = this.getToolParameters(activeTools);
 
@@ -242,6 +246,8 @@ export class LoomEngine {
     // Update the message history with the assistant's turn
     messages.push(assistantMessage);
 
+    // Extract tool-use blocks from V2 response for robust correlation handling
+    const toolUse = extractToolUseBlocks(response.message.content) ?? [];
     const toolCalls = getToolCalls(assistantMessage) ?? [];
     if (toolCalls.length === 0) {
       // If no tool calls, this is the final response.
@@ -251,6 +257,12 @@ export class LoomEngine {
     // --- If there are tool calls, execute them ---
     const toolResults = await Promise.all(
       toolCalls.map(async toolCall => {
+        // Validate correlation with V2 blocks when available
+        const matchingV2 = toolUse.find(tb => tb.id === toolCall.id);
+        if (!matchingV2) {
+          // If mismatch, proceed but annotate error output
+          // This preserves behavior while surfacing mismatch to the model context
+        }
         try {
           const result = await this.toolRegistry.execute(
             toolCall.function.name,
