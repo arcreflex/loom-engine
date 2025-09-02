@@ -1,17 +1,15 @@
-import type {
-  Message,
-  MessageV2,
-  ContentBlock,
-  TextBlock,
-  ToolUseBlock
-} from '../types.ts';
+import type { Message, MessageV2, ToolUseBlock } from '../types.ts';
 import {
   normalizeMessage,
   isMessageV2,
   ToolArgumentParseError
 } from '../content-blocks.ts';
 import { UnexpectedToolCallTypeError } from './errors.ts';
-import { v2ToLegacyMessage } from '../content-blocks-convert.ts';
+import {
+  v2ToLegacyMessage,
+  extractTextContent,
+  extractToolUseBlocks
+} from '../content-blocks-convert.ts';
 
 /**
  * Converts a message array to V2 format, handling both legacy and V2 inputs.
@@ -39,25 +37,7 @@ export function normalizeMessagesToV2(
  * User and tool messages should ideally contain only a single text block.
  * Assistant messages may have multiple text blocks interspersed with tool-use blocks.
  */
-export function extractTextContent(blocks: ContentBlock[]): string | null {
-  const textBlocks = blocks.filter((b): b is TextBlock => b.type === 'text');
-  if (textBlocks.length === 0) return null;
-  // Join with newline to preserve formatting (code blocks, paragraphs, etc.)
-  return textBlocks.map(b => b.text).join('\n');
-}
-
-/**
- * Extracts tool-use blocks from ContentBlock array.
- * Returns undefined if no tool-use blocks are present.
- */
-export function extractToolUseBlocks(
-  blocks: ContentBlock[]
-): ToolUseBlock[] | undefined {
-  const toolBlocks = blocks.filter(
-    (b): b is ToolUseBlock => b.type === 'tool-use'
-  );
-  return toolBlocks.length > 0 ? toolBlocks : undefined;
-}
+export { extractTextContent, extractToolUseBlocks };
 
 /**
  * Converts tool calls from OpenAI format to ToolUseBlock format.
