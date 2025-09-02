@@ -84,6 +84,56 @@ describe('Forest V2-aware prefix matching', () => {
     assert.equal(final.id, nodeId);
   });
 
+  it('retains assistant messages that are tool-use only', async () => {
+    const { mockStore } = createMockStore();
+    const forest = new Forest(mockStore);
+
+    const rootId = mockRootId('root-4');
+    await mockStore.saveRootInfo({
+      id: rootId,
+      createdAt: new Date().toISOString(),
+      config: { systemPrompt: 'Sys' },
+      child_ids: []
+    });
+
+    const final = await forest.append(
+      rootId,
+      [
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            {
+              id: 'call-xyz',
+              type: 'function',
+              function: { name: 'noop', arguments: '{}' }
+            }
+          ]
+        }
+      ],
+      {
+        source_info: {
+          type: 'model',
+          provider: 'openai',
+          model_name: 'gpt-4o-2024-08-06',
+          parameters: { max_tokens: 10, temperature: 1 }
+        }
+      }
+    );
+
+    // Should have created a non-root node whose parent is the root
+    if (!final.parent_id) throw new Error('expected non-root node');
+    // parent should be the root id
+    // Compare via string as these are branded string types
+    if (
+      (final.parent_id as unknown as string) !== (rootId as unknown as string)
+    ) {
+      throw new Error(
+        `expected parent_id ${String(rootId)}, got ${String(final.parent_id)}`
+      );
+    }
+  });
+
   it('skips empty-normalized messages and matches subsequent child', async () => {
     const { mockStore } = createMockStore();
     const forest = new Forest(mockStore);

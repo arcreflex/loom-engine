@@ -372,6 +372,54 @@ describe('LoomEngine', () => {
       });
     });
 
+    it('should clamp tokens using model capabilities', async () => {
+      const systemPrompt = 'system message';
+      const rootConfig: RootConfig = { systemPrompt };
+      const providerName: ProviderName = 'openai';
+      const modelName = 'gpt-4o-2024-08-06'; // known caps: out=16384
+      const existingMessages: Message[] = [{ role: 'user', content: 'Short' }];
+
+      const rootId = mockRootId('rootClamp');
+      const root = createTestRoot(rootId.toString(), rootConfig);
+      {
+        let node: Node = root;
+        for (let i = 0; i < existingMessages.length; i++) {
+          node = createTestNode(
+            `pre-${i}`,
+            root.id,
+            node.id,
+            existingMessages[i]
+          );
+        }
+      }
+
+      const options = { n: 1, max_tokens: 999999, temperature: 0.7 };
+      await engine.generate(
+        root.id,
+        providerName,
+        modelName,
+        existingMessages,
+        options
+      );
+
+      // Assert provider called with clamped max_tokens (derived from model caps)
+      const firstCall =
+        (mockProviderInstance.generate.mock.calls[0] as any) ?? [];
+      const argsArr = firstCall.arguments ?? firstCall;
+      const callArgs = argsArr[0];
+      if (!callArgs || !callArgs.parameters)
+        throw new Error('provider call missing parameters');
+      const { KNOWN_MODELS } = await import('./browser.ts');
+      const expectedCap =
+        KNOWN_MODELS['openai/gpt-4o-2024-08-06']?.capabilities
+          ?.max_output_tokens;
+      if (callArgs.parameters.max_tokens !== expectedCap) {
+        throw new Error(
+          `expected clamped max_tokens ${expectedCap}, got ${callArgs.parameters.max_tokens}`
+        );
+      }
+    });
+
     it('should throw an error for unsupported provider types', async () => {
       const root = createTestRoot('r5', { systemPrompt: 'test' });
       const userMessages: Message[] = [
