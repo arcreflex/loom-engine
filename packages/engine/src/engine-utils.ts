@@ -109,17 +109,16 @@ export function coalesceTextOnlyAdjacent(
     const curIsTextOnly = msg.content.every(b => b.type === 'text');
 
     if (prevIsTextOnly && curIsTextOnly) {
-      // Concatenate text with separator
-      const prevText = (prev.content as NonEmptyArray<TextBlock>)[0].text;
-      const restPrev = (prev.content as NonEmptyArray<TextBlock>).slice(1);
-      const newPrevText =
-        prevText +
-        separator +
-        (msg.content as NonEmptyArray<TextBlock>)[0].text;
+      // Join all text blocks from prev and current into a single block per message pair.
+      const prevJoined = (prev.content as NonEmptyArray<TextBlock>)
+        .map(b => b.text)
+        .join('');
+      const curJoined = (msg.content as NonEmptyArray<TextBlock>)
+        .map(b => b.text)
+        .join('');
+      const mergedText = (prevJoined + (separator ?? '') + curJoined) as string;
       const newPrevBlocks: NonEmptyArray<TextBlock> = [
-        { type: 'text', text: newPrevText },
-        ...restPrev,
-        ...((msg.content as NonEmptyArray<TextBlock>).slice(1) as TextBlock[])
+        { type: 'text', text: mergedText }
       ];
       out[out.length - 1] = { ...prev, content: newPrevBlocks } as MessageV2;
     } else {

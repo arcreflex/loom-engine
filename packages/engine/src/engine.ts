@@ -260,8 +260,12 @@ export class LoomEngine {
         // Validate correlation with V2 blocks when available
         const matchingV2 = toolUse.find(tb => tb.id === toolCall.id);
         if (!matchingV2) {
-          // If mismatch, proceed but annotate error output
-          // This preserves behavior while surfacing mismatch to the model context
+          this.log({
+            level: 'debug',
+            event: 'tool_correlation_mismatch',
+            tool_call_id: toolCall.id,
+            v2_ids: toolUse.map(t => t.id)
+          });
         }
         try {
           const result = await this.toolRegistry.execute(

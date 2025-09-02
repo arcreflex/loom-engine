@@ -236,10 +236,31 @@ export class Forest {
       throw new Error(`Parent node not found: ${parentId}`);
     }
 
-    messages = messages.filter(
-      m =>
-        (m.content != null && m.content.length > 0) || getToolCalls(m)?.length
-    );
+    messages = messages.filter(m => {
+      const toolCalls = getToolCalls(m)?.length ?? 0;
+      const contentUnknown = (m as unknown as { content?: unknown }).content;
+      if (typeof contentUnknown === 'string') {
+        return contentUnknown.trim().length > 0 || toolCalls > 0;
+      }
+      if (Array.isArray(contentUnknown)) {
+        // Treat as V2 ContentBlock[]
+        const hasToolUse = contentUnknown.some(
+          b => (b as { type?: string }).type === 'tool-use'
+        );
+        const hasText = contentUnknown.some(b => {
+          const blk = b as { type?: string; text?: unknown };
+          return (
+            blk.type === 'text' &&
+            typeof blk.text === 'string' &&
+            blk.text.trim().length > 0
+          );
+        });
+        // Allow assistant messages that are tool-use only; drop if empty after normalization
+        return hasText || hasToolUse;
+      }
+      // null/undefined: only keep if tool calls are present
+      return toolCalls > 0;
+    });
 
     if (!messages.length) {
       return parentNode;

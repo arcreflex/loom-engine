@@ -124,9 +124,26 @@ describe('coalesceTextOnlyAdjacent', () => {
     assert.equal((out[0].content[0] as TextBlock).text, 'A B');
     assert.equal((out[1].content[0] as TextBlock).text, 'C D');
     // tool-use prevents coalescing with following assistant text
-    assert.equal((out[3] as any).type, undefined);
+    assert.equal(out[2].role, 'assistant');
+    assert.equal((out[2].content[0] as any).type, 'tool-use');
+    assert.equal(out[3].role, 'assistant');
+    assert.equal((out[3].content[0] as TextBlock).text, 'E');
     assert.equal(out[4].role, 'tool');
     assert.equal(out[5].role, 'tool');
+  });
+
+  it('joins multi-block text messages into a single block per coalesced pair', () => {
+    const msgs: MessageV2[] = [
+      user(['Hello, ', 'world']),
+      user(['! ', 'How are you?'])
+    ];
+    const out = coalesceTextOnlyAdjacent(msgs, ' ');
+    assert.equal(out.length, 1);
+    assert.equal(out[0].role, 'user');
+    assert.equal(
+      (out[0].content[0] as TextBlock).text,
+      'Hello, world ! How are you?'
+    );
   });
 });
 
