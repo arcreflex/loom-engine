@@ -595,6 +595,91 @@ describe('LoomEngine', () => {
       );
     });
 
+    it('should execute multiple tool calls in one assistant turn and recurse', async () => {
+      const root = createTestRoot('r_multi', {
+        systemPrompt: 'You are a helpful assistant'
+      });
+      const providerName: ProviderName = 'openai';
+      const modelName = 'gpt-4';
+      const userMessages: Message[] = [{ role: 'user', content: 'Echo twice' }];
+      const options = { n: 1, max_tokens: 100, temperature: 0.7 };
+      const activeTools = ['echo'];
+
+      mockProviderInstance.generate.mock.resetCalls();
+
+      let callCount = 0;
+      mockProviderInstance.generate.mock.mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) {
+          // First call: return two tool calls in one assistant message
+          return {
+            message: {
+              role: 'assistant',
+              content: [
+                {
+                  type: 'tool-use',
+                  id: 'c1',
+                  name: 'echo',
+                  parameters: { message: 'one' }
+                },
+                {
+                  type: 'tool-use',
+                  id: 'c2',
+                  name: 'echo',
+                  parameters: { message: 'two' }
+                }
+              ]
+            },
+            finish_reason: 'tool_calls',
+            usage: { input_tokens: 12, output_tokens: 6 }
+          };
+        } else {
+          return {
+            message: {
+              role: 'assistant',
+              content: [{ type: 'text', text: 'Both tools executed.' }]
+            },
+            finish_reason: 'stop',
+            usage: { input_tokens: 20, output_tokens: 10 }
+          };
+        }
+      });
+
+      let result = await engine.generate(
+        root.id,
+        providerName,
+        modelName,
+        userMessages,
+        options,
+        activeTools
+      );
+      while (result.next) result = await result.next;
+
+      // Provider called twice (tool turn + final)
+      assert.strictEqual(mockProviderInstance.generate.mock.callCount(), 2);
+
+      // Expect 1 final node returned
+      assert.strictEqual(result.childNodes.length, 1);
+      assert.strictEqual(result.childNodes[0].message.role, 'assistant');
+      assert.strictEqual(
+        result.childNodes[0].message.content,
+        'Both tools executed.'
+      );
+
+      // Verify two tool result nodes were created with matching IDs
+      const created = Array.from(mockStoreWrapper.nodes.values());
+      const toolNodes = created.filter(
+        (
+          n
+        ): n is typeof n & {
+          message: { role: 'tool'; tool_call_id: string };
+        } => n.message.role === 'tool'
+      );
+      assert.strictEqual(toolNodes.length, 2);
+      const ids = toolNodes.map(n => n.message.tool_call_id).sort();
+      assert.deepStrictEqual(ids, ['c1', 'c2']);
+    });
+
     it('should return a `next` promise tool-calling sequence', async () => {
       const root = createTestRoot('r9', {
         systemPrompt: 'You are a helpful assistant'

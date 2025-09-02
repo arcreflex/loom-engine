@@ -256,7 +256,10 @@ export class Forest {
           );
         });
         // Allow assistant messages that are tool-use only; drop if empty after normalization
-        return hasText || hasToolUse;
+        return (
+          hasText ||
+          (hasToolUse && (m as { role: string }).role === 'assistant')
+        );
       }
       // null/undefined: only keep if tool calls are present
       return toolCalls > 0;

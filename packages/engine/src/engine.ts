@@ -261,10 +261,11 @@ export class LoomEngine {
         const matchingV2 = toolUse.find(tb => tb.id === toolCall.id);
         if (!matchingV2) {
           this.log({
-            level: 'debug',
+            level: 'warn',
             event: 'tool_correlation_mismatch',
+            root_id: root.id,
             tool_call_id: toolCall.id,
-            v2_ids: toolUse.map(t => t.id)
+            available_v2_ids: toolUse.map(t => t.id)
           });
         }
         try {
