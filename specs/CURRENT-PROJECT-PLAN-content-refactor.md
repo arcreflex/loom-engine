@@ -1,6 +1,6 @@
 # ContentBlock Refactor Implementation Plan
 
-CURRENT STATUS: Phase 4b (Forest updates) COMPLETED; Phase 4c (Engine internals) IN PROGRESS.
+CURRENT STATUS: Phase 4c (Engine internals) COMPLETED; Phase 4d (V2 write cutover) COMPLETED.
 
 ## Overview
 

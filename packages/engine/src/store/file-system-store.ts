@@ -11,7 +11,8 @@ import type {
 } from '../types.ts';
 import type { ILoomStore, NodeQueryCriteria, NodeStructure } from './types.ts';
 import { initializeLog, log } from '../log.ts';
-import { normalizeMessage } from '../content-blocks.ts';
+import { isMessageV2, normalizeMessage } from '../content-blocks.ts';
+import { v2ToLegacyMessage } from '../providers/provider-utils.ts';
 
 class IdCache<T extends string> {
   known = new Set<T>();
@@ -117,8 +118,20 @@ export class FileSystemStore implements ILoomStore {
     // Ensure directories exist
     await fs.mkdir(nodesDir, { recursive: true });
 
-    // Write node data
-    await fs.writeFile(nodePath, JSON.stringify(nodeData, null, 2));
+    // Write node data in canonical V2 message format
+    let toWrite: NodeDataV2;
+    try {
+      const v2 = normalizeMessage((nodeData as NodeData).message);
+      toWrite = { ...(nodeData as NodeData), message: v2 } as NodeDataV2;
+    } catch (error) {
+      const errorMessage = `Failed to normalize message for write (node ${nodeData.id}): ${
+        error instanceof Error ? error.message : String(error)
+      }`;
+      this.log(errorMessage);
+      throw new Error(errorMessage, { cause: error });
+    }
+
+    await fs.writeFile(nodePath, JSON.stringify(toWrite, null, 2));
 
     // Invalidate cache
     this.nodeStructuresCache = null;
@@ -173,7 +186,8 @@ export class FileSystemStore implements ILoomStore {
       const nodePath = this.nodeFilePath(root.id, nodeId);
       try {
         const data = await fs.readFile(nodePath, 'utf-8');
-        return JSON.parse(data) as NodeData;
+        const raw = JSON.parse(data) as unknown;
+        return this.toLegacyNode(raw);
       } catch (error) {
         // Check if this is a file not found error (return null) vs JSON parse error (fail loudly)
         if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
@@ -239,7 +253,7 @@ export class FileSystemStore implements ILoomStore {
 
         const nodePath = path.join(nodesDir, file);
         const data = await fs.readFile(nodePath, 'utf-8');
-        const node = JSON.parse(data) as NodeData;
+        const node = this.toLegacyNode(JSON.parse(data) as unknown);
 
         // Filter by parent ID if specified
         if (parentId && node.parent_id !== parentId) {
@@ -307,6 +321,24 @@ export class FileSystemStore implements ILoomStore {
 
   log(msg: unknown) {
     log(this.basePath, msg);
+  }
+
+  private isPersistedNodeV2(obj: unknown): obj is NodeDataV2 {
+    if (!obj || typeof obj !== 'object') return false;
+    const rec = obj as { message?: unknown };
+    return isMessageV2(rec.message);
+  }
+
+  private toLegacyNode(raw: unknown): NodeData {
+    if (this.isPersistedNodeV2(raw)) {
+      const { message, ...rest } = raw;
+      const legacy = v2ToLegacyMessage(message);
+      return {
+        ...(rest as Omit<NodeDataV2, 'message'>),
+        message: legacy
+      } as NodeData;
+    }
+    return raw as NodeData;
   }
 
   /**

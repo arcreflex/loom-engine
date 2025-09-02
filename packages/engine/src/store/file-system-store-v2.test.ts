@@ -294,6 +294,131 @@ describe('FileSystemStore V2 Message Format', () => {
     });
   });
 
+  it('should persist messages in V2 format on write and convert to legacy on load', async () => {
+    // Create test root
+    const rootId = store.generateRootId();
+    const rootData: RootData = {
+      id: rootId,
+      child_ids: [],
+      createdAt: new Date().toISOString(),
+      config: { systemPrompt: 'Test' }
+    };
+    await store.saveRootInfo(rootData);
+
+    // Prepare legacy user node and save via store (write should normalize to V2)
+    const userNodeId = store.generateNodeId(rootId);
+    const userNode: NodeData = {
+      id: userNodeId,
+      root_id: rootId,
+      parent_id: rootId,
+      child_ids: [],
+      message: { role: 'user', content: 'Hello there' },
+      metadata: {
+        timestamp: new Date().toISOString(),
+        original_root_id: rootId,
+        source_info: { type: 'user' }
+      }
+    };
+    await store.saveNode(userNode);
+
+    // Read raw file and verify V2 shape persisted
+    const [, userFile] = userNodeId.split('/');
+    const userFilePath = join(tempDir, rootId, 'nodes', `${userFile}.json`);
+    const userRaw = JSON.parse(
+      await (await import('node:fs/promises')).readFile(userFilePath, 'utf-8')
+    );
+    if (!Array.isArray(userRaw.message.content)) {
+      throw new Error('Expected V2 array content for user message');
+    }
+    if (userRaw.message.content[0].type !== 'text') {
+      throw new Error('Expected text block for user message');
+    }
+    // loadNode should convert back to legacy
+    const loadedUser = (await store.loadNode(userNodeId)) as NodeData;
+    if (typeof loadedUser.message.content !== 'string') {
+      throw new Error('Expected legacy string content after loadNode');
+    }
+
+    // Assistant with tool_calls
+    const asstNodeId = store.generateNodeId(rootId);
+    const asstNode: NodeData = {
+      id: asstNodeId,
+      root_id: rootId,
+      parent_id: userNodeId,
+      child_ids: [],
+      message: {
+        role: 'assistant',
+        content: 'Ok',
+        tool_calls: [
+          {
+            id: 't1',
+            type: 'function',
+            function: { name: 'noop', arguments: '{}' }
+          }
+        ]
+      },
+      metadata: {
+        timestamp: new Date().toISOString(),
+        original_root_id: rootId,
+        source_info: {
+          type: 'model',
+          provider: 'openai',
+          model_name: 'gpt-4',
+          parameters: { temperature: 1, max_tokens: 100 }
+        }
+      }
+    };
+    await store.saveNode(asstNode);
+    const [, asstFile] = asstNodeId.split('/');
+    const asstFilePath = join(tempDir, rootId, 'nodes', `${asstFile}.json`);
+    const asstRaw = JSON.parse(
+      await (await import('node:fs/promises')).readFile(asstFilePath, 'utf-8')
+    );
+    if (!Array.isArray(asstRaw.message.content)) {
+      throw new Error('Expected V2 array content for assistant');
+    }
+    if (asstRaw.message.tool_calls !== undefined) {
+      throw new Error('tool_calls should not be persisted in V2 file');
+    }
+    // Legacy load returns tool_calls
+    const loadedAsst = (await store.loadNode(asstNodeId)) as NodeData;
+    if (!Array.isArray((loadedAsst.message as any).tool_calls)) {
+      throw new Error('Expected legacy tool_calls array after loadNode');
+    }
+
+    // Tool message
+    const toolNodeId = store.generateNodeId(rootId);
+    const toolNode: NodeData = {
+      id: toolNodeId,
+      root_id: rootId,
+      parent_id: asstNodeId,
+      child_ids: [],
+      message: { role: 'tool', content: '{"ok":true}', tool_call_id: 't1' },
+      metadata: {
+        timestamp: new Date().toISOString(),
+        original_root_id: rootId,
+        source_info: { type: 'tool_result', tool_name: 'noop' }
+      }
+    };
+    await store.saveNode(toolNode);
+    const [, toolFile] = toolNodeId.split('/');
+    const toolFilePath = join(tempDir, rootId, 'nodes', `${toolFile}.json`);
+    const toolRaw = JSON.parse(
+      await (await import('node:fs/promises')).readFile(toolFilePath, 'utf-8')
+    );
+    if (!Array.isArray(toolRaw.message.content)) {
+      throw new Error('Expected V2 array content for tool');
+    }
+    if (toolRaw.message.tool_call_id !== 't1') {
+      throw new Error('Expected tool_call_id to be preserved in V2');
+    }
+    // loadNode returns legacy string content
+    const loadedTool = (await store.loadNode(toolNodeId)) as NodeData;
+    if (typeof loadedTool.message.content !== 'string') {
+      throw new Error('Expected legacy string content for tool after loadNode');
+    }
+  });
+
   it('should normalize messages in findNodesNormalized', async () => {
     // Create test root
     const rootId = store.generateRootId();
