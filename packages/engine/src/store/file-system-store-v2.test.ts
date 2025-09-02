@@ -2,7 +2,7 @@ import { describe, it, beforeEach, afterEach } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { rm, writeFile, mkdir } from 'node:fs/promises';
+import { rm, writeFile, mkdir, readFile } from 'node:fs/promises';
 import { FileSystemStore } from './file-system-store.ts';
 import type { RootData, NodeData, NodeId } from '../types.ts';
 
@@ -324,9 +324,7 @@ describe('FileSystemStore V2 Message Format', () => {
     // Read raw file and verify V2 shape persisted
     const [, userFile] = userNodeId.split('/');
     const userFilePath = join(tempDir, rootId, 'nodes', `${userFile}.json`);
-    const userRaw = JSON.parse(
-      await (await import('node:fs/promises')).readFile(userFilePath, 'utf-8')
-    );
+    const userRaw = JSON.parse(await readFile(userFilePath, 'utf-8'));
     if (!Array.isArray(userRaw.message.content)) {
       throw new Error('Expected V2 array content for user message');
     }
@@ -371,9 +369,7 @@ describe('FileSystemStore V2 Message Format', () => {
     await store.saveNode(asstNode);
     const [, asstFile] = asstNodeId.split('/');
     const asstFilePath = join(tempDir, rootId, 'nodes', `${asstFile}.json`);
-    const asstRaw = JSON.parse(
-      await (await import('node:fs/promises')).readFile(asstFilePath, 'utf-8')
-    );
+    const asstRaw = JSON.parse(await readFile(asstFilePath, 'utf-8'));
     if (!Array.isArray(asstRaw.message.content)) {
       throw new Error('Expected V2 array content for assistant');
     }
@@ -403,9 +399,7 @@ describe('FileSystemStore V2 Message Format', () => {
     await store.saveNode(toolNode);
     const [, toolFile] = toolNodeId.split('/');
     const toolFilePath = join(tempDir, rootId, 'nodes', `${toolFile}.json`);
-    const toolRaw = JSON.parse(
-      await (await import('node:fs/promises')).readFile(toolFilePath, 'utf-8')
-    );
+    const toolRaw = JSON.parse(await readFile(toolFilePath, 'utf-8'));
     if (!Array.isArray(toolRaw.message.content)) {
       throw new Error('Expected V2 array content for tool');
     }
@@ -417,6 +411,82 @@ describe('FileSystemStore V2 Message Format', () => {
     if (typeof loadedTool.message.content !== 'string') {
       throw new Error('Expected legacy string content for tool after loadNode');
     }
+
+    // Assistant tool-use-only persistence and legacy load
+    const onlyToolAsstId = store.generateNodeId(rootId);
+    const onlyToolAsst: NodeData = {
+      id: onlyToolAsstId,
+      root_id: rootId,
+      parent_id: toolNodeId,
+      child_ids: [],
+      message: {
+        role: 'assistant',
+        content: null,
+        tool_calls: [
+          {
+            id: 'only',
+            type: 'function',
+            function: { name: 'noop', arguments: '{}' }
+          }
+        ]
+      },
+      metadata: {
+        timestamp: new Date().toISOString(),
+        original_root_id: rootId,
+        source_info: {
+          type: 'model',
+          provider: 'openai',
+          model_name: 'gpt',
+          parameters: { max_tokens: 10, temperature: 1 }
+        }
+      }
+    };
+    await store.saveNode(onlyToolAsst);
+    const [, onlyFile] = onlyToolAsstId.split('/');
+    const onlyPath = join(tempDir, rootId, 'nodes', `${onlyFile}.json`);
+    const onlyRaw = JSON.parse(await readFile(onlyPath, 'utf-8'));
+    if (
+      !Array.isArray(onlyRaw.message.content) ||
+      onlyRaw.message.content[0].type !== 'tool-use'
+    ) {
+      throw new Error('Expected V2 tool-use-only assistant on disk');
+    }
+    const loadedOnly = (await store.loadNode(onlyToolAsstId)) as NodeData;
+    if ((loadedOnly.message as any).content !== null) {
+      throw new Error(
+        'Expected legacy assistant content to be null for tool-use-only'
+      );
+    }
+  });
+
+  it('should fail loudly on invalid message normalization and not write a partial file', async () => {
+    const rootId = store.generateRootId();
+    const rootData: RootData = {
+      id: rootId,
+      child_ids: [],
+      createdAt: new Date().toISOString(),
+      config: { systemPrompt: 'Test' }
+    };
+    await store.saveRootInfo(rootData);
+
+    const badId = store.generateNodeId(rootId);
+    const badNode: NodeData = {
+      id: badId,
+      root_id: rootId,
+      parent_id: rootId,
+      child_ids: [],
+      message: { role: 'tool', content: '   ', tool_call_id: '' as any },
+      metadata: {
+        timestamp: new Date().toISOString(),
+        original_root_id: rootId,
+        source_info: { type: 'tool_result', tool_name: 'noop' }
+      }
+    } as any;
+
+    await assert.rejects(async () => await store.saveNode(badNode));
+    const [, badFile] = badId.split('/');
+    const badPath = join(tempDir, rootId, 'nodes', `${badFile}.json`);
+    await assert.rejects(async () => await readFile(badPath, 'utf-8'));
   });
 
   it('should normalize messages in findNodesNormalized', async () => {

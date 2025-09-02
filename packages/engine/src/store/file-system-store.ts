@@ -12,7 +12,7 @@ import type {
 import type { ILoomStore, NodeQueryCriteria, NodeStructure } from './types.ts';
 import { initializeLog, log } from '../log.ts';
 import { isMessageV2, normalizeMessage } from '../content-blocks.ts';
-import { v2ToLegacyMessage } from '../providers/provider-utils.ts';
+import { v2ToLegacyMessage } from '../content-blocks-convert.ts';
 
 class IdCache<T extends string> {
   known = new Set<T>();

@@ -20,8 +20,8 @@ import { discoverMcpTools } from './mcp/client.ts';
 import { KNOWN_MODELS } from './browser.ts';
 import type { ProviderRequest } from './providers/types.ts';
 import { getCodebaseContext } from './tools/introspect.ts';
+import { v2ToLegacyMessage } from './content-blocks-convert.ts';
 import {
-  v2ToLegacyMessage,
   normalizeMessagesToV2,
   extractToolUseBlocks
 } from './providers/provider-utils.ts';

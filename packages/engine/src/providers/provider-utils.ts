@@ -10,12 +10,8 @@ import {
   isMessageV2,
   ToolArgumentParseError
 } from '../content-blocks.ts';
-import {
-  UnexpectedToolCallTypeError,
-  InvalidAssistantMessageError,
-  MissingMessageContentError,
-  MalformedToolMessageError
-} from './errors.ts';
+import { UnexpectedToolCallTypeError } from './errors.ts';
+import { v2ToLegacyMessage } from '../content-blocks-convert.ts';
 
 /**
  * Converts a message array to V2 format, handling both legacy and V2 inputs.
@@ -114,57 +110,4 @@ export function toolCallsToToolUseBlocks(
  * This is a temporary conversion during the migration period.
  * @throws {Error} if tool message has no text content
  */
-export function v2ToLegacyMessage(message: MessageV2): Message {
-  if (message.role === 'tool') {
-    const textContent = extractTextContent(message.content);
-    if (textContent === null) {
-      throw new MalformedToolMessageError(
-        'Tool message must have text content',
-        { tool_call_id: message.tool_call_id }
-      );
-    }
-    return {
-      role: 'tool',
-      content: textContent,
-      tool_call_id: message.tool_call_id
-    };
-  }
-
-  if (message.role === 'user') {
-    const textContent = extractTextContent(message.content);
-    if (textContent === null) {
-      throw new MissingMessageContentError('User');
-    }
-    return {
-      role: 'user',
-      content: textContent
-    };
-  }
-
-  // Assistant message
-  const textContent = extractTextContent(message.content);
-  const toolUseBlocks = extractToolUseBlocks(message.content);
-
-  // Validate that assistant message has either text or tool-use blocks
-  if (!textContent && (!toolUseBlocks || toolUseBlocks.length === 0)) {
-    throw new InvalidAssistantMessageError();
-  }
-
-  const legacyMessage: Message = {
-    role: 'assistant',
-    content: textContent
-  };
-
-  if (toolUseBlocks && toolUseBlocks.length > 0) {
-    legacyMessage.tool_calls = toolUseBlocks.map(tb => ({
-      id: tb.id,
-      type: 'function' as const,
-      function: {
-        name: tb.name,
-        arguments: JSON.stringify(tb.parameters)
-      }
-    }));
-  }
-
-  return legacyMessage;
-}
+export { v2ToLegacyMessage };
