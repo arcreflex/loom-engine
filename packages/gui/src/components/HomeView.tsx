@@ -86,7 +86,7 @@ export default function HomeView() {
         />
       </Panel>
       <PanelResizeHandle className="w-1 bg-terminal-border/20 hover:bg-terminal-border/40 cursor-col-resize" />
-      <Panel>
+      <Panel defaultSize={75}>
         {loading ? null : topology.length === 0 ? (
           <div className="flex items-center justify-center h-full text-terminal-text/70">
             No conversations yet. Start chatting!

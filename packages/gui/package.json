@@ -10,7 +10,10 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "typecheck": "tsc --build --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:run": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@ankhdt/loom-engine": "workspace:*",
@@ -34,6 +37,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",
+    "@testing-library/jest-dom": "^6.4.2",
+    "@testing-library/react": "^16.0.0",
+    "@testing-library/user-event": "^14.5.2",
     "@tailwindcss/line-clamp": "^0.4.4",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
@@ -45,11 +51,14 @@
     "concurrently": "^8.2.2",
     "eslint": "^9.22.0",
     "globals": "^16.0.0",
+    "jsdom": "^24.1.3",
+    "msw": "^2.6.2",
     "postcss": "^8.4.35",
     "tailwindcss": "^3.4.1",
     "tsx": "^4.7.1",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.26.1",
-    "vite": "^6.3.1"
+    "vite": "^6.3.1",
+    "vitest": "^2.1.5"
   }
 }

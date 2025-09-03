@@ -4,17 +4,35 @@ Objective: Establish a practical, fast testing setup for `packages/gui` covering
 
 Owner: <name> · Reviewers: <names> · ETA: <date>
 
+## Status (in progress)
+
+- Tooling wired in `packages/gui`:
+  - Added Vitest + RTL + MSW dev deps and scripts (`test`, `test:run`).
+  - Configured `vite.config.ts` `test` block (jsdom env, setupFiles, coverage).
+  - Added MSW server and fixtures: `packages/gui/src/test/testServer.ts`.
+  - Added global setup with console guards and store reset: `src/test/setup.ts`.
+  - Added helper `renderWithRouter`: `src/test/utils/render.tsx`.
+  - Created initial screen-level test: `src/App.test.tsx`.
+- Minor UI tweak to silence SSR layout warning in tests: set `defaultSize` on right Panel in `HomeView`.
+- Added more coverage: API contracts, store transitions, App boot, NodeView load, InputArea submit (Ctrl/Cmd+Enter), large paste handling, and generation error surface.
+- `pnpm --filter @ankhdt/loom-gui test:run` passes locally (18 tests green).
+
+Next up: API contract tests (`src/api.ts`), store transition tests, and 2–3 more screen-level flows from the list below.
+Completed in this batch; remaining candidates for v1 polish:
+
+- Command palette execution path (toggle generate-on-submit via list selection).
+- Graph hover preview minimal assertion with lightweight topology.
+
 ## Acceptance Criteria
 
-- `pnpm --filter @ankhdt/loom-gui test` runs locally and in CI.
+- `pnpm --filter @ankhdt/loom-gui test` (non-watch) runs locally and in CI.
 - Contract, store, and ≥ 3 screen-level integration tests are green.
-- E2E smoke runs headless in CI (optional) with traces/screenshots on failure.
 - Coverage in `packages/gui` ≥ 80% lines/statements/branches (server bootstrap excluded).
 
 ## Deliverables (v1)
 
 - Vitest + RTL + MSW wired (jsdom env, global setup).
-- Playwright project with one happy path, hermetic data.
+- No Playwright/E2E in this batch. Defer thin E2E to v2.
 
 ## 0) Tooling and Wiring
 
@@ -69,16 +87,10 @@ Target high‑value flows using real store + router with MSW:
 - Input area: type; submit (e.g., Cmd+Enter); large paste behavior.
 - Node view: siblings pager; copy/edit actions; children/siblings load.
 
-## 5) Thin E2E Smoke (Optional)
+## 5) Thin E2E Smoke (Deferred)
 
-- One happy path across the full stack.
-- Server pointed at a fixture temp `DATA_DIR` or replaced with a tiny mock server.
-- Mock external LLM calls at the server boundary; keep tests deterministic.
-- Run in CI with:
-  ```bash
-  pnpm exec playwright install --with-deps
-  pnpm --filter @ankhdt/loom-gui test:e2e
-  ```
+- Out of scope for batch 1. Track for v2.
+- Keep guidance in `specs/gui-testing.md` but do not implement Playwright yet.
 
 ## 6) CI & Quality Bars
 
