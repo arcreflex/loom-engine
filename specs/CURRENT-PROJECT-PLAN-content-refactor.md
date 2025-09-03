@@ -1,6 +1,6 @@
 # ContentBlock Refactor Implementation Plan
 
-CURRENT STATUS: Phase 4c (Engine internals) COMPLETED; Phase 4d (V2 write cutover) COMPLETED.
+CURRENT STATUS: Phase 4a–4d COMPLETED; Phase 5 (server endpoints + UI rendering) COMPLETED; Phase 6 (unit tests) COMPLETED; Phase 6 (manual validation) PENDING.
 
 ## Overview
 
@@ -161,7 +161,7 @@ Guiding principles:
 - Type safety first: no unsafe casts; introduce precise types/guards instead
 - Test‑first per sub‑phase: land targeted tests before code changes
 
-#### Phase 4a — Foundations (Utilities + Tests)
+#### Phase 4a — Foundations (Utilities + Tests) ✅ COMPLETED
 
 Create shared utilities and tests; no behavior change to public APIs yet.
 
@@ -197,7 +197,7 @@ Create shared utilities and tests; no behavior change to public APIs yet.
    - Normalization: empty text filtering; assistant tool‑use only allowed
    - Tokens: residual ≤ 0, exact boundary, rounding semantics, unknown model caps
 
-#### Phase 4b — Forest In‑Place Updates (Public API unchanged)
+#### Phase 4b — Forest In‑Place Updates (Public API unchanged) ✅ COMPLETED
 
 Update internal comparison logic; do not coalesce at the Forest layer.
 
@@ -215,7 +215,7 @@ Update internal comparison logic; do not coalesce at the Forest layer.
    - Mixed text/tool‑use sequences
    - Adjacent text messages not coalesced at Forest layer
 
-#### Phase 4c — LoomEngine In‑Place Updates (Public API unchanged)
+#### Phase 4c — LoomEngine In‑Place Updates (Public API unchanged) ✅ COMPLETED
 
 Migrate context construction, token shaping, and tool loop to V2 internals.
 
@@ -243,7 +243,7 @@ Migrate context construction, token shaping, and tool loop to V2 internals.
    - Coalescing boundaries in context building
    - Token boundary conditions and rounding
 
-#### Phase 4d — Persistence Write Cutover
+#### Phase 4d — Persistence Write Cutover ✅ COMPLETED
 
 Switch write path to canonical V2 while keeping legacy read normalization.
 
@@ -286,7 +286,7 @@ Switch write path to canonical V2 while keeping legacy read normalization.
 - Tokens: residual ≤ 0, exact boundary, rounding; unknown model fallback caps
 - Append/Prefix: empty‑text filtering; multi‑tool‑use batches; index alignment preserved
 
-### Phase 5: UI Updates
+### Phase 5: UI Updates ✅ COMPLETED
 
 **Goal**: Update GUI components to render ContentBlock format
 
@@ -298,6 +298,17 @@ Switch write path to canonical V2 while keeping legacy read normalization.
 2. **Update server endpoints**
    - Ensure API returns new format
    - Handle legacy clients if needed
+
+STATUS UPDATE (2025-09-03):
+
+- Server endpoints: Completed for append and edit flows.
+  - `POST /api/nodes/:parentId/append` now accepts `string | ContentBlock[]` (text-only), rejects tool-use blocks, and normalizes responses to V2.
+  - `PUT /api/nodes/:nodeId/content` now accepts `string | ContentBlock[]` (text-only), rejects tool-use blocks, and normalizes responses to V2.
+  - Existing read endpoints (`/path`, `/children`, `/siblings`, `/node`) already normalize to V2.
+- UI rendering: MessageItem already renders `ContentBlock[]`; no change required.
+- UI composer: Still submits plain strings for user input; optional enhancement to emit `ContentBlock[]` can be scheduled later.
+
+Confirmed by code audit on 2025-09-03.
 
 ### Phase 6: Testing & Validation
 
@@ -316,6 +327,12 @@ Switch write path to canonical V2 while keeping legacy read normalization.
    - End-to-end generation with tools
    - Legacy data compatibility
    - Multi-provider testing
+
+STATUS UPDATE (2025-09-03):
+
+- Engine unit tests passing: 166 tests, 38 suites, 0 failures (node --test in packages/engine).
+- Persistence write path verified to V2; read normalization verified by tests.
+- Manual validation outstanding (GUI smoke test and data migration checks to be performed).
 
 ## Implementation Order
 

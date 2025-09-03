@@ -328,38 +328,11 @@ async function main() {
       if (typeof content === 'string') {
         textContent = content;
       } else if (Array.isArray(content)) {
-        for (const b of content) {
-          if (
-            !b ||
-            typeof b !== 'object' ||
-            typeof (b as { type?: unknown }).type !== 'string'
-          ) {
-            return res.status(400).json({
-              error: 'Content must be a string or ContentBlock[] of text blocks'
-            });
-          }
-          if (isToolUseBlock(b as ContentBlock)) {
-            return res
-              .status(400)
-              .json({ error: 'Appending tool-use blocks is not supported' });
-          }
-          if (!isTextBlock(b as ContentBlock)) {
-            return res
-              .status(400)
-              .json({ error: 'Unsupported content block type' });
-          }
-          if (typeof (b as { text?: unknown }).text !== 'string') {
-            return res
-              .status(400)
-              .json({ error: 'Text block must include a string text field' });
-          }
+        const result = joinTextBlocksOrError(content, 'append');
+        if (!result.ok) {
+          return res.status(400).json({ error: result.error });
         }
-        textContent = content
-          .filter((b): b is Extract<ContentBlock, { type: 'text' }> =>
-            isTextBlock(b as ContentBlock)
-          )
-          .map(b => b.text)
-          .join('\n');
+        textContent = result.text;
       } else {
         return res
           .status(400)
@@ -465,41 +438,11 @@ async function main() {
       if (typeof content === 'string') {
         textContent = content;
       } else if (Array.isArray(content)) {
-        // Only text edits are supported here; reject tool-use edits and unknown blocks.
-        for (const b of content) {
-          if (
-            !b ||
-            typeof b !== 'object' ||
-            typeof (b as { type?: unknown }).type !== 'string'
-          ) {
-            return res.status(400).json({
-              error: 'Content must be a string or ContentBlock[] of text blocks'
-            });
-          }
+        const result = joinTextBlocksOrError(content, 'edit');
+        if (!result.ok) {
+          return res.status(400).json({ error: result.error });
         }
-        for (const b of content) {
-          if (isToolUseBlock(b as ContentBlock)) {
-            return res
-              .status(400)
-              .json({ error: 'Editing tool-use blocks is not supported' });
-          }
-          if (!isTextBlock(b as ContentBlock)) {
-            return res
-              .status(400)
-              .json({ error: 'Unsupported content block type' });
-          }
-          if (typeof (b as { text?: unknown }).text !== 'string') {
-            return res
-              .status(400)
-              .json({ error: 'Text block must include a string text field' });
-          }
-        }
-        textContent = content
-          .filter((b): b is Extract<ContentBlock, { type: 'text' }> =>
-            isTextBlock(b as ContentBlock)
-          )
-          .map(b => b.text)
-          .join('\n');
+        textContent = result.text;
       } else {
         return res
           .status(400)
@@ -756,6 +699,50 @@ main().catch(err => {
   console.error('Server initialization failed:', err);
   process.exit(1);
 });
+
+// Helper: validate ContentBlock[] is text-only and join with newlines
+function joinTextBlocksOrError(
+  blocks: ContentBlock[],
+  context: 'append' | 'edit'
+): { ok: true; text: string } | { ok: false; error: string } {
+  for (const b of blocks) {
+    if (
+      !b ||
+      typeof b !== 'object' ||
+      typeof (b as { type?: unknown }).type !== 'string'
+    ) {
+      return {
+        ok: false,
+        error: 'Content must be a string or ContentBlock[] of text blocks'
+      };
+    }
+  }
+  for (const b of blocks) {
+    if (isToolUseBlock(b)) {
+      return {
+        ok: false,
+        error:
+          context === 'append'
+            ? 'Appending tool-use blocks is not supported'
+            : 'Editing tool-use blocks is not supported'
+      };
+    }
+    if (!isTextBlock(b)) {
+      return { ok: false, error: 'Unsupported content block type' };
+    }
+    if (typeof (b as { text?: unknown }).text !== 'string') {
+      return {
+        ok: false,
+        error: 'Text block must include a string text field'
+      };
+    }
+  }
+  const text = blocks
+    .filter((b): b is Extract<ContentBlock, { type: 'text' }> => isTextBlock(b))
+    .map(b => b.text)
+    .join('\n');
+  return { ok: true, text };
+}
 
 async function filterOutBookmarkedDescendants(
   engine: LoomEngine,
