@@ -1,7 +1,14 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
-import { NodeData, NodeId } from '@ankhdt/loom-engine';
+import {
+  NodeData,
+  NodeId,
+  type ContentBlock,
+  type TextBlock,
+  type ToolUseBlock,
+  type MessageV2
+} from '@ankhdt/loom-engine';
 import { type DisplayMessage } from '../types';
 import {
   useState,
@@ -15,7 +22,6 @@ import { Link } from 'react-router-dom';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { atomDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import TextareaAutosize from 'react-textarea-autosize';
-import { AssistantMessage } from '../../../engine/src/types';
 
 // Threshold for collapsing messages (number of lines)
 const LINE_THRESHOLD = 30;
@@ -34,7 +40,25 @@ export type CoalescedMessage = {
   messages: DisplayMessage[];
 };
 
-type ToolCallInfo = NonNullable<AssistantMessage['tool_calls']>[number];
+function isTextBlock(block: ContentBlock): block is TextBlock {
+  return block.type === 'text';
+}
+
+function isToolUseBlock(block: ContentBlock): block is ToolUseBlock {
+  return block.type === 'tool-use';
+}
+
+function blocksToText(blocks: ContentBlock[]): string {
+  return blocks
+    .filter(isTextBlock)
+    .map(b => b.text)
+    .join('');
+}
+
+function getToolUseBlocks(msg: MessageV2): ToolUseBlock[] {
+  if (msg.role !== 'assistant') return [];
+  return msg.content.filter(isToolUseBlock);
+}
 
 export const MessageItem = forwardRef(
   (
@@ -64,7 +88,9 @@ export const MessageItem = forwardRef(
     const end = message.messages[message.messages.length - 1];
     const currentIndex = siblings?.findIndex(s => s.id === end.nodeId) ?? -1;
 
-    const combinedText = message.messages.map(msg => msg.content).join('');
+    const combinedText = message.messages
+      .map(msg => blocksToText(msg.content))
+      .join('');
     const [editText, setEditText] = useState(combinedText);
     const lineCount = combinedText.split('\n').length;
 
@@ -101,8 +127,7 @@ export const MessageItem = forwardRef(
 
     // Check if any message has tool calls or is a tool result
     const hasToolCalls = message.messages.some(
-      msg =>
-        msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0
+      msg => msg.role === 'assistant' && getToolUseBlocks(msg).length > 0
     );
     const toolCallId =
       message.role === 'tool' && message.messages[0]?.role === 'tool'
@@ -113,18 +138,18 @@ export const MessageItem = forwardRef(
       <div ref={ref} className={`${spacing} ${messageClass} ${previewClass}`}>
         {/* Render tool calls for assistant messages */}
         {hasToolCalls &&
-          message.messages.map(
-            (msg, index) =>
-              msg.role === 'assistant' &&
-              msg.tool_calls &&
-              msg.tool_calls.length > 0 && (
-                <div key={`${msg.nodeId}-tools-${index}`} className="mb-4">
-                  {msg.tool_calls.map(toolCall => (
-                    <ToolCall toolCall={toolCall} key={toolCall.id} />
-                  ))}
-                </div>
-              )
-          )}
+          message.messages.map((msg, index) => {
+            if (msg.role !== 'assistant') return null;
+            const blocks = getToolUseBlocks(msg);
+            if (blocks.length === 0) return null;
+            return (
+              <div key={`${msg.nodeId}-tools-${index}`} className="mb-4">
+                {blocks.map(toolBlock => (
+                  <ToolCall toolCall={toolBlock} key={toolBlock.id} />
+                ))}
+              </div>
+            );
+          })}
 
         {/* Render tool result for tool messages */}
         {!!toolCallId && (
@@ -238,7 +263,7 @@ export const MessageItem = forwardRef(
   }
 );
 
-const ToolCall = ({ toolCall }: { toolCall: ToolCallInfo }) => {
+const ToolCall = ({ toolCall }: { toolCall: ToolUseBlock }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   return (
     <div className="bg-gray-800/50 p-2 rounded">
@@ -248,16 +273,14 @@ const ToolCall = ({ toolCall }: { toolCall: ToolCallInfo }) => {
       >
         <span className="mr-2">{isExpanded ? '▼' : '▶'}</span>
         <div className="text-xs font-mono text-gray-400">🔧 Tool Call</div>
-        <div className="ml-2 text-xs text-gray-300">
-          {toolCall.function.name}
-        </div>
+        <div className="ml-2 text-xs text-gray-300">{toolCall.name}</div>
         {toolCall.id && (
           <span className="ml-2 text-xs text-gray-500">ID: {toolCall.id}</span>
         )}
       </button>
-      {isExpanded && toolCall.function.arguments && (
+      {isExpanded && (
         <pre className="text-xs text-gray-300 bg-gray-900/50 p-2 rounded">
-          {JSON.stringify(JSON.parse(toolCall.function.arguments), null, 2)}
+          {JSON.stringify(toolCall.parameters, null, 2)}
         </pre>
       )}
     </div>

@@ -1,4 +1,4 @@
-import { NodeData, NodeId, Role } from '@ankhdt/loom-engine';
+import { NodeData, NodeId, Role, type ContentBlock } from '@ankhdt/loom-engine';
 
 interface ChildNavigatorProps {
   children: NodeData[];
@@ -36,6 +36,19 @@ export function ChildNavigator({
       <div className="max-h-40 overflow-y-auto space-y-1 pr-1">
         {children.map(child => {
           const isFocused = previewChild?.id === child.id;
+          const msg = child.message as unknown as {
+            role: Role;
+            content: string | ContentBlock[] | null;
+          };
+          const summary = Array.isArray(msg.content)
+            ? msg.content
+                .filter(
+                  (b): b is Extract<ContentBlock, { type: 'text' }> =>
+                    b.type === 'text'
+                )
+                .map(b => b.text)
+                .join(' ')
+            : msg.content || '';
 
           return (
             <button
@@ -60,7 +73,7 @@ export function ChildNavigator({
                 {child.message.role === 'user' ? 'User: ' : ''}
               </span>
               <span className="text-terminal-text/90">
-                {child.message.content?.replace(/\n/g, ' ') || '(no content)'}
+                {summary ? summary.replace(/\n/g, ' ') : '(no content)'}
               </span>
             </button>
           );

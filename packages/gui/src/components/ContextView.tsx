@@ -2,7 +2,12 @@
 import { useRef, useEffect, useState, useMemo } from 'react';
 import { CoalescedMessage, MessageItem } from './MessageItem';
 import { PENDING_GENERATION, type DisplayMessage } from '../types';
-import { NodeData, NodeId, RootConfig } from '@ankhdt/loom-engine';
+import {
+  NodeData,
+  NodeId,
+  RootConfig,
+  type ContentBlock
+} from '@ankhdt/loom-engine';
 import TextareaAutosize from 'react-textarea-autosize';
 
 interface ContextViewProps {
@@ -247,7 +252,10 @@ export function ContextView({
                 message={{
                   role: previewChild.message.role,
                   messages: [
-                    { ...previewChild.message, nodeId: previewChild.id }
+                    {
+                      ...legacyToV2Preview(previewChild),
+                      nodeId: previewChild.id
+                    } as unknown as import('../types').DisplayMessage
                   ]
                 }}
                 isLast={true}
@@ -289,4 +297,84 @@ export function ContextView({
       )}
     </div>
   );
+}
+
+// Convert a legacy NodeData.message into a minimal V2-shaped message for preview rendering only
+function legacyToV2Preview(node: NodeData): {
+  role: 'user' | 'assistant' | 'tool';
+  content: ContentBlock[];
+  tool_call_id?: string;
+} {
+  const m = node.message as unknown as {
+    role: 'user' | 'assistant' | 'tool';
+    content: string | ContentBlock[] | null;
+    tool_calls?: Array<{
+      id: string;
+      type: 'function';
+      function: { name: string; arguments: string };
+    }>;
+    tool_call_id?: string;
+  };
+
+  // If already V2 (content is an array), just return as-is with proper typing
+  if (Array.isArray(m.content)) {
+    const out = {
+      role: m.role,
+      content: m.content
+    } as {
+      role: 'user' | 'assistant' | 'tool';
+      content: ContentBlock[];
+    } & Partial<{ tool_call_id: string }>;
+    if (m.role === 'tool' && m.tool_call_id) out.tool_call_id = m.tool_call_id;
+    return out;
+  }
+
+  const blocks: ContentBlock[] = [];
+  if (typeof m.content === 'string' && m.content.trim().length > 0) {
+    blocks.push({ type: 'text', text: m.content });
+  }
+  if (m.role === 'assistant' && Array.isArray(m.tool_calls)) {
+    for (const tc of m.tool_calls) {
+      let params: Record<string, unknown> = {};
+      try {
+        params = tc.function.arguments ? JSON.parse(tc.function.arguments) : {};
+      } catch (e) {
+        // surface parse errors in preview rather than silently dropping details
+         
+        console.warn(
+          'Failed to parse tool arguments JSON in preview:',
+          e,
+          tc.function.arguments
+        );
+        params = {
+          _raw: tc.function.arguments,
+          _parseError: true
+        } as Record<string, unknown>;
+      }
+      blocks.push({
+        type: 'tool-use',
+        id: tc.id,
+        name: tc.function.name,
+        parameters: params
+      });
+    }
+  }
+
+  // Ensure non-empty: if still empty, insert an empty text block for user/tool to satisfy rendering
+  if (blocks.length === 0) {
+    blocks.push({ type: 'text', text: '' });
+  }
+
+  const out: {
+    role: 'user' | 'assistant' | 'tool';
+    content: ContentBlock[];
+    tool_call_id?: string;
+  } = {
+    role: m.role,
+    content: blocks
+  };
+  if (m.role === 'tool' && m.tool_call_id) {
+    out.tool_call_id = m.tool_call_id;
+  }
+  return out;
 }

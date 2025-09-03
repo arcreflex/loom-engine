@@ -1,7 +1,6 @@
 import {
   Bookmark,
   Config,
-  Message,
   NodeData,
   NodeId,
   Role,
@@ -240,17 +239,7 @@ export async function getDefaultConfig(): Promise<
   };
 }
 
-// Note: This helper is no longer needed since the API now returns DisplayMessages directly
-// Keeping it for reference but it's unused
-export function messagesToDisplayMessages(
-  messages: Message[],
-  nodeIds: NodeId[]
-): DisplayMessage[] {
-  return messages.map((message, index) => ({
-    ...message,
-    nodeId: nodeIds[index] || ('unknown-id' as NodeId)
-  }));
-}
+// Deprecated helper removed: API returns DisplayMessages directly in V2 format
 
 export async function switchRoot(systemPrompt?: string): Promise<RootData> {
   // Ensure return type is RootData

@@ -30,6 +30,7 @@ import type {
 import 'reactflow/dist/style.css';
 import './GraphView.css';
 import { DisplayMessage } from '../types';
+import type { ContentBlock } from '@ankhdt/loom-engine';
 import { HoverPreviewTooltip } from './HoverPreviewTooltip';
 
 type GraphMode = 'single-root' | 'multi-root' | 'compact';
@@ -309,6 +310,14 @@ function GraphViewInner({
     ? state
     : {};
 
+  const blocksToText = (blocks: ContentBlock[]): string =>
+    blocks
+      .filter(
+        (b): b is Extract<ContentBlock, { type: 'text' }> => b.type === 'text'
+      )
+      .map(b => b.text)
+      .join('');
+
   // Prepare the content for the tooltip
   const tooltipContent = useMemo(() => {
     if (!previewNodeId || !previewMessages || !previewRoot) {
@@ -343,7 +352,7 @@ function GraphViewInner({
             <span className={`font-semibold uppercase text-xs`}>
               {msg.role === 'user' ? 'User: ' : ''}
             </span>
-            {msg.content}
+            {blocksToText(msg.content)}
           </div>
         </div>
       );

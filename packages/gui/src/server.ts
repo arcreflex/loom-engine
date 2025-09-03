@@ -11,10 +11,18 @@ import {
   RootId,
   type ProviderName,
   GenerateResult,
-  type Message
+  type Message,
+  // V2 utilities for ContentBlocks
+  normalizeMessage
 } from '@ankhdt/loom-engine';
-import { DisplayMessage, GenerationRequestUpdate } from './types';
+import { DisplayMessage } from './types';
 import { getEncoding } from 'js-tiktoken';
+
+type SSEUpdate = {
+  status: 'pending' | 'idle' | 'error';
+  added?: unknown[];
+  error?: string;
+};
 
 class GenerationRequest {
   private manager: GenerationRequestManager;
@@ -26,7 +34,7 @@ class GenerationRequest {
   }> = new Set();
 
   readonly parentNodeId: NodeId;
-  callbacks: Set<(state: GenerationRequestUpdate) => void> = new Set();
+  callbacks: Set<(state: SSEUpdate) => void> = new Set();
 
   constructor(manager: GenerationRequestManager, parentNodeId: NodeId) {
     this.manager = manager;
@@ -60,9 +68,15 @@ class GenerationRequest {
             this.manager.getOrCreate(child.id).addRequest(options, next);
           }
         }
+        // Emit V2-normalized nodes in SSE updates
+        const addedV2 = childNodes.map(n =>
+          'message' in (n as object)
+            ? { ...n, message: normalizeMessage((n as NodeData).message) }
+            : n
+        );
         this.update({
           status: this.getStatus(),
-          added: childNodes
+          added: addedV2
         });
       })
       .catch(error => {
@@ -76,7 +90,7 @@ class GenerationRequest {
     return requestId;
   }
 
-  update(state: GenerationRequestUpdate) {
+  update(state: SSEUpdate) {
     this.callbacks.forEach(callback => callback(state));
   }
 }
@@ -163,7 +177,7 @@ async function main() {
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
-    const sendUpdate = (state: GenerationRequestUpdate) => {
+    const sendUpdate = (state: SSEUpdate) => {
       res.write(`data: ${JSON.stringify(state)}\n\n`);
     };
     // Send initial state
@@ -197,11 +211,12 @@ async function main() {
           }
         : undefined;
 
-      res.json({
-        ...node,
-        contextTokens,
-        pendingGeneration
-      });
+      // Return node with V2-normalized message when applicable
+      const nodeOut: unknown =
+        'message' in (node as object)
+          ? { ...node, message: normalizeMessage((node as NodeData).message) }
+          : node;
+      res.json({ ...(nodeOut as object), contextTokens, pendingGeneration });
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }
@@ -216,7 +231,7 @@ async function main() {
         to: nodeId as NodeId
       });
 
-      // Create DisplayMessages that include nodeIds, timestamps, and source info
+      // Create DisplayMessages (V2) that include nodeIds, timestamps, and source info
       const messagesWithIds = path.map(node => {
         let sourceProvider: ProviderName | undefined;
         let sourceModelName: string | undefined;
@@ -228,7 +243,8 @@ async function main() {
           sourceModelName = node.metadata.source_info.model_name;
         }
         return {
-          ...node.message,
+          // Normalize to V2 message format for API response
+          ...normalizeMessage(node.message),
           nodeId: node.id,
           timestamp: node.metadata.timestamp,
           sourceProvider,
@@ -249,7 +265,11 @@ async function main() {
     try {
       const { nodeId } = req.params;
       const children = await engine.getForest().getChildren(nodeId as NodeId);
-      res.json(children);
+      const out: unknown[] = children.map(n => ({
+        ...n,
+        message: normalizeMessage(n.message)
+      }));
+      res.json(out);
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }
@@ -265,7 +285,11 @@ async function main() {
       }
 
       const siblings = await engine.getForest().getChildren(node.parent_id);
-      res.json(siblings);
+      const out: unknown[] = siblings.map(n => ({
+        ...n,
+        message: normalizeMessage(n.message)
+      }));
+      res.json(out);
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }
@@ -289,7 +313,14 @@ async function main() {
       // Update current node ID in config
       await configStore.update({ currentNodeId: newNode.id });
 
-      res.json(newNode);
+      const out: unknown =
+        'message' in (newNode as object)
+          ? {
+              ...newNode,
+              message: normalizeMessage((newNode as NodeData).message)
+            }
+          : newNode;
+      res.json(out);
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }
@@ -356,7 +387,11 @@ async function main() {
       }
 
       const newNode = await engine.editNode(nodeId as NodeId, content);
-      res.json(newNode);
+      const out: unknown = {
+        ...newNode,
+        message: normalizeMessage(newNode.message)
+      };
+      res.json(out);
     } catch (error) {
       res.status(500).json({ error: String(error) });
     }
