@@ -1,181 +1,94 @@
 # Testing
 
-Testing philosophy and requirements for the loom-engine system.
+Testing philosophy and requirements for the loom-engine monorepo.
 
 ## Philosophy
 
-**Fix the code, not the test.** Failing tests generally indicate real issues in implementation. When adding new features, add or update tests in the same package first.
+**Fix the code, not the test.** Failing tests generally indicate real issues. When adding features, update or add tests in the same package first.
 
-## Test Structure
+Prefer black‑box behavior over implementation details. Keep tests fast, deterministic, and isolated.
 
-### Location
+## Pyramid & Runners
 
-- Tests live next to source files as `*.test.ts`
-- Use Node's experimental test runner (`node --test`)
-- Each package contains its own test suite
+- **Unit (fast, many)**: Pure functions, store slices, small components.
+- **Integration (fewer)**: Screen/flow tests with real state + mocked network.
+- **E2E (fewest)**: Happy paths across the full stack.
 
-### Categories
+Packages use different runners suited to their environment:
 
-**Unit Tests**
+- `packages/engine`: Node test runner (`node --test`). No browser APIs.
+- `packages/gui`: Vitest + jsdom for unit/integration; Playwright (or similar) for thin E2E. See `specs/gui-testing.md`.
 
-- Test individual functions and classes in isolation
-- Focus on edge cases and error conditions
-- Mock external dependencies when appropriate
+## Location & Conventions
 
-**Engine/Store Tests**
+- Tests live next to source as `*.test.ts(x)`.
+- Shared GUI test utilities can live under `packages/gui/src/test/`.
+- Avoid global state leakage; reset per test where applicable.
 
-- Isolate filesystem operations using temporary directories
-- Test tree consistency and invariant preservation
-- Validate serialization/deserialization
+## Categories
 
-**Integration Tests**
+### Engine / Store (library)
 
-- Test full workflows end-to-end
-- No mocking of providers in integration tests (or clearly document mocking strategy)
-- Test tool execution and MCP integration
+- Use temporary directories (`os.tmpdir()`) for filesystem tests.
+- Assert tree invariants, ID stability, and serialization/consistency.
+- Validate parameter mapping, tool invocation semantics, and error propagation.
 
-## Required Invariants
+### GUI (application)
 
-Tests must assert these system invariants:
+- Unit: Component behavior and pure helpers with React Testing Library.
+- Contract: API client request/response shapes via network mocking.
+- Integration: Full screens with router + real store, network mocked.
+- E2E: One or two happy paths, preferably against fixture data. Details in `specs/gui-testing.md`.
 
-### Message Coalescing
+## Required Invariants (cross‑cutting)
 
-- No coalescing across tool messages (they break adjacency by role)
-- Current behavior: coalesces adjacent same-role messages
-- Future: should not coalesce messages that contain any `tool-use` blocks
+### Message Coalescing (display vs. storage)
+
+- No coalescing across tool messages.
+- Adjacent same‑role messages may visually coalesce in GUI; engine invariants remain authoritative.
 
 ### Tree Structure
 
-- Root immutability: roots cannot be edited in-place
-- Serialized mutations ensure consistency
-- Path traversal produces deterministic message sequences
-- Node deletion maintains tree consistency
+- Root immutability (no in‑place edits of roots).
+- Deterministic path traversal; parent/child consistency; no cycles.
 
 ### Data Integrity
 
-- ID uniqueness within scope (NodeId within root, RootId globally)
-- Parent/child relationship consistency
-- No circular references in tree structure
-
-## CI Requirements
-
-All commits must pass:
-
-```bash
-pnpm lint && pnpm typecheck && pnpm test
-```
-
-Pre-commit hooks enforce this locally and reject failing commits.
-
-## Store Testing
-
-- Use temporary directories (`os.tmpdir()`) for FileSystemStore tests
-- Do not point `$DATA_DIR` to shared/production folders during test runs
-- Test cache invalidation behavior explicitly
-- Verify atomic write assumptions within single-file boundaries
-
-## Provider Testing
-
-- Mock network calls in unit tests
-- Use real provider SDKs in integration tests when API keys available
-- Test parameter mapping and error propagation
-- Validate tool choice semantics per provider
-
-## Async Operations and Promises
-
-### Testing Strategy
-
-- **Await all promises**: Ensure all async operations complete before assertions
-- **Promise rejection handling**: Test both resolution and rejection paths
-- **Timeout management**: Set appropriate timeouts for long-running operations
-- **Concurrent operations**: Test race conditions with parallel async calls
-
-### Common Patterns
-
-- **Queue testing**: Verify operations execute in correct order
-- **SSE streaming**: Mock event emitters for testing real-time updates
-- **Provider responses**: Use promise-based mocks for API calls
-- **Tool execution**: Test async tool calls with proper error handling
+- ID uniqueness (RootId global; NodeId within root).
+- Atomic writes and cache invalidation behaviors validated.
 
 ## Mocking Strategy
 
-### When to Mock
+- Unit tests mock external dependencies for speed and determinism.
+- Integration tests mock network boundaries, not internal logic.
+- Choose realistic responses and include error paths.
+- SSE: prefer discrete event simulation over token‑level streaming in tests.
 
-**Mock external dependencies when**:
+## Async & Concurrency
 
-- Testing in isolation (unit tests)
-- External service unavailable or unreliable
-- Need deterministic results for edge cases
-- Testing error conditions difficult to reproduce
+- Await all promises; assert both resolve and reject paths.
+- Control timers/timeouts; test ordering for queued/serialized operations.
+- For GUI SSE flows, model events as discrete status updates.
 
-**Use real implementations when**:
+## CI & Gates
 
-- Testing integration points
-- Validating actual provider behavior
-- Testing full end-to-end workflows
-- Performance characteristics matter
-
-### Mock Guidelines
-
-- **Interface compliance**: Mocks must match actual interface exactly
-- **Behavior fidelity**: Mock responses should mirror real service behavior
-- **Error simulation**: Include realistic error scenarios in mocks
-- **State management**: Mocks should maintain internal state when needed
-
-### Mock vs Real Decision Criteria
-
-1. **Speed**: Unit tests use mocks for speed; integration tests use real services
-2. **Reliability**: Mock flaky external services; use real for stable ones
-3. **Cost**: Mock expensive API calls in development/testing
-4. **Complexity**: Mock complex setup requirements; use real for simple ones
-
-## Integration Test Requirements
-
-### Required Integration Tests
-
-**Provider Integration**:
-
-- At least one real provider test when API keys available
-- Tool calling flow with actual tool execution
-- Error handling from real provider responses
-
-**Store Integration**:
-
-- FileSystemStore with actual filesystem operations
-- Cache invalidation with real file changes
-- Concurrent access patterns (within single-process constraint)
-
-**End-to-End Workflows**:
-
-- Complete generation flow: input → provider → tools → response
-- Edit flow with branching and bookmark updates
-- Delete operations with cascade/reparent strategies
-
-### Integration Test Guidelines
-
-- **Environment setup**: Document required environment variables
-- **Cleanup**: Always clean up test data after completion
-- **Isolation**: Each test should be independent and idempotent
-- **Timeouts**: Set generous timeouts for network operations
+- Commits must pass: `pnpm lint && pnpm typecheck && pnpm -r test`.
+- GUI coverage targets: ≥ 80% lines/statements/branches for critical files (server bootstrap excluded from jsdom).
+- E2E is thin and can be optional in CI; keep deterministic via fixtures.
+- Cache pnpm store and Playwright browsers between runs.
+- Fail CI on any `console.error` during tests (enforced in Vitest setup).
+- Upload Playwright traces/screenshots on failure.
 
 ## Test Data Management
 
-### Fixtures
+- Fixtures are minimal yet representative; prefer in‑test literals for clarity.
+- Use unique temp dirs; never point `$DATA_DIR` to production data during tests.
+- Clean up after tests and avoid cross‑test coupling.
 
-- **Minimal examples**: Use smallest data sets that exercise functionality
-- **Edge cases**: Include boundary conditions and error scenarios
-- **Realistic data**: Some tests should use production-like data volumes
+## Non‑goals
 
-### Temporary Data
+- Load/stress and performance benchmarking (separate from core tests).
+- Broad cross‑browser testing (target modern evergreen; E2E thin).
+- Security penetration testing.
 
-- **Automatic cleanup**: Use test framework's cleanup hooks
-- **Unique namespaces**: Prevent collision between parallel test runs
-- **Resource limits**: Monitor and limit disk/memory usage in tests
-
-## Non-goals
-
-- Performance benchmarking (not in core test suite)
-- UI/browser testing (GUI tests use different framework)
-- Load testing or stress testing
-- Cross-browser compatibility testing
-- Security penetration testing
+For GUI specifics (tooling, flows, selectors, and E2E setup), see `specs/gui-testing.md`.
