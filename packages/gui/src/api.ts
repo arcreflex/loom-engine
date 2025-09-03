@@ -8,7 +8,8 @@ import {
   RootData,
   RootId,
   ProviderName,
-  ToolInfo
+  ToolInfo,
+  type ContentBlock
 } from '@ankhdt/loom-engine';
 import type {
   DisplayMessage,
@@ -105,7 +106,7 @@ export async function getSiblings(nodeId: NodeId): Promise<NodeData[]> {
 export async function appendMessage(
   parentId: NodeId,
   role: Role,
-  content: string
+  content: string | ContentBlock[]
 ): Promise<NodeData> {
   return fetchApi<NodeData>(`/api/nodes/${encode(parentId)}/append`, {
     method: 'POST',
@@ -149,7 +150,7 @@ export function subscribeToGenerationUpdates(
 
 export async function editNodeContent(
   nodeId: NodeId,
-  content: string
+  content: string | ContentBlock[]
 ): Promise<NodeData> {
   return fetchApi<NodeData>(`/api/nodes/${encode(nodeId)}/content`, {
     method: 'PUT',

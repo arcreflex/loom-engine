@@ -12,8 +12,13 @@ import {
   type ProviderName,
   GenerateResult,
   type Message,
+  // Types for request validation
+  type ContentBlock,
+  type Role,
   // V2 utilities for ContentBlocks
-  normalizeMessage
+  normalizeMessage,
+  isTextBlock,
+  isToolUseBlock
 } from '@ankhdt/loom-engine';
 import { DisplayMessage } from './types';
 import { getEncoding } from 'js-tiktoken';
@@ -298,17 +303,84 @@ async function main() {
   app.post('/api/nodes/:parentId/append', async (req, res) => {
     try {
       const { parentId } = req.params;
-      const { role, content } = req.body;
+      const { role, content } = req.body as {
+        role?: Role;
+        // Accept legacy string content or V2 ContentBlock[] (text-only)
+        content?: string | ContentBlock[];
+      };
 
-      if (!role || !content) {
-        return res.status(400).json({ error: 'Role and content are required' });
+      // Basic validation
+      if (!role || typeof role !== 'string') {
+        return res.status(400).json({ error: 'Valid role is required' });
+      }
+      if (role !== 'user') {
+        return res
+          .status(400)
+          .json({ error: `Unsupported role for append: ${role}` });
+      }
+      const typedRole = 'user' as const;
+      if (content === undefined || content === null) {
+        return res.status(400).json({ error: 'Content is required' });
+      }
+
+      // Normalize to plain text; reject tool-use blocks in append
+      let textContent: string;
+      if (typeof content === 'string') {
+        textContent = content;
+      } else if (Array.isArray(content)) {
+        for (const b of content) {
+          if (
+            !b ||
+            typeof b !== 'object' ||
+            typeof (b as { type?: unknown }).type !== 'string'
+          ) {
+            return res.status(400).json({
+              error: 'Content must be a string or ContentBlock[] of text blocks'
+            });
+          }
+          if (isToolUseBlock(b as ContentBlock)) {
+            return res
+              .status(400)
+              .json({ error: 'Appending tool-use blocks is not supported' });
+          }
+          if (!isTextBlock(b as ContentBlock)) {
+            return res
+              .status(400)
+              .json({ error: 'Unsupported content block type' });
+          }
+          if (typeof (b as { text?: unknown }).text !== 'string') {
+            return res
+              .status(400)
+              .json({ error: 'Text block must include a string text field' });
+          }
+        }
+        textContent = content
+          .filter((b): b is Extract<ContentBlock, { type: 'text' }> =>
+            isTextBlock(b as ContentBlock)
+          )
+          .map(b => b.text)
+          .join('\n');
+      } else {
+        return res
+          .status(400)
+          .json({ error: 'Content must be string or ContentBlock[]' });
+      }
+
+      if (textContent.trim().length === 0) {
+        return res
+          .status(400)
+          .json({ error: 'Content must be non-empty after trimming' });
       }
 
       const newNode = await engine
         .getForest()
-        .append(parentId as NodeId, [{ role, content }], {
-          source_info: { type: 'user' }
-        });
+        .append(
+          parentId as NodeId,
+          [{ role: typedRole, content: textContent }],
+          {
+            source_info: { type: 'user' }
+          }
+        );
 
       // Update current node ID in config
       await configStore.update({ currentNodeId: newNode.id });
@@ -380,13 +452,67 @@ async function main() {
   app.put('/api/nodes/:nodeId/content', async (req, res) => {
     try {
       const { nodeId } = req.params;
-      const { content } = req.body;
+      const { content } = req.body as {
+        // Accept legacy string content or V2 ContentBlock[]
+        content?: string | ContentBlock[];
+      };
 
-      if (typeof content !== 'string') {
-        return res.status(400).json({ error: 'Content must be a string' });
+      if (content === undefined || content === null) {
+        return res.status(400).json({ error: 'Content is required' });
       }
 
-      const newNode = await engine.editNode(nodeId as NodeId, content);
+      let textContent: string;
+      if (typeof content === 'string') {
+        textContent = content;
+      } else if (Array.isArray(content)) {
+        // Only text edits are supported here; reject tool-use edits and unknown blocks.
+        for (const b of content) {
+          if (
+            !b ||
+            typeof b !== 'object' ||
+            typeof (b as { type?: unknown }).type !== 'string'
+          ) {
+            return res.status(400).json({
+              error: 'Content must be a string or ContentBlock[] of text blocks'
+            });
+          }
+        }
+        for (const b of content) {
+          if (isToolUseBlock(b as ContentBlock)) {
+            return res
+              .status(400)
+              .json({ error: 'Editing tool-use blocks is not supported' });
+          }
+          if (!isTextBlock(b as ContentBlock)) {
+            return res
+              .status(400)
+              .json({ error: 'Unsupported content block type' });
+          }
+          if (typeof (b as { text?: unknown }).text !== 'string') {
+            return res
+              .status(400)
+              .json({ error: 'Text block must include a string text field' });
+          }
+        }
+        textContent = content
+          .filter((b): b is Extract<ContentBlock, { type: 'text' }> =>
+            isTextBlock(b as ContentBlock)
+          )
+          .map(b => b.text)
+          .join('\n');
+      } else {
+        return res
+          .status(400)
+          .json({ error: 'Content must be string or ContentBlock[]' });
+      }
+
+      if (textContent.trim().length === 0) {
+        return res
+          .status(400)
+          .json({ error: 'Content must be non-empty after trimming' });
+      }
+
+      const newNode = await engine.editNode(nodeId as NodeId, textContent);
       const out: unknown = {
         ...newNode,
         message: normalizeMessage(newNode.message)
