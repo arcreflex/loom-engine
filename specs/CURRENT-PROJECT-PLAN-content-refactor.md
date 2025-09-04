@@ -1,6 +1,6 @@
 # ContentBlock Refactor Implementation Plan
 
-CURRENT STATUS: Phase 4a–4d COMPLETED; Phase 5 (server endpoints + UI rendering) COMPLETED; Phase 6 (unit tests) COMPLETED; Phase 6 (manual validation) PENDING.
+CURRENT STATUS: Phase 4a–4d COMPLETED; Phase 5 (server endpoints + UI rendering) COMPLETED; Phase 6 (unit tests) COMPLETED; Phase 6 (manual validation) COMPLETED.
 
 ## Overview
 
@@ -328,11 +328,18 @@ Confirmed by code audit on 2025-09-03.
    - Legacy data compatibility
    - Multi-provider testing
 
-STATUS UPDATE (2025-09-03):
+STATUS UPDATE (2025-09-04):
 
 - Engine unit tests passing: 166 tests, 38 suites, 0 failures (node --test in packages/engine).
+- GUI tests passing: 19 tests, key integration flows green.
 - Persistence write path verified to V2; read normalization verified by tests.
-- Manual validation outstanding (GUI smoke test and data migration checks to be performed).
+- Manual validation completed by user against real loom data: open/view nodes, add messages, generate (incl. tool use) all working.
+
+Cleanup follow-ups (post‑merge, non‑blocking):
+
+- Keep legacy read helpers for one release window; plan removal next minor.
+- Ensure all non‑engine coalescing helpers avoid crossing tool boundaries (engine uses the strict V2 coalescer already).
+- Optional: add a configuration option to fail‑early when residual token window ≤ 0 (current default is clamp‑to‑1).
 
 ## Implementation Order
 

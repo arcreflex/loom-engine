@@ -98,7 +98,7 @@ The system fails loudly when referencing non-existent entities to maintain data 
 ### Capability Enforcement
 
 **Model limits**: Enforce context length and parameter limits
-**Effective max_tokens invariant**: Effective max_tokens must be positive after clamping; if the residual window is exhausted, the engine must either clamp to 1 or fail early with a clear error (intended; current code may compute negative max_tokens)
+**Effective max_tokens invariant**: Engine clamps effective `max_tokens` to ≥ 1 based on model caps and estimated input; negative values are never passed to providers. Future option: configurable fail‑early when residual window ≤ 0.
 **Feature support**: Error on unsupported features (tools, streaming)
 **Rate limiting**: Handle and propagate provider rate limit errors
 
@@ -115,11 +115,11 @@ The system fails loudly when referencing non-existent entities to maintain data 
 
 Authoritative rules for message coalescing behavior (referenced from data-model.md and engine.md).
 
-**Current behavior**: Adjacent messages with the same role are concatenated with separator (default empty string). Tool messages naturally break adjacency by having different roles.
+**Engine behavior**: Only coalesces adjacent user/assistant messages where both are text‑only (all `content` blocks are `text`); never coalesces messages that contain any `tool-use` blocks and never coalesces tool messages.
 
-**Intended behavior**: Do not coalesce messages that contain any `tool-use` blocks; do not coalesce across tool messages. Only coalesce adjacent user/assistant messages where both are text-only (all `content` blocks are `text`).
+**Utility behavior**: A generic `coalesceMessages` helper exists that coalesces purely by role adjacency and does not inspect content blocks. It is not used in engine provider context construction and should not be used where tool‑use semantics matter.
 
-**Implementation gap**: Current coalesceMessages function coalesces purely by role adjacency without checking for `tool-use` blocks. This is tracked as a known gap requiring future refinement. Note: GUI visual coalescing for display purposes is separate and does not affect engine coalescing rules.
+**Display note**: GUI visual coalescing for display purposes is separate and does not affect engine coalescing rules or stored message structure.
 
 ### Matching Rules
 

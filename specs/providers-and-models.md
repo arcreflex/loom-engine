@@ -140,7 +140,7 @@ When model not in catalog:
 2. Subtract from model's known context limit (if available)
 3. Clamp max_tokens by model capabilities and estimated residual window
 4. Enforce provider-specific maximum output limits
-5. **Parameter constraint**: Unknown models use conservative caps; if residual capacity is ≤ 0, generation should fail early or clamp to 1 (intended; code gap)
+5. **Parameter constraint**: Unknown models use conservative caps; engine clamps effective `max_tokens` to ≥ 1 when residual capacity is ≤ 0. A fail‑early option may be introduced in the future.
 
 ### Safety Limits
 

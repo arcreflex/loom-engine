@@ -53,13 +53,12 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 - Applies default parameters from configuration
 - Enforces provider-specific parameter limits
 - **Token clamping**: Applies minimum of requested tokens, model output limit, and available context window
-- **Invariant**: Effective token limit must be positive after clamping
-- **Gap**: Current implementation may pass negative values
+- **Invariant**: Effective token limit is clamped to ≥ 1 (no negative values passed to providers)
 
 **Message Coalescing**
 
 - See errors-and-invariants.md for Message Coalescing rules
-- Current behavior coalesces purely by role adjacency
+- Engine uses a V2 coalescer that only coalesces adjacent text-only user/assistant messages and never across tool-use or tool messages
 
 ### Generation Flows
 
@@ -98,14 +97,11 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 
 **Effective max_tokens Selection**
 
-- Estimates input token count for context
+- Estimates input token count for context (including system prompt)
 - Calculates remaining tokens for generation
 - Applies safety margins for provider variations
 - Falls back to conservative estimates for unknown models
-
-**Current**: Token estimation excludes system prompt; ignores capabilities.max_total_tokens
-**Intended**: Should include system prompt in estimation; should consider max_total_tokens cap
-**Gap**: Token estimation and max_total_tokens enforcement not fully implemented
+- Enforces `max_total_tokens` when available and clamps effective `max_tokens` to ≥ 1
 
 **Parameter Validation**
 
