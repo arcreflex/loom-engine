@@ -52,6 +52,43 @@ describe('provider-utils', () => {
       assert.strictEqual(result[2].content[0].type, 'text');
       assert.strictEqual((result[2].content[0] as any).text, 'How are you?');
     });
+
+    it('normalizes legacy assistant with text + tool_calls preserving canonical order', () => {
+      const mixed: (Message | MessageV2)[] = [
+        { role: 'user', content: 'Q1' },
+        {
+          role: 'assistant',
+          content: 'Here you go',
+          tool_calls: [
+            {
+              id: 'tc-1',
+              type: 'function',
+              function: { name: 'lookup', arguments: '{"q":"abc"}' }
+            }
+          ]
+        }
+      ];
+
+      const result = normalizeMessagesToV2(mixed as any);
+      assert.strictEqual(result.length, 2);
+      // User normalized to text-only
+      assert.strictEqual(result[0].role, 'user');
+      assert.strictEqual(result[0].content.length, 1);
+      assert.strictEqual(result[0].content[0].type, 'text');
+      assert.strictEqual((result[0].content[0] as any).text, 'Q1');
+
+      // Assistant canonicalizes to [text, tool-use]
+      assert.strictEqual(result[1].role, 'assistant');
+      assert.strictEqual(result[1].content.length, 2);
+      assert.strictEqual(result[1].content[0].type, 'text');
+      assert.strictEqual((result[1].content[0] as any).text, 'Here you go');
+      assert.strictEqual(result[1].content[1].type, 'tool-use');
+      assert.strictEqual((result[1].content[1] as any).id, 'tc-1');
+      assert.strictEqual((result[1].content[1] as any).name, 'lookup');
+      assert.deepStrictEqual((result[1].content[1] as any).parameters, {
+        q: 'abc'
+      });
+    });
   });
 
   describe('toolCallsToToolUseBlocks', () => {
@@ -169,6 +206,37 @@ describe('provider-utils', () => {
           assert(error.message.includes("'function'"));
           return true;
         }
+      );
+    });
+
+    it('preserves order of multiple tool calls', () => {
+      const toolCalls = [
+        {
+          id: 'a',
+          type: 'function',
+          function: { name: 'first', arguments: '{"x":1}' }
+        },
+        {
+          id: 'b',
+          type: 'function',
+          function: { name: 'second', arguments: '{"y":2}' }
+        },
+        {
+          id: 'c',
+          type: 'function',
+          function: { name: 'third', arguments: '{"z":3}' }
+        }
+      ];
+
+      const blocks = toolCallsToToolUseBlocks(toolCalls);
+      assert.strictEqual(blocks.length, 3);
+      assert.deepStrictEqual(
+        blocks.map(b => [b.id, b.name]),
+        [
+          ['a', 'first'],
+          ['b', 'second'],
+          ['c', 'third']
+        ]
       );
     });
   });
