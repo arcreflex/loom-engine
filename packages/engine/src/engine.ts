@@ -9,7 +9,6 @@ import {
   type RootConfig,
   type Message,
   type NodeData,
-  getToolCalls,
   type RootData
 } from './types.ts';
 import type { NonEmptyArray, TextBlock, MessageV2 } from './types.ts';
@@ -254,37 +253,25 @@ export class LoomEngine {
 
     // Extract tool-use blocks from V2 response for robust correlation handling
     const toolUse = extractToolUseBlocks(response.message.content) ?? [];
-    const toolCalls = getToolCalls(assistantMessage) ?? [];
-    if (toolCalls.length === 0) {
+    if (toolUse.length === 0) {
       // If no tool calls, this is the final response.
       return { childNodes: [assistantNode as NodeData] };
     }
 
     // --- If there are tool calls, execute them ---
     const toolResults = await Promise.all(
-      toolCalls.map(async toolCall => {
-        // Validate correlation with V2 blocks when available
-        const matchingV2 = toolUse.find(tb => tb.id === toolCall.id);
-        if (!matchingV2) {
-          this.log({
-            level: 'warn',
-            event: 'tool_correlation_mismatch',
-            root_id: root.id,
-            tool_call_id: toolCall.id,
-            available_v2_ids: toolUse.map(t => t.id)
-          });
-        }
+      toolUse.map(async toolBlock => {
         try {
           const result = await this.toolRegistry.execute(
-            toolCall.function.name,
-            JSON.parse(toolCall.function.arguments)
+            toolBlock.name,
+            toolBlock.parameters
           );
           const v2 = {
             role: 'tool' as const,
             content: [
               { type: 'text' as const, text: result }
             ] as NonEmptyArray<TextBlock>,
-            tool_call_id: toolCall.id
+            tool_call_id: toolBlock.id
           };
           return v2;
         } catch (error) {
@@ -296,7 +283,7 @@ export class LoomEngine {
                 text: JSON.stringify({ error: String(error) })
               }
             ] as NonEmptyArray<TextBlock>,
-            tool_call_id: toolCall.id
+            tool_call_id: toolBlock.id
           };
           return v2;
         }
@@ -307,9 +294,6 @@ export class LoomEngine {
 
     let lastToolNode: NodeData | undefined;
     for (const toolResultMessage of toolResults) {
-      const toolCall = toolCalls.find(
-        tc => tc.id === toolResultMessage.tool_call_id
-      )!;
       const legacyToolResult = v2ToLegacyMessage(toolResultMessage);
       const toolNode = await this.forest.append(
         root.id,
@@ -324,7 +308,9 @@ export class LoomEngine {
         {
           source_info: {
             type: 'tool_result',
-            tool_name: toolCall.function.name
+            tool_name:
+              toolUse.find(tb => tb.id === toolResultMessage.tool_call_id)
+                ?.name ?? 'unknown'
           }
         }
       );
