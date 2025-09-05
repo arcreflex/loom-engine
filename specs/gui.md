@@ -1,267 +1,153 @@
 # GUI
 
-UI architecture and flows, including server interactions.
+Authoritative description of the GUI architecture and behavior.
 
-## Structure
+## Overview
 
-### Application Architecture
+- SPA with backend: React frontend + Express backend (API + SSE)
+- State: Zustand store is the single source of truth for UI state
+- Build/runtime: Vite (dev), production builds; Node server wraps engine
 
-**SPA + Backend**: React frontend with Express backend for API and SSE
-**State Management**: Zustand store as single source of truth for UI state
-**Rendering**: Vite development server with HMR, production builds
+## Aesthetics & Interaction Philosophy
 
-### Main Views
+The GUI aims for a calm, fast, and legible terminal‑inspired feel. Visuals are deliberately restrained—monospace typography, low‑chroma palette, thin borders—so information density and hierarchy do the work, not chrome. Interactions prefer keyboard velocity and predictable semantics: the command palette is the “center”, destructive actions ask for confirmation, and global toggles trade per‑widget cleverness for consistency. Layout changes avoid jank; we reserve space (e.g., for child previews) and minimize reflows and surprise auto‑scrolls. Navigation is grounded in conversation structure, with bookmarks as durable affordances and guardrails that prevent accidental loss. We try to surface state plainly (status bar, LEDs, inline text) and keep power tucked behind progressive disclosure (palette, hover previews, collapsible tool groups). Text stays first‑class—markdown, code, copy/export—and streaming focuses on discrete, meaningful updates instead of theatrical token dribble. Overall: quiet UI, keyboard‑friendly flow, stable layout, explicit state, and user control over model, presets, and tools.
 
-**HomeView**: Root conversation selection and management
-**NodeView**: Individual conversation node display and interaction
-**Graph View**: Visual tree representation with navigation
+## Views
+
+- HomeView: Bookmarks, roots list, and multi‑root graph with hover previews
+- NodeView: Conversation context, child navigator, graph, tools, input
+- GraphView: React Flow + Dagre layout for conversation trees
+
+## Keyboard & Commands
+
+- Shortcut: Cmd/Ctrl+P toggles command palette
+- Shortcut: Escape navigates to parent when palette is closed
+- Submit: Cmd+Enter = send and generate; Ctrl+Enter = send only
+- Palette: Fuzzy search (title/description), arrow navigation, Enter executes, Escape closes
+- Commands (dynamic list):
+  - Set input role (user/assistant)
+  - Toggle Generate on Submit (status reflected live in command title)
+  - Navigate to parent
+  - Bookmark: Save current / Remove current
+  - Navigate to bookmark(s)
+  - Navigate to root(s) (with system prompt description)
+  - Node ops: Delete this node, Delete all children, Delete all siblings except this
+  - Copy: Copy current context (Markdown), Copy all children
+  - Presets: Activate default or specific named preset (✓ for active)
+  - Models: Switch to any model from KNOWN_MODELS (✓ for current)
+  - Graph modes: single-root, multi-root, compact
+  - Rendering: Toggle between Markdown and Raw
+  - Metadata: Show current node metadata modal
+
+## Input & Submission
+
+- Generate on Submit indicator: Inline LED shows ON/OFF
+- Large paste handling: If input is empty and pasted text >500 chars, the paste is appended as a user message and the UI navigates to the new node
+- Focus: Input focuses on node change and when enabled
+- Inline params: Effective generation params (n, temperature, max_tokens) and estimated context token count are displayed above the input
+
+## Context & Messages
+
+- Coalescing: Adjacent messages of same role are visually coalesced for display (presentation‑only)
+- Rendering modes: Global toggle between Markdown and Raw
+  - Markdown: remark-gfm + code syntax highlighting with copy buttons
+  - Raw: exact text with preserved whitespace
+- Long content: Messages auto‑collapse when very long; “X more lines – click to expand” reveals full content
+- Tool calls: Assistant tool‑use blocks render as expandable “Tool Call” sections with JSON parameters; tool message results render as expandable “Tool Result”
+- Inline editing: Messages can be edited inline; saving creates a new node via edit endpoint and auto‑navigates to it
+- Scroll behavior: Auto‑scrolls to newest content; floating “Scroll to Latest” button appears when scrolled away
+- Child preview polish: ContextView intentionally reserves space below the last message and renders the child preview in a fixed area at the bottom, so hovering in/out of a child does not cause the main context to reflow or scroll
+
+## Graph View
+
+- Modes: single-root, multi-root, compact (current node, its path/ancestors, immediate neighbors)
+- Layout: Dagre top‑to‑bottom (TB) via React Flow; fitView with min/max zoom and dotted background
+- Styling semantics:
+  - Current node and ancestors: higher opacity
+  - Bookmark nodes: thicker focus border and larger node size
+  - Edges colored by role; current‑path edges are thicker and animated
+- Hover preview: Debounced tooltip near cursor showing bookmark title, system prompt, and a subset of recent messages (first + last), pointer‑events disabled
+- Click navigation: Clicking a node triggers pending navigation
+
+## Navigation & Child Selection
+
+- Pending navigation: State‑driven intent; NavigationManager reads and clears it after routing
+- ChildNavigator: Lists children with role‑colored prefixes, hover/focus previews, and click‑to‑navigate; Message footer shows sibling index and prev/next sibling links
+
+## Bookmarks
+
+- Named bookmarks: Save/delete by title on current node; listed in sidebar and HomeView
+- Guardrail on delete: Server refuses deletion of nodes that are bookmarked or have bookmarked descendants (400)
+
+## Models, Presets, and Tools
+
+- Model inference: On node load, current model/provider defaults to the most recent assistant message’s source info (if available)
+- Preset merge: Effective params = defaults merged with active preset merged with request overrides; active tools are included in request
+- Tools UI: Group tri‑state (indeterminate when partially active), bulk toggle; per‑tool toggles; available tools come from server definitions
+- Tool seeding: Active tools auto‑seed from the prior assistant message’s tool list (even if the current node is a user message), filtered to currently available tools
+
+## Status & Layout
+
+- StatusBar: Shows provider/model, compact node id, sibling position, bookmark title, and operation/status (Initializing/Processing/Error)
+- Layout: Resizable panels – left column (GraphView over ToolsPanel), right column (ContextView), input at bottom, ChildNavigator below input
+
+## Generation & Streaming
+
+- SSE: Discrete status updates with complete nodes (no token‑level streaming); subscription is set up when a node is pending generation and cleaned up on navigation
+- Auto‑navigation: On SSE completion, if exactly one child was added, auto‑navigate to it; otherwise reload current node state
+- Pending placeholder: When generating, ContextView shows an animated “…” placeholder at the end
+
+## Server contracts surfaced in UI
+
+- Token estimate: Node responses include an approximate contextTokens count for display
+- Append/Edit validation: Server only accepts text content for append/edit; tool‑use blocks and empty content are rejected with explicit errors
 
 ## Core Flows
 
-### Navigation and Load
+### Initialization and Load
 
-**Data Gathering**:
-
-1. Load conversation list from backend
-2. Fetch current node data if bookmark exists
-3. Populate Zustand store with initial state
-4. Render appropriate view based on current state
-
-**pendingNavigation Semantics**:
-
-- **Optimistic updates**: UI shows intended destination immediately
-- **Rollback mechanism**: Revert if navigation fails
-- **Loading states**: Visual feedback during navigation
+- Fetch roots, bookmarks, presets, defaults, and tools; populate store; render HomeView or NodeView depending on route
+- pendingNavigation semantics: visually reflect intended destination immediately, clear after route transition
 
 ### Submit Input with Generation
 
-**Input Flow**:
-
-1. User enters text in input field
-2. Optional generation parameters selection
-3. Submit triggers POST to backend with input and parameters
-
-**Generation Process**:
-
-1. Backend appends user input to conversation
-2. Backend initiates generation with selected provider
-3. SSE stream provides real-time generation updates
-4. Frontend updates UI with partial responses
-
-**Post-generation**:
-
-1. Children list updated with new nodes
-2. Auto-navigation to newly generated response (configurable)
-3. Input field cleared and ready for next interaction
+- Append user message; optionally start generation with current model/preset/tools
+- Subscribe to SSE for updates; integrate added nodes live; clear subscription on completion or navigation
 
 ### Edit Flow (Branching)
 
-**Edit Initiation**:
+- Inline edit of a message creates a new node via server edit endpoint and navigates to it
 
-1. User clicks edit button on existing node
-2. Node content loaded into edit mode
-3. Original content preserved for comparison
+### System Prompt Editing
 
-**Branch Creation**:
-
-1. User modifies content and submits
-2. Backend creates new branch using LCP algorithm
-3. UI updates to show new branch
-4. Navigation automatically follows new branch
-
-**System Prompt Editing**:
-Editing system prompt creates/selects new Root rather than mutating existing Root (see Root immutability in data-model.md). Server finds matching roots or creates new ones.
-
-**Metadata Modal**:
-
-- Edit node metadata (tags, custom data)
-- View generation parameters and source info
-- Access to advanced node operations
-
-### Bookmark CRUD and Guardrails
-
-**Creation**: Save current node as named bookmark
-**Updates**: Automatically update "current" bookmark on navigation
-**Deletion**: Remove bookmarks with confirmation
-**Validation**: Check bookmark validity before navigation
-**Guardrails**: Prevent navigation to deleted or invalid nodes
-
-### Tool Activation UX
-
-**Per-tool Control**: Individual checkboxes for each available tool
-**Group Control**: Enable/disable entire tool categories
-**Generation Request Integration**: Selected tools included in generation parameters
-**Visual Feedback**: Clear indication of which tools are active
-
-**Tool Status Display**:
-
-- Available tools list with descriptions
-- Active/inactive status indication
-- Tool execution results in conversation
-
-### Graph View Modes
-
-**single-root**: Display single conversation tree
-**multi-root**: Display multiple conversation trees
-**compact**: Condensed view for large conversations
-
-**Hover Preview**:
-
-- Node content preview without navigation
-- Metadata display (generation parameters, timestamps)
-- Note: Quick actions in hover are not implemented
-
-## Testing
-
-- Overview and guidance: see `specs/gui-testing.md`.
-- Emphasis on fast unit/integration tests with mocked network and real store/router.
-- Keep E2E minimal (one or two happy paths) using fixture `DATA_DIR` or a small mock server.
-- Prefer role/label based selectors; provide stable `aria-label`/`title` where needed.
-- Treat `console.error` in tests as a failure (guard in Vitest setup).
+- Editing system prompt creates/selects a new Root rather than mutating an existing Root (see data-model.md)
 
 ## Rendering Modes
 
-### Markdown vs Raw
+- Global toggle between Markdown and Raw rendering; not per‑message
+- Visual coalescing is presentational only and does not affect stored messages
 
-**Markdown Mode**:
+## Error & Status Display
 
-- Render assistant responses as formatted markdown
-- Syntax highlighting for code blocks
-- Link handling and media embedding
+- Categories: network, generation, validation, system
+- Strategies: inline/contextual where applicable and StatusBar for global state; no toasts/error boundaries
 
-**Raw Mode**:
+## State Management
 
-- Display exact text content without formatting
-- Useful for debugging and exact content inspection
-- Preserve whitespace and special characters
+- Store tracks node data, roots, bookmarks, graph view state, presets/defaults, tools, palette/modal state, and pending generation/navigation
+- Actions cover navigation, generation, presets/models/tools, editing, and UI state (palette, modals, rendering mode)
 
-**Toggle Behavior**: Per-message or global mode switching
+## Testing
 
-### ContextView and Visual Coalescing
-
-**Display vs. Storage**: The UI may visually coalesce adjacent messages for display; this is purely presentational and does not affect engine's coalescing rules or stored message structure.
-
-## Error/Status Display Patterns
-
-### Error Categories
-
-**Network Errors**: Connection failures, timeouts
-**Generation Errors**: Provider failures, rate limits
-**Validation Errors**: Invalid input, parameter errors
-**System Errors**: Internal application errors
-
-### Display Strategies
-
-**Inline Errors**: Show errors in context where they occurred
-**Status Bar**: Persistent status for ongoing operations
-**Error handling**: Basic error display (toast notifications and error boundaries not implemented)
-
-### Recovery Actions
-
-**Retry Mechanisms**: Automatic and manual retry options
-**Fallback Content**: Show last known good state
-**Error Reporting**: Optional error reporting to developers
-
-## Server Interaction (Moved from server-api)
-
-### Server API
-
-The server exposes a thin API surface for nodes, roots, bookmarks, models, tools, topology, and SSE updates. The server is a pass-through to Engine with minimal business logic.
-
-**SSE contract**: Status updates with node data and error information
-
-### SSE Subscription Lifecycle
-
-**Connection Establishment**:
-
-1. Frontend connects to generation SSE endpoint
-2. Backend maintains client connection registry
-3. No client heartbeat pings
-
-**Event Streaming**:
-
-1. Generation requests trigger SSE events
-2. Discrete status updates with complete nodes (not chunked token streams)
-3. Tool-calling recursion handled via promise chain
-
-**Connection Management**:
-
-- Automatic reconnection on connection loss
-- Client-side buffering of missed events
-- Graceful degradation without SSE support
-
-### Request/Response Shapes
-
-**Note**: Specific schemas not detailed here (see API implementation)
-**Principle**: JSON-based communication with consistent error formats
-**Streaming**: SSE for real-time updates, HTTP for discrete operations
-
-## State Management (Zustand)
-
-### Store Structure
-
-Zustand store is used as single source of truth for UI state. Key state includes:
-
-- Current conversation state (root and node IDs)
-- Conversation data and tree structure
-- UI state (sidebar, view modes, rendering preferences)
-- Generation state and active tools
-- Graph view state and hover previews
-
-### Actions and Updates
-
-**Navigation**: Update current node/root with optimistic updates
-**Generation**: Manage generation state and real-time updates
-**Tool Management**: Track active tools for generation
-**Settings**: Persist user preferences
-
-## Component Architecture
-
-### Layout Components
-
-**AppLayout**: Root component with navigation and main content area
-**Sidebar**: Conversation list and navigation
-**MainContent**: Current view rendering (Home, Node, Graph)
-
-### Conversation Components
-
-**ConversationList**: Display available conversations
-**NodeDisplay**: Render individual conversation nodes
-**MessageComponent**: Individual message rendering with role-specific styling
-**InputForm**: User input with generation controls
-
-### Graph Components
-
-**GraphView**: SVG-based tree visualization
-**NodeComponent**: Individual nodes in graph view
-**EdgeComponent**: Connection lines between nodes
+- Vitest + MSW with mocked endpoints; focus on unit/integration of store and views; minimal E2E
+- Prefer role/label selectors; treat console.error as test failure
 
 ## Performance Considerations
 
-### Lazy Loading
+- Future goals: lazy loading of heavy content, virtualized rendering for large trees, caching and bundle optimizations (see META.md for current gaps)
 
-**Conversation Content**: Load node content on-demand
-**Large Trees**: Virtualized rendering for large conversation trees
-**Image/Media**: Lazy load embedded media content
+## Non‑goals
 
-### Caching Strategy
-
-**Client-side Caching**: Cache conversation data in memory
-**Invalidation**: Clear cache on server updates
-**Persistent Storage**: Optional localStorage for offline capability
-
-### Optimization Techniques
-
-**React Optimization**: Memoization, React.memo, useMemo
-**Bundle Splitting**: Code splitting for large dependencies
-**Asset Optimization**: Image compression, font loading
-
-## Non-goals
-
-This specification does not cover:
-
-- Component-level prop documentation (see TypeScript interfaces)
-- Specific CSS/styling implementations
-- Detailed accessibility specifications
-- Mobile responsive design requirements
-- Internationalization and localization
+- Component‑level prop docs (see TypeScript)
+- Detailed styling and accessibility specifications
+- Mobile responsiveness and i18n/l10n
