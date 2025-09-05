@@ -12,6 +12,7 @@ import {
   getToolCalls,
   type RootData
 } from './types.ts';
+import type { NonEmptyArray, TextBlock } from './types.ts';
 import { AnthropicProvider } from './providers/anthropic.ts';
 import { GoogleProvider } from './providers/google.ts';
 import { ToolRegistry } from './tools/registry.ts';
@@ -269,17 +270,26 @@ export class LoomEngine {
             toolCall.function.name,
             JSON.parse(toolCall.function.arguments)
           );
-          return {
-            tool_call_id: toolCall.id,
+          const v2 = {
             role: 'tool' as const,
-            content: result
+            content: [
+              { type: 'text' as const, text: result }
+            ] as NonEmptyArray<TextBlock>,
+            tool_call_id: toolCall.id
           };
+          return v2;
         } catch (error) {
-          return {
-            tool_call_id: toolCall.id,
+          const v2 = {
             role: 'tool' as const,
-            content: JSON.stringify({ error: String(error) })
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({ error: String(error) })
+              }
+            ] as NonEmptyArray<TextBlock>,
+            tool_call_id: toolCall.id
           };
+          return v2;
         }
       })
     );
@@ -291,9 +301,10 @@ export class LoomEngine {
       const toolCall = toolCalls.find(
         tc => tc.id === toolResultMessage.tool_call_id
       )!;
+      const legacyToolResult = v2ToLegacyMessage(toolResultMessage);
       const toolNode = await this.forest.append(
         root.id,
-        [...messages, toolResultMessage],
+        [...messages, legacyToolResult],
         {
           source_info: {
             type: 'tool_result',
@@ -308,7 +319,7 @@ export class LoomEngine {
       }
       lastToolNode = toolNode;
 
-      messages.push(toolResultMessage);
+      messages.push(legacyToolResult);
     }
     if (!lastToolNode) {
       return { childNodes: [assistantNode as NodeData] };
