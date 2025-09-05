@@ -295,8 +295,7 @@ describe('LoomEngine', () => {
       });
     });
 
-    // TODO(c3): Re-enable after engine passes V2 context to providers and tests are updated
-    it.skip('should coalesce messages before sending them to the provider', async () => {
+    it('coalesces adjacent assistant text messages before provider call (V2)', async () => {
       const systemPrompt = 'system message';
       const rootConfig: RootConfig = { systemPrompt };
       const providerName: ProviderName = 'openai';
@@ -338,6 +337,11 @@ describe('LoomEngine', () => {
         1,
         'Provider called once'
       );
+      // Ensure provider receives 2 messages (assistant coalesced)
+      const firstCall = mockProviderInstance.generate.mock.calls[0]
+        .arguments[0] as any;
+      assert.strictEqual(firstCall.messages.length, 2);
+
       assert.deepEqual(
         mockProviderInstance.generate.mock.calls[0].arguments,
         [
@@ -346,11 +350,13 @@ describe('LoomEngine', () => {
             messages: [
               {
                 role: 'user',
-                content: 'Write a poem'
+                content: [{ type: 'text', text: 'Write a poem' }]
               },
               {
                 role: 'assistant',
-                content: 'The first line is finished later.'
+                content: [
+                  { type: 'text', text: 'The first line is finished later.' }
+                ]
               }
             ],
             model: 'gpt-4',
@@ -362,7 +368,7 @@ describe('LoomEngine', () => {
             tools: undefined
           }
         ],
-        'Provider called with coalesced messages'
+        'Provider called with coalesced adjacent assistant V2 messages'
       );
 
       assert.strictEqual(
