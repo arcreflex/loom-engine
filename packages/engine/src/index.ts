@@ -37,7 +37,6 @@ export {
   ToolArgumentParseError
 } from './content-blocks.ts';
 export * from './tools/types.ts';
-export { coalesceMessages } from './coalesce-messages.ts';
 export { Forest } from './forest.ts';
 export * from './config.ts';
 

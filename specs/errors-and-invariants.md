@@ -117,7 +117,7 @@ Authoritative rules for message coalescing behavior (referenced from data-model.
 
 **Engine behavior**: Only coalesces adjacent user/assistant messages where both are text‑only (all `content` blocks are `text`); never coalesces messages that contain any `tool-use` blocks and never coalesces tool messages.
 
-**Utility behavior**: A generic `coalesceMessages` helper exists that coalesces purely by role adjacency and does not inspect content blocks. It is not used in engine provider context construction and should not be used where tool‑use semantics matter.
+**Deprecated helper**: The legacy role‑only `coalesceMessages` helper has been removed to prevent misuse in contexts where tool‑use semantics matter.
 
 **Display note**: GUI visual coalescing for display purposes is separate and does not affect engine coalescing rules or stored message structure.
 
