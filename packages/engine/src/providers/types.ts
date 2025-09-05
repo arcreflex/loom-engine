@@ -1,4 +1,4 @@
-import type { Message, MessageV2, ProviderName } from '../types.ts';
+import type { MessageV2, ProviderName } from '../types.ts';
 import type { JSONSchema7 } from 'json-schema';
 
 /**
@@ -19,8 +19,8 @@ export interface ToolDefinitionForProvider {
  */
 export interface ProviderRequest {
   systemMessage: string | undefined;
-  /** The full context history of messages. Can be either legacy or V2 format. */
-  messages: Message[] | MessageV2[];
+  /** The full context history of messages in V2 format. */
+  messages: MessageV2[];
 
   model: string;
 

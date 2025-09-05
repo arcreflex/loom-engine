@@ -128,13 +128,11 @@ export class LoomEngine {
       );
     }
 
-    const coalesced = v2Coalesced.map(v2ToLegacyMessage);
-
     const childNodes = await Promise.all(
       Array.from({ length: options.n }).map(async () => {
         const response = await provider.generate({
           systemMessage: root.config.systemPrompt,
-          messages: coalesced,
+          messages: v2Coalesced,
           model: modelName,
           parameters,
           tools: undefined
@@ -211,13 +209,11 @@ export class LoomEngine {
     // Limit to 5 iterations to prevent infinite loops
     const v2Context = normalizeMessagesToV2(messages);
     const v2Coalesced = coalesceTextOnlyAdjacent(v2Context, '');
-    const coalesced = v2Coalesced.map(v2ToLegacyMessage);
-
     const toolParameters = this.getToolParameters(activeTools);
 
     const response = await provider.generate({
       systemMessage: root.config.systemPrompt,
-      messages: coalesced,
+      messages: v2Coalesced,
       model: modelName,
       parameters,
       ...toolParameters
