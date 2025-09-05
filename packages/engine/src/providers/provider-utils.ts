@@ -61,7 +61,17 @@ export function toolCallsToToolUseBlocks(
 
     let parameters: Record<string, unknown>;
     try {
-      parameters = JSON.parse(tc.function.arguments);
+      const parsed = JSON.parse(tc.function.arguments);
+      // Ensure parsed value is a plain object, not null/array/primitive
+      const isPlainObject =
+        parsed !== null &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed) &&
+        Object.getPrototypeOf(parsed) === Object.prototype;
+      if (!isPlainObject) {
+        throw new Error('Expected tool arguments to be a JSON object');
+      }
+      parameters = parsed as Record<string, unknown>;
     } catch (error) {
       // Throw ToolArgumentParseError with truncated arguments for context
       const truncatedArgs =

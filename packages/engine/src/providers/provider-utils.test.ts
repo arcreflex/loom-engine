@@ -100,6 +100,31 @@ describe('provider-utils', () => {
       assert.deepStrictEqual(result[0].parameters, { message: 'test' });
     });
 
+    it('throws error when tool arguments parse but are not an object', () => {
+      const cases = ['"a string"', '42', 'true', 'null', '[1,2,3]'];
+
+      for (const arg of cases) {
+        const toolCalls = [
+          {
+            id: 'call_x',
+            type: 'function',
+            function: { name: 'test', arguments: arg }
+          }
+        ];
+
+        assert.throws(
+          () => toolCallsToToolUseBlocks(toolCalls),
+          (error: any) => {
+            assert(error instanceof ToolArgumentParseError);
+            // Ensure rawArguments echo back the input (possibly truncated), not empty
+            assert.ok(typeof error.rawArguments === 'string');
+            assert.ok(error.rawArguments.length > 0);
+            return true;
+          }
+        );
+      }
+    });
+
     it('truncates long arguments in error message', () => {
       const longInvalidJson = 'x'.repeat(150);
       const toolCalls = [
