@@ -12,7 +12,7 @@ import {
   getToolCalls,
   type RootData
 } from './types.ts';
-import type { NonEmptyArray, TextBlock } from './types.ts';
+import type { NonEmptyArray, TextBlock, MessageV2 } from './types.ts';
 import { AnthropicProvider } from './providers/anthropic.ts';
 import { GoogleProvider } from './providers/google.ts';
 import { ToolRegistry } from './tools/registry.ts';
@@ -20,6 +20,7 @@ import type { ConfigStore, Bookmark } from './config.ts';
 import { discoverMcpTools } from './mcp/client.ts';
 import { KNOWN_MODELS } from './browser.ts';
 import type { ProviderRequest } from './providers/types.ts';
+import { isMessageV2, normalizeMessage } from './content-blocks.ts';
 import { getCodebaseContext } from './tools/introspect.ts';
 import { v2ToLegacyMessage } from './content-blocks-convert.ts';
 import {
@@ -83,7 +84,7 @@ export class LoomEngine {
     rootId: RootId,
     providerName: ProviderName,
     modelName: string,
-    contextMessages: Message[],
+    contextMessages: MessageV2[],
     options: GenerateOptions,
     activeTools?: string[]
   ): Promise<GenerateResult> {
@@ -140,9 +141,10 @@ export class LoomEngine {
         });
         // Convert V2 message back to legacy format for forest
         const legacyResponseMessage = v2ToLegacyMessage(response.message);
+        const legacyHistory = contextMessages.map(v2ToLegacyMessage);
         const responseNode = await this.forest.append(
           root.id,
-          [...contextMessages, legacyResponseMessage],
+          [...legacyHistory, legacyResponseMessage],
           {
             source_info: {
               type: 'model',
@@ -198,7 +200,7 @@ export class LoomEngine {
     root: RootData,
     providerName: ProviderName,
     modelName: string,
-    contextMessages: Message[],
+    contextMessages: Array<Message | MessageV2>,
     parameters: ProviderRequest['parameters'],
     activeTools: string[]
   ): Promise<GenerateResult> {
@@ -226,7 +228,14 @@ export class LoomEngine {
     // Append the assistant's response (which may or may not have tool calls)
     const assistantNode = await this.forest.append(
       root.id,
-      [...messages, assistantMessage],
+      [
+        ...messages.map(m =>
+          isMessageV2(m as unknown)
+            ? v2ToLegacyMessage(m as MessageV2)
+            : (m as Message)
+        ),
+        assistantMessage
+      ],
       {
         source_info: {
           type: 'model',
@@ -304,7 +313,14 @@ export class LoomEngine {
       const legacyToolResult = v2ToLegacyMessage(toolResultMessage);
       const toolNode = await this.forest.append(
         root.id,
-        [...messages, legacyToolResult],
+        [
+          ...messages.map(m =>
+            isMessageV2(m as unknown)
+              ? v2ToLegacyMessage(m as MessageV2)
+              : (m as Message)
+          ),
+          legacyToolResult
+        ],
         {
           source_info: {
             type: 'tool_result',
@@ -342,9 +358,10 @@ export class LoomEngine {
 
   async getMessages(
     nodeId: NodeId
-  ): Promise<{ root: RootConfig; messages: Message[] }> {
+  ): Promise<{ root: RootConfig; messages: MessageV2[] }> {
     const { root, messages } = await this.forest.getMessages(nodeId);
-    return { root: root.config, messages };
+    const v2 = messages.map(m => normalizeMessage(m));
+    return { root: root.config, messages: v2 };
   }
 
   async editNode(nodeId: NodeId, newContent: string): Promise<NodeData> {

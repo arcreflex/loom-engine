@@ -10,6 +10,8 @@ import type {
   NodeData,
   Node
 } from './types.ts'; // Adjust path as needed
+import { normalizeMessage } from './content-blocks.ts';
+import { normalizeMessagesToV2 } from './providers/provider-utils.ts';
 
 describe('LoomEngine', () => {
   let engine: LoomEngine;
@@ -81,7 +83,11 @@ describe('LoomEngine', () => {
         'loadRootInfo called'
       );
       assert.deepStrictEqual(result.root, rootConfig);
-      assert.deepStrictEqual(result.messages, [node1.message, node2.message]);
+      assert.deepStrictEqual(
+        result.messages,
+        [normalizeMessage(node1.message), normalizeMessage(node2.message)],
+        'Engine.getMessages returns V2-normalized messages'
+      );
     });
 
     it('should throw if a node in the path is missing (consistency issue)', async () => {
@@ -179,7 +185,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        userMessages,
+        normalizeMessagesToV2(userMessages),
         options
       );
 
@@ -223,7 +229,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        userMessages,
+        normalizeMessagesToV2(userMessages),
         optionsN2
       );
 
@@ -270,7 +276,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        existingMessages,
+        normalizeMessagesToV2(existingMessages),
         options
       );
 
@@ -322,7 +328,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        existingMessages,
+        normalizeMessagesToV2(existingMessages),
         options
       );
 
@@ -399,7 +405,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        existingMessages,
+        normalizeMessagesToV2(existingMessages),
         options
       );
 
@@ -436,7 +442,7 @@ describe('LoomEngine', () => {
             root.id,
             unsupportedProvider,
             modelName,
-            userMessages,
+            normalizeMessagesToV2(userMessages),
             options
           ),
         /Unsupported provider: unsupported/
@@ -475,7 +481,7 @@ describe('LoomEngine', () => {
             root.id,
             providerName,
             modelName,
-            userMessages,
+            normalizeMessagesToV2(userMessages),
             options
           ),
         providerError
@@ -544,7 +550,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        userMessages,
+        normalizeMessagesToV2(userMessages),
         options,
         activeTools
       );
@@ -698,7 +704,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        userMessages,
+        normalizeMessagesToV2(userMessages),
         options,
         activeTools
       );
@@ -783,7 +789,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        userMessages,
+        normalizeMessagesToV2(userMessages),
         options,
         activeTools
       );
@@ -924,7 +930,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        userMessages,
+        normalizeMessagesToV2(userMessages),
         options,
         activeTools
       );

@@ -11,7 +11,7 @@ import {
   RootId,
   type ProviderName,
   GenerateResult,
-  type Message,
+  type MessageV2,
   // Types for request validation
   type ContentBlock,
   type Role,
@@ -778,7 +778,7 @@ async function filterOutBookmarkedDescendants(
 
 // Token counting utility
 function estimateTokenCount(
-  messages: Message[],
+  messages: MessageV2[],
   systemPrompt?: string
 ): number {
   try {
@@ -797,8 +797,12 @@ function estimateTokenCount(
     let totalChars = 0;
     if (systemPrompt) totalChars += systemPrompt.length;
     for (const message of messages) {
-      if (typeof message.content === 'string' && message.content) {
-        totalChars += message.content.length;
+      // For V2, approximate by joining any text blocks
+      if (Array.isArray(message.content)) {
+        for (const block of message.content) {
+          if (block.type === 'text' && block.text)
+            totalChars += block.text.length;
+        }
       }
     }
     return Math.ceil(totalChars / 4);

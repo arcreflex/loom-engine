@@ -17,7 +17,7 @@ import {
  * Handles mixed arrays where some messages may be V2 and others legacy.
  */
 export function normalizeMessagesToV2(
-  messages: Message[] | MessageV2[]
+  messages: Array<Message | MessageV2>
 ): MessageV2[] {
   if (messages.length === 0) return [];
 
