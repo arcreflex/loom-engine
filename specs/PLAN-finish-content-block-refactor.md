@@ -133,3 +133,79 @@ Acceptance:
 - [ ] gui server/UI: V2-only inputs (no strings); responses V2
 - [ ] tests: updated for V2 shapes
 - [ ] docs/specs: updated to V2-only
+
+## Checkpoint Commit Plan
+
+### Commit Criteria (Summary)
+
+- Linting: root `pnpm lint` passes with zero errors/warnings per commit.
+- Tests: root `pnpm test` passes per commit. If a commit focuses on a single subsystem, dependent subsystem tests may be temporarily marked `skip` (Node `test.skip` / Vitest `it.skip`) with a clear TODO referencing the commit where they are re‑enabled.
+- Scope: each commit is moderately sized and coherent (one logical theme), avoiding broad refactors that span unrelated modules.
+- Backwards compatibility during transition: boundary adapters may exist temporarily but are removed in later commits as noted.
+
+### Planned Checkpoint Commits
+
+1. refactor(providers-utils): consolidate V2 helpers and invariants
+
+- Harden `content-blocks` and `content-blocks-convert` helpers; tighten guards and error types used by providers.
+- Add/extend unit tests for block parsing, tool-use correlation, and conversions.
+- No public API changes; all packages compile and tests stay green.
+
+2. refactor(providers-types): ProviderRequest.messages → MessageV2[]
+
+- Change `packages/engine/src/providers/types.ts` to accept V2 messages only.
+- Update provider adapters (OpenAI/Anthropic/Google/OpenRouter) to treat inputs as V2; keep local normalization guards for safety.
+- Update provider tests to construct V2 messages; remove reliance on legacy shapes in provider tests.
+
+3. refactor(engine-generate): V2 context to providers, bridge at forest edge
+
+- Update `LoomEngine.generate` and `toolCall` to pass V2 context directly to providers and to consume V2 provider responses.
+- Keep a temporary bridge only where the forest still expects legacy (V2→legacy for `forest.append`).
+- Update engine tests that call `generate` to use V2 message builders; keep behavior identical.
+- If any forest tests fail due to type drift, mark them `skip` with TODO referencing commit 5.
+
+4. refactor(engine-edit/reads): V2 surfaced from Engine APIs
+
+- Change `Engine.getMessages` and related read paths to return V2.
+- Update token estimation and any message coalescing in `engine-utils` to operate on V2.
+- Adapt engine tests that assert read shapes to V2; ensure GUI doesn’t rely on legacy engine shapes.
+
+5. refactor(forest-core): V2 append/prefix/edit throughout
+
+- Change `Forest.append`, `getMessages`, and prefix matching to operate on `MessageV2[]`; remove legacy branches.
+- Keep normalization via `normalizeMessage` for defensive equality, but operate on V2 types.
+- Update `forest.test.ts` to V2 shapes; re‑enable any tests skipped in commit 3.
+
+6. refactor(store): forward‑migrate on read; return V2
+
+- Make `FileSystemStore.loadNode/findNodes` return `NodeData` with V2 `message`; forward‑migrate legacy JSON on read.
+- Remove `loadNodeNormalized/findNodesNormalized`; keep a private legacy detection util.
+- Update store tests to assert V2 on read/write, including legacy fixtures; ensure `serialize()` reflects V2 content.
+
+7. feat(gui-server): enforce V2-only requests; remove string acceptance
+
+- Update route validators/types to require `ContentBlock[]` for user/assistant inputs and text‑only for user/tool messages.
+- Remove string coercion helpers; add block validation with clear errors.
+- Update frontend calls to construct/send V2 blocks; adjust GUI tests accordingly.
+- If any GUI tests conflict with in‑flight engine changes, temporarily `it.skip` with TODO referencing commit 9.
+
+8. chore(tokens): unify token accounting on V2
+
+- Ensure both engine and server estimate tokens from V2 consistently (reuse helpers or add thin adapters).
+- Extend tests to cover token estimation for mixed text/tool‑use assistant turns.
+
+9. cleanup(legacy-removal): delete obsolete bridges and types
+
+- Remove `Message` legacy types, V2↔legacy conversion used only for migration, and unused helpers like `getToolCalls`.
+- Remove provider normalization that only protected legacy inputs.
+- Re‑enable any GUI tests skipped in commit 7.
+
+10. docs: finalize V2-only posture
+
+- Update specs (data-model, engine, providers, GUI) to V2‑only language and examples.
+- Add concise migration notes (breaking changes + how legacy data is forward‑migrated by the store).
+
+Notes
+
+- Each commit runs `pnpm lint && pnpm typecheck && pnpm test` at the root.
+- Temporary skips, when unavoidable, include explicit TODO comments that name the exact commit where they are removed (e.g., “TODO: unskip in commit 5 (forest V2 core)”).
