@@ -9,7 +9,7 @@ import type {
   RootId,
   SourceInfo
 } from './types.ts';
-import type { ILoomStore, NodeQueryCriteria } from './store/types.ts';
+import type { NodeQueryCriteria } from './store/types.ts';
 import type { IProvider } from './providers/types.ts';
 import { OpenAIProvider } from './providers/openai.ts';
 
@@ -21,8 +21,6 @@ export function createMockStore() {
   const roots: Map<string, RootData> = new Map();
 
   const mockStore = {
-    initialize: mock.fn(async () => {}),
-
     generateNodeId: (root: RootId) => {
       return `node-${root}-${Math.random().toString(36).substring(2, 15)}` as NodeId;
     },
@@ -32,7 +30,9 @@ export function createMockStore() {
 
     saveNode: mock.fn(async (nodeData: Node) => {
       if (nodeData.parent_id === undefined) {
-        return mockStore.saveRootInfo(nodeData);
+        const rootInfo = nodeData as RootData;
+        roots.set(rootInfo.id, { ...rootInfo });
+        return;
       }
       nodes.set(nodeData.id, { ...nodeData });
     }),
@@ -96,17 +96,16 @@ export function createMockStore() {
 
     log: console.log.bind(console),
 
-    // V2 normalized methods - not implemented in mock
-    loadNodeNormalized: mock.fn(async (_nodeId: NodeId) => {
+    // normalized helpers (not used in these tests)
+    loadNodeNormalized: mock.fn(async () => {
       throw new Error('loadNodeNormalized not implemented in mock store');
     }),
-
-    findNodesNormalized: mock.fn(async (_criteria: NodeQueryCriteria) => {
+    findNodesNormalized: mock.fn(async () => {
       throw new Error('findNodesNormalized not implemented in mock store');
     })
-  };
+  } satisfies import('./store/types.ts').ILoomStore;
 
-  mockStore satisfies ILoomStore;
+  // Avoid strict ILoomStore satisfaction to keep mock minimal.
 
   return {
     mockStore,

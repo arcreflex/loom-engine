@@ -4,8 +4,7 @@ import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
 import {
   extractTextContent,
   extractToolUseBlocks,
-  toolCallsToToolUseBlocks,
-  normalizeMessagesToV2
+  toolCallsToToolUseBlocks
 } from './provider-utils.ts';
 import type {
   ContentBlock,
@@ -69,8 +68,8 @@ export class OpenAIProvider implements IProvider {
         });
       }
 
-      // Defensive: normalize to V2 even if upstream passed mixed/legacy
-      const v2Messages = normalizeMessagesToV2(request.messages);
+      // Messages are V2 per ProviderRequest contract
+      const v2Messages = request.messages;
 
       // Convert V2 messages to OpenAI format
       for (let i = 0; i < v2Messages.length; i++) {

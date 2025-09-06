@@ -1,7 +1,7 @@
 import type { Logger } from '../log.ts';
 import { KNOWN_MODELS } from './known-models.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
-import { extractTextContent, normalizeMessagesToV2 } from './provider-utils.ts';
+import { extractTextContent } from './provider-utils.ts';
 import type {
   ContentBlock,
   AssistantMessageV2,
@@ -56,8 +56,8 @@ export class AnthropicProvider implements IProvider {
         timeout: 10 * 60 * 1000 // see https://github.com/anthropics/anthropic-sdk-typescript?tab=readme-ov-file#long-requests
       });
 
-      // Defensive: normalize to V2 even if upstream passed mixed/legacy
-      const v2Messages = normalizeMessagesToV2(request.messages);
+      // Messages are V2 per ProviderRequest contract
+      const v2Messages = request.messages;
 
       // Convert V2 messages to Anthropic format
       const anthropicMessages: Anthropic.MessageParam[] = [];

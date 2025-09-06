@@ -11,7 +11,6 @@ import type {
   Node
 } from './types.ts'; // Adjust path as needed
 import { normalizeMessage } from './content-blocks.ts';
-import { normalizeMessagesToV2 } from './providers/provider-utils.ts';
 
 describe('LoomEngine', () => {
   let engine: LoomEngine;
@@ -185,7 +184,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        normalizeMessagesToV2(userMessages),
+        userMessages.map(m => normalizeMessage(m)),
         options
       );
 
@@ -229,7 +228,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        normalizeMessagesToV2(userMessages),
+        userMessages.map(m => normalizeMessage(m)),
         optionsN2
       );
 
@@ -276,7 +275,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        normalizeMessagesToV2(existingMessages),
+        existingMessages.map(m => normalizeMessage(m)),
         options
       );
 
@@ -327,7 +326,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        normalizeMessagesToV2(existingMessages),
+        existingMessages.map(m => normalizeMessage(m)),
         options
       );
 
@@ -411,7 +410,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        normalizeMessagesToV2(existingMessages),
+        existingMessages.map(m => normalizeMessage(m)),
         options
       );
 
@@ -448,7 +447,7 @@ describe('LoomEngine', () => {
             root.id,
             unsupportedProvider,
             modelName,
-            normalizeMessagesToV2(userMessages),
+            userMessages.map(m => normalizeMessage(m)),
             options
           ),
         /Unsupported provider: unsupported/
@@ -487,7 +486,7 @@ describe('LoomEngine', () => {
             root.id,
             providerName,
             modelName,
-            normalizeMessagesToV2(userMessages),
+            userMessages.map(m => normalizeMessage(m)),
             options
           ),
         providerError
@@ -556,7 +555,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        normalizeMessagesToV2(userMessages),
+        userMessages.map(m => normalizeMessage(m)),
         options,
         activeTools
       );
@@ -710,7 +709,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        normalizeMessagesToV2(userMessages),
+        userMessages.map(m => normalizeMessage(m)),
         options,
         activeTools
       );
@@ -795,7 +794,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        normalizeMessagesToV2(userMessages),
+        userMessages.map(m => normalizeMessage(m)),
         options,
         activeTools
       );
@@ -936,7 +935,7 @@ describe('LoomEngine', () => {
         root.id,
         providerName,
         modelName,
-        normalizeMessagesToV2(userMessages),
+        userMessages.map(m => normalizeMessage(m)),
         options,
         activeTools
       );
@@ -966,7 +965,7 @@ describe('LoomEngine', () => {
       // Verify the assistant node has the expected tool-only structure
       assert(assistantNode, 'Assistant node should exist');
       assert.strictEqual(assistantNode.message.role, 'assistant');
-      // After v2ToLegacyMessage conversion, tool-only message should have null content
+      // After conversion conversion, tool-only message should have null content
       assert.strictEqual(
         assistantNode.message.content,
         null,

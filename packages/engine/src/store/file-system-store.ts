@@ -12,7 +12,7 @@ import type {
 import type { ILoomStore, NodeQueryCriteria, NodeStructure } from './types.ts';
 import { initializeLog, log } from '../log.ts';
 import { isMessageV2, normalizeMessage } from '../content-blocks.ts';
-import { v2ToLegacyMessage } from '../content-blocks-convert.ts';
+import { convertV2ToLegacy } from '../legacy-bridge.ts';
 
 class IdCache<T extends string> {
   known = new Set<T>();
@@ -332,7 +332,7 @@ export class FileSystemStore implements ILoomStore {
   private toLegacyNode(raw: unknown): NodeData {
     if (this.isPersistedNodeV2(raw)) {
       const { message, ...rest } = raw;
-      const legacy = v2ToLegacyMessage(message);
+      const legacy = convertV2ToLegacy(message);
       return {
         ...(rest as Omit<NodeDataV2, 'message'>),
         message: legacy

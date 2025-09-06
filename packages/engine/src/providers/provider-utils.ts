@@ -1,12 +1,7 @@
-import type { Message, MessageV2, ToolUseBlock } from '../types.ts';
-import {
-  normalizeMessage,
-  isMessageV2,
-  ToolArgumentParseError
-} from '../content-blocks.ts';
+import type { ToolUseBlock } from '../types.ts';
+import { ToolArgumentParseError } from '../content-blocks.ts';
 import { UnexpectedToolCallTypeError } from './errors.ts';
 import {
-  v2ToLegacyMessage,
   extractTextContent,
   extractToolUseBlocks
 } from '../content-blocks-convert.ts';
@@ -16,19 +11,7 @@ import {
  * This is used by providers to ensure they work with the V2 format internally.
  * Handles mixed arrays where some messages may be V2 and others legacy.
  */
-export function normalizeMessagesToV2(
-  messages: Array<Message | MessageV2>
-): MessageV2[] {
-  if (messages.length === 0) return [];
-
-  // Normalize each message individually to handle mixed arrays
-  return messages.map(msg => {
-    if (isMessageV2(msg)) {
-      return msg as MessageV2;
-    }
-    return normalizeMessage(msg as Message);
-  });
-}
+// Normalization shim removed: adapters now accept V2-only inputs.
 
 /**
  * Extracts text content from ContentBlock array.
@@ -100,4 +83,4 @@ export function toolCallsToToolUseBlocks(
  * This is a temporary conversion during the migration period.
  * @throws {Error} if tool message has no text content
  */
-export { v2ToLegacyMessage };
+// Legacy conversion export removed; Forest/Engine handle any temporary bridging internally.

@@ -1,95 +1,16 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeMessagesToV2,
   toolCallsToToolUseBlocks,
-  v2ToLegacyMessage,
   extractTextContent,
   extractToolUseBlocks
 } from './provider-utils.ts';
 import { ToolArgumentParseError } from '../content-blocks.ts';
-import {
-  UnexpectedToolCallTypeError,
-  InvalidAssistantMessageError,
-  MissingMessageContentError,
-  MalformedToolMessageError
-} from './errors.ts';
-import type { Message, MessageV2, NonEmptyArray } from '../types.ts';
+import { UnexpectedToolCallTypeError } from './errors.ts';
+//
 
 describe('provider-utils', () => {
-  describe('normalizeMessagesToV2', () => {
-    it('handles mixed legacy and V2 messages correctly', () => {
-      const mixedMessages: (Message | MessageV2)[] = [
-        // Legacy message
-        {
-          role: 'user',
-          content: 'Hello'
-        },
-        // V2 message
-        {
-          role: 'assistant',
-          content: [{ type: 'text', text: 'Hi there' }] as NonEmptyArray<any>
-        },
-        // Another legacy message
-        {
-          role: 'user',
-          content: 'How are you?'
-        }
-      ];
-
-      const result = normalizeMessagesToV2(mixedMessages as any);
-
-      assert.strictEqual(result.length, 3);
-      assert.strictEqual(result[0].role, 'user');
-      assert.strictEqual(result[0].content[0].type, 'text');
-      assert.strictEqual((result[0].content[0] as any).text, 'Hello');
-
-      assert.strictEqual(result[1].role, 'assistant');
-      assert.strictEqual(result[1].content[0].type, 'text');
-      assert.strictEqual((result[1].content[0] as any).text, 'Hi there');
-
-      assert.strictEqual(result[2].role, 'user');
-      assert.strictEqual(result[2].content[0].type, 'text');
-      assert.strictEqual((result[2].content[0] as any).text, 'How are you?');
-    });
-
-    it('normalizes legacy assistant with text + tool_calls preserving canonical order', () => {
-      const mixed: (Message | MessageV2)[] = [
-        { role: 'user', content: 'Q1' },
-        {
-          role: 'assistant',
-          content: 'Here you go',
-          tool_calls: [
-            {
-              id: 'tc-1',
-              type: 'function',
-              function: { name: 'lookup', arguments: '{"q":"abc"}' }
-            }
-          ]
-        }
-      ];
-
-      const result = normalizeMessagesToV2(mixed as any);
-      assert.strictEqual(result.length, 2);
-      // User normalized to text-only
-      assert.strictEqual(result[0].role, 'user');
-      assert.strictEqual(result[0].content.length, 1);
-      assert.strictEqual(result[0].content[0].type, 'text');
-      assert.strictEqual((result[0].content[0] as any).text, 'Q1');
-
-      // Assistant canonicalizes to [text, tool-use]
-      assert.strictEqual(result[1].role, 'assistant');
-      assert.strictEqual(result[1].content.length, 2);
-      assert.strictEqual(result[1].content[0].type, 'text');
-      assert.strictEqual((result[1].content[0] as any).text, 'Here you go');
-      assert.strictEqual(result[1].content[1].type, 'tool-use');
-      assert.strictEqual((result[1].content[1] as any).id, 'tc-1');
-      assert.strictEqual((result[1].content[1] as any).name, 'lookup');
-      assert.deepStrictEqual((result[1].content[1] as any).parameters, {
-        q: 'abc'
-      });
-    });
-  });
+  // Normalization helper tests removed; adapters accept V2-only inputs now.
 
   describe('toolCallsToToolUseBlocks', () => {
     it('throws ToolArgumentParseError for invalid JSON arguments', () => {
@@ -241,127 +162,9 @@ describe('provider-utils', () => {
     });
   });
 
-  describe('v2ToLegacyMessage', () => {
-    it('throws error for tool message with no text content', () => {
-      const toolMessage: MessageV2 = {
-        role: 'tool',
-        content: [] as any, // Invalid empty content
-        tool_call_id: 'call_123'
-      };
+  // Legacy conversion tests removed; conversion is handled internally where needed.
 
-      assert.throws(
-        () => v2ToLegacyMessage(toolMessage),
-        (error: any) => {
-          assert(error instanceof MalformedToolMessageError);
-          assert(error.message.includes('Tool message must have text content'));
-          assert(error.message.includes('call_123'));
-          return true;
-        }
-      );
-    });
-
-    it('successfully converts tool message with text content', () => {
-      const toolMessage: MessageV2 = {
-        role: 'tool',
-        content: [{ type: 'text', text: 'Tool result' }] as NonEmptyArray<any>,
-        tool_call_id: 'call_123'
-      };
-
-      const result = v2ToLegacyMessage(toolMessage);
-
-      assert.strictEqual(result.role, 'tool');
-      assert.strictEqual(result.content, 'Tool result');
-      assert.strictEqual((result as any).tool_call_id, 'call_123');
-    });
-  });
-
-  describe('normalizeMessagesToV2 edge cases', () => {
-    it('handles empty message array', () => {
-      const result = normalizeMessagesToV2([]);
-      assert.strictEqual(result.length, 0);
-    });
-
-    it('enforces role-specific content constraints', () => {
-      // Test that user messages get normalized to text-only
-      const userWithToolCalls = {
-        role: 'user',
-        content: 'Hello',
-        tool_calls: [
-          {
-            /* tool call data */
-          }
-        ]
-      };
-
-      const normalized = normalizeMessagesToV2([userWithToolCalls as any]);
-      assert.strictEqual(normalized[0].role, 'user');
-      assert.strictEqual(normalized[0].content.length, 1);
-      assert.strictEqual(normalized[0].content[0].type, 'text');
-    });
-
-    it('handles deeply nested mixed arrays correctly', () => {
-      const messages = [
-        { role: 'user', content: 'Start' },
-        {
-          role: 'assistant',
-          content: [{ type: 'text', text: 'V2 message' }] as NonEmptyArray<any>
-        },
-        { role: 'user', content: 'Middle' },
-        {
-          role: 'assistant',
-          content: null,
-          tool_calls: [
-            {
-              id: 'tc1',
-              type: 'function',
-              function: { name: 'test', arguments: '{}' }
-            }
-          ]
-        },
-        { role: 'tool', content: 'Result', tool_call_id: 'tc1' },
-        {
-          role: 'assistant',
-          content: [
-            { type: 'text', text: 'Final' },
-            { type: 'tool-use', id: 'tc2', name: 'end', parameters: {} }
-          ] as NonEmptyArray<any>
-        }
-      ];
-
-      const result = normalizeMessagesToV2(messages as any);
-
-      assert.strictEqual(result.length, 6);
-      // Verify each message was normalized correctly
-      assert.strictEqual(result[0].content[0].type, 'text');
-      assert.strictEqual(result[1].content[0].type, 'text');
-      assert.strictEqual(result[2].content[0].type, 'text');
-      assert.strictEqual(result[3].content[0].type, 'tool-use');
-      assert.strictEqual(result[4].content[0].type, 'text');
-      assert.strictEqual(result[5].content.length, 2);
-    });
-
-    it('preserves V2 messages that are already normalized', () => {
-      const v2Messages = [
-        {
-          role: 'user',
-          content: [{ type: 'text', text: 'Hello' }] as NonEmptyArray<any>
-        },
-        {
-          role: 'assistant',
-          content: [
-            { type: 'text', text: 'Hi' },
-            { type: 'tool-use', id: 'x', name: 'y', parameters: {} }
-          ] as NonEmptyArray<any>
-        }
-      ];
-
-      const result = normalizeMessagesToV2(v2Messages as any);
-
-      // Should be identical references since already V2
-      assert.strictEqual(result[0], v2Messages[0]);
-      assert.strictEqual(result[1], v2Messages[1]);
-    });
-  });
+  // Normalization edge cases removed.
 
   describe('content block ordering', () => {
     it('preserves order when extracting from mixed content blocks', () => {
@@ -410,36 +213,5 @@ describe('provider-utils', () => {
     });
   });
 
-  describe('v2ToLegacyMessage edge cases', () => {
-    it('throws error for user message with no text content', () => {
-      const userMessage: MessageV2 = {
-        role: 'user',
-        content: [] as any // Invalid empty content
-      };
-
-      assert.throws(
-        () => v2ToLegacyMessage(userMessage),
-        (error: any) => {
-          assert(error instanceof MissingMessageContentError);
-          assert(error.message.includes('User'));
-          return true;
-        }
-      );
-    });
-
-    it('throws error for assistant message with no content', () => {
-      const assistantMessage: MessageV2 = {
-        role: 'assistant',
-        content: [] as any // Invalid empty content
-      };
-
-      assert.throws(
-        () => v2ToLegacyMessage(assistantMessage),
-        (error: any) => {
-          assert(error instanceof InvalidAssistantMessageError);
-          return true;
-        }
-      );
-    });
-  });
+  // Legacy conversion edge cases removed.
 });

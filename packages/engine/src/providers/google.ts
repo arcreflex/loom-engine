@@ -1,6 +1,6 @@
 import type { Logger } from '../log.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
-import { extractTextContent, normalizeMessagesToV2 } from './provider-utils.ts';
+import { extractTextContent } from './provider-utils.ts';
 import type {
   ToolUseBlock,
   AssistantMessageV2,
@@ -60,8 +60,8 @@ export class GoogleProvider implements IProvider {
       // Prepare messages, including system message if provided
       const messages: Content[] = [];
 
-      // Defensive: normalize to V2 even if upstream passed mixed/legacy
-      const v2Messages = normalizeMessagesToV2(request.messages);
+      // Messages are V2 per ProviderRequest contract
+      const v2Messages = request.messages;
 
       // Convert V2 messages to Google format
       for (let i = 0; i < v2Messages.length; i++) {

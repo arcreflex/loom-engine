@@ -21,11 +21,9 @@ import { KNOWN_MODELS } from './browser.ts';
 import type { ProviderRequest } from './providers/types.ts';
 import { isMessageV2, normalizeMessage } from './content-blocks.ts';
 import { getCodebaseContext } from './tools/introspect.ts';
-import { v2ToLegacyMessage } from './content-blocks-convert.ts';
-import {
-  normalizeMessagesToV2,
-  extractToolUseBlocks
-} from './providers/provider-utils.ts';
+import { extractToolUseBlocks } from './providers/provider-utils.ts';
+import { convertV2ToLegacy } from './legacy-bridge.ts';
+// error classes no longer used directly here
 import {
   clampMaxTokens,
   coalesceTextOnlyAdjacent,
@@ -100,8 +98,7 @@ export class LoomEngine {
     };
 
     // Build V2 context and coalesce per spec, then convert back to legacy for provider
-    const v2Context = normalizeMessagesToV2(contextMessages);
-    const v2Coalesced = coalesceTextOnlyAdjacent(v2Context, '');
+    const v2Coalesced = coalesceTextOnlyAdjacent(contextMessages, '');
     const estimatedInputTokens = estimateInputTokens(
       v2Coalesced,
       root.config.systemPrompt
@@ -139,8 +136,8 @@ export class LoomEngine {
           tools: undefined
         });
         // Convert V2 message back to legacy format for forest
-        const legacyResponseMessage = v2ToLegacyMessage(response.message);
-        const legacyHistory = contextMessages.map(v2ToLegacyMessage);
+        const legacyResponseMessage = convertV2ToLegacy(response.message);
+        const legacyHistory = contextMessages.map(convertV2ToLegacy);
         const responseNode = await this.forest.append(
           root.id,
           [...legacyHistory, legacyResponseMessage],
@@ -209,7 +206,7 @@ export class LoomEngine {
     const provider = this.getProvider(providerName);
 
     // Limit to 5 iterations to prevent infinite loops
-    const v2Context = normalizeMessagesToV2(messages);
+    const v2Context: MessageV2[] = messages.map(m => normalizeMessage(m));
     const v2Coalesced = coalesceTextOnlyAdjacent(v2Context, '');
     const toolParameters = this.getToolParameters(activeTools);
 
@@ -222,7 +219,7 @@ export class LoomEngine {
     });
 
     // Convert V2 message back to legacy format for forest
-    const assistantMessage = v2ToLegacyMessage(response.message);
+    const assistantMessage = convertV2ToLegacy(response.message);
 
     // Append the assistant's response (which may or may not have tool calls)
     const assistantNode = await this.forest.append(
@@ -230,7 +227,7 @@ export class LoomEngine {
       [
         ...messages.map(m =>
           isMessageV2(m as unknown)
-            ? v2ToLegacyMessage(m as MessageV2)
+            ? convertV2ToLegacy(m as MessageV2)
             : (m as Message)
         ),
         assistantMessage
@@ -294,13 +291,13 @@ export class LoomEngine {
 
     let lastToolNode: NodeData | undefined;
     for (const toolResultMessage of toolResults) {
-      const legacyToolResult = v2ToLegacyMessage(toolResultMessage);
+      const legacyToolResult = convertV2ToLegacy(toolResultMessage);
       const toolNode = await this.forest.append(
         root.id,
         [
           ...messages.map(m =>
             isMessageV2(m as unknown)
-              ? v2ToLegacyMessage(m as MessageV2)
+              ? convertV2ToLegacy(m as MessageV2)
               : (m as Message)
           ),
           legacyToolResult
@@ -439,3 +436,5 @@ export class LoomEngine {
     }
   }
 }
+
+// legacy: helper no longer needed here (kept for clarity during migration)
