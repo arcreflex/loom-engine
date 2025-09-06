@@ -19,7 +19,7 @@ Conceptual model and invariants of roots, nodes, messages, and metadata.
 - **Content**: Exactly one Message object
 - **Representation**: Forest represents each role turn as a node; the path from root to a node is the conversation history
 
-### Message
+### Message (V2-only)
 
 Three distinct message roles:
 
@@ -27,22 +27,22 @@ Three distinct message roles:
 2. **Assistant messages**: Model responses (may include tool use requests)
 3. **Tool messages**: Results from tool execution
 
-**Message properties**:
+Canonical V2 properties:
 
 - `role`: "user" | "assistant" | "tool"
-- `content`: Array of ContentBlock (see below). Empty arrays are not allowed
+- `content`: Non-empty array of ContentBlock (see below). Empty arrays are not allowed
 - `tool_call_id` (tool messages only): Reference to the tool-use block `id` that prompted this result
 
-### ContentBlock
+### ContentBlock (V2)
 
 Canonical message content is an ordered list of content blocks:
 
 - `text` block: plain textual content
 - `tool-use` block (assistant messages only): a request by the model to execute a named tool with JSON parameters. The `id` correlates to a subsequent tool message's `tool_call_id`.
 
-Additional block types may be introduced in the future (e.g., images, citations). The rest of the system should not assume only two types exist.
+Additional block types may be introduced (e.g., images, citations). The system must not assume only two types exist.
 
-### Legacy Compatibility
+### Legacy Compatibility (forward-migration only)
 
 Older data formats represented messages as:
 
@@ -55,7 +55,7 @@ FileSystemStore MUST normalize legacy-on-disk messages to the new canonical form
 - Each legacy `tool_calls[]` entry becomes a `{ type: 'tool-use', id, name, parameters }` block
 - Tool messages keep `tool_call_id` as-is and their string content becomes a single text block
 
-On write, FileSystemStore SHOULD persist only the new canonical `content: ContentBlock[]` form (no `tool_calls`, no string `content`).
+On write, FileSystemStore persists only the canonical `content: ContentBlock[]` form (no `tool_calls`, no string `content`).
 
 ### NodeMetadata
 
@@ -107,7 +107,7 @@ Optional structured data attached to nodes:
 - User experience - seamless navigation between conversation variants
   **Trade-offs**: Complexity in tree management, but worth it for branching UX
 
-## Message Semantics
+## Message Semantics (V2)
 
 ### Content Handling
 
@@ -150,7 +150,7 @@ When appending to existing conversation:
 - **Completeness**: All messages from root to target included in path
 - **Ordering**: Messages appear in chronological conversation order
 
-## Editing Semantics
+## Editing Semantics (V2)
 
 ### LCP (Longest Common Prefix)
 
@@ -161,7 +161,7 @@ The editing process:
 3. Split existing path at divergence point
 4. Attach new content as branch
 
-### Split Behavior
+### Split Behavior (text-only)
 
 When splitting existing conversation:
 

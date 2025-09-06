@@ -2,13 +2,13 @@
 
 Provider abstraction and model catalog behavior.
 
-## Provider Interface (Behavioral)
+## Provider Interface (Behavioral, V2-only)
 
 All provider implementations must conform to a common behavioral interface for consistency across different AI services.
 
-### Message Normalization
+### Message Normalization (V2)
 
-**Input**: Conversation history as Message[] with `content: ContentBlock[]`
+**Input**: Conversation history as `MessageV2[]` with `content: ContentBlock[]`
 **Output**: Provider-specific message payloads
 
 **Normalization responsibilities**:

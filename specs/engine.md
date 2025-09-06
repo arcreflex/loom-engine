@@ -20,15 +20,15 @@ The Forest class manages the conversation tree structure and provides core tree 
 - **Deletion strategies**: cascade removes descendants; reparent attaches children to grandparent
 - **Path traversal**: validates reachability and throws on broken chains
 
-## LoomEngine Responsibilities
+## LoomEngine Responsibilities (V2-only)
 
 The LoomEngine orchestrates providers, parameters, and generation flows.
 
 ### LoomEngine Capabilities
 
-**Core Operations**: Generate with n>1 fanout and tool-calling recursion; edit nodes with bookmark management; message retrieval for context construction.
+**Core Operations**: Generate with n>1 fanout and tool-calling recursion; edit nodes with bookmark management; message retrieval for V2 context construction.
 
-**Guarantees**: Conservative token limit clamping based on model capabilities and estimation; coalesces adjacent same-role messages when safe (text-only blocks); surfaces provider/tool errors; appends results with model/tool metadata.
+**Guarantees**: Conservative token limit clamping; coalesces adjacent same-role messages when safe (text-only blocks); surfaces provider/tool errors; appends results with model/tool metadata; V2-only message flows end-to-end.
 
 ### Key Behaviors
 
@@ -55,12 +55,12 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 - **Token clamping**: Applies minimum of requested tokens, model output limit, and available context window
 - **Invariant**: Effective token limit is clamped to ≥ 1 (no negative values passed to providers)
 
-**Message Coalescing**
+**Message Coalescing (V2)**
 
 - See errors-and-invariants.md for Message Coalescing rules
 - Engine uses a V2 coalescer that only coalesces adjacent text-only user/assistant messages and never across tool-use or tool messages
 
-### Generation Flows
+### Generation Flows (V2)
 
 #### Simple Generation (n=1, no tools)
 

@@ -30,7 +30,7 @@ The system fails loudly when referencing non-existent entities to maintain data 
 **Invalid node sequence**: Detect impossible parent-child sequences
 **Missing intermediate nodes**: Fail when path contains gaps
 
-## Edit Constraints
+## Edit Constraints (V2)
 
 ### Root Node Protection
 
@@ -44,16 +44,16 @@ The system fails loudly when referencing non-existent entities to maintain data 
 **Split boundaries**: Splits must occur at valid message boundaries
 **Tool message restriction**: Node.message.role 'tool' messages cannot be split; splitNode throws (see data-model.md editing semantics)
 
-### Content Validation
+### Content Validation (V2)
 
 **Message structure**: Enforce proper message role sequences
 **Tool-use correlation**: Ensure tool results reference valid `tool-use` IDs via `tool_call_id`
-**Content consistency**: Validate message `content` contains only well-formed blocks
+**Content consistency**: Validate message `content` contains only well-formed blocks; non-empty arrays required
 
-### Edit Contracts
+### Edit Contracts (V2)
 
 **If node has children**: editNodeContent may split or branch depending on content changes
-**If node has no children**: editNodeContent edits in-place and updates source_info to {type: 'user'}
+**If node has no children**: editNodeContent edits in-place (rejects empty edits) and updates source_info to {type: 'user'}
 
 ## Delete Constraints
 

@@ -30,13 +30,13 @@ The data directory (default `~/.loom/`) contains:
   - `{ type: 'tool-use', id: string, name: string, parameters: object }` (assistant only)
 - Tool result messages include `tool_call_id` referencing a prior `tool-use` block `id`.
 
-### Legacy Compatibility
+### Legacy Compatibility (forward-migration)
 
 - Write path: FileSystemStore persists nodes in the canonical V2 format.
 - Read paths:
-  - `loadNode` / `findNodes` return legacy-shaped messages for backward compatibility (`content: string | null` and optional `tool_calls` on assistant).
-  - `loadNodeNormalized` / `findNodesNormalized` return canonical V2 messages (`ContentBlock[]`).
-- Legacy node files (on disk) remain readable via the normalized read methods. The store converts between formats as needed while preserving semantics (e.g., assistant tool-use-only remains `content: null` in legacy shape).
+  - `loadNode` / `findNodes` return canonical V2 messages (`content: ContentBlock[]`).
+  - `loadNodeNormalized` / `findNodesNormalized` also return V2 and validate/normalize strictly, failing loudly on malformed data.
+- Legacy node files (on disk) are normalized to V2 on read. Assistant tool-use-only remains `content: [ { type: 'tool-use', ... } ]`.
 
 ### Equality and Caching
 
