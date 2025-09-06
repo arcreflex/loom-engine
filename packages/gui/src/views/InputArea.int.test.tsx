@@ -60,7 +60,7 @@ describe('InputArea submit behaviors', () => {
     await waitFor(() => expect(appendCalls).toHaveLength(1));
     expect(appendCalls[0]).toMatchObject({
       role: 'user',
-      content: 'Hello world'
+      content: [{ type: 'text', text: 'Hello world' }]
     });
     expect(generateCalls).toHaveLength(0);
   });

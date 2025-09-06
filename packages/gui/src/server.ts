@@ -305,8 +305,8 @@ async function main() {
       const { parentId } = req.params;
       const { role, content } = req.body as {
         role?: Role;
-        // Accept legacy string content or V2 ContentBlock[] (text-only)
-        content?: string | ContentBlock[];
+        // Require V2 ContentBlock[] (text-only)
+        content?: ContentBlock[];
       };
 
       // Basic validation
@@ -323,21 +323,17 @@ async function main() {
         return res.status(400).json({ error: 'Content is required' });
       }
 
-      // Normalize to plain text; reject tool-use blocks in append
-      let textContent: string;
-      if (typeof content === 'string') {
-        textContent = content;
-      } else if (Array.isArray(content)) {
-        const result = joinTextBlocksOrError(content, 'append');
-        if (!result.ok) {
-          return res.status(400).json({ error: result.error });
-        }
-        textContent = result.text;
-      } else {
+      // Require V2 blocks; reject tool-use blocks in append
+      if (!Array.isArray(content)) {
         return res
           .status(400)
-          .json({ error: 'Content must be string or ContentBlock[]' });
+          .json({ error: 'Content must be ContentBlock[] (text-only)' });
       }
+      const result = joinTextBlocksOrError(content, 'append');
+      if (!result.ok) {
+        return res.status(400).json({ error: result.error });
+      }
+      const textContent = result.text;
 
       if (textContent.trim().length === 0) {
         return res
@@ -426,28 +422,24 @@ async function main() {
     try {
       const { nodeId } = req.params;
       const { content } = req.body as {
-        // Accept legacy string content or V2 ContentBlock[]
-        content?: string | ContentBlock[];
+        // Require V2 ContentBlock[] (text-only)
+        content?: ContentBlock[];
       };
 
       if (content === undefined || content === null) {
         return res.status(400).json({ error: 'Content is required' });
       }
 
-      let textContent: string;
-      if (typeof content === 'string') {
-        textContent = content;
-      } else if (Array.isArray(content)) {
-        const result = joinTextBlocksOrError(content, 'edit');
-        if (!result.ok) {
-          return res.status(400).json({ error: result.error });
-        }
-        textContent = result.text;
-      } else {
+      if (!Array.isArray(content)) {
         return res
           .status(400)
-          .json({ error: 'Content must be string or ContentBlock[]' });
+          .json({ error: 'Content must be ContentBlock[] (text-only)' });
       }
+      const joinResult = joinTextBlocksOrError(content, 'edit');
+      if (!joinResult.ok) {
+        return res.status(400).json({ error: joinResult.error });
+      }
+      const textContent = joinResult.text;
 
       if (textContent.trim().length === 0) {
         return res

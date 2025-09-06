@@ -300,7 +300,9 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
 
         // Only append if content is non-empty
         if (content.trim() !== '') {
-          newNode = await appendMessage(currentNode.id, role, content);
+          newNode = await appendMessage(currentNode.id, role, [
+            { type: 'text', text: content }
+          ]);
           messageNodeId = newNode.id;
         }
 
@@ -330,7 +332,9 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
 
       get().actions.setStatusLoading('Submitting Pasted Content');
       try {
-        const newNode = await appendMessage(currentNode.id, inputRole, content);
+        const newNode = await appendMessage(currentNode.id, inputRole, [
+          { type: 'text', text: content }
+        ]);
         set({ pendingNavigation: newNode.id });
         get().actions.setStatusIdle();
       } catch (error) {
@@ -452,7 +456,9 @@ export const useAppStore = create<GuiAppState>((set, get) => ({
 
       get().actions.setStatusLoading('Saving Edit');
       try {
-        const newNode = await editNodeContent(nodeId, newContent);
+        const newNode = await editNodeContent(nodeId, [
+          { type: 'text', text: newContent }
+        ]);
         set({ pendingNavigation: newNode.id });
         get().actions.setStatusIdle();
       } catch (error) {
