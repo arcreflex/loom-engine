@@ -6,8 +6,7 @@ import {
   type RootConfig,
   type Message,
   type RootData,
-  type NodeMetadata,
-  getToolCalls
+  type NodeMetadata
 } from './types.ts';
 import { normalizeMessage } from './content-blocks.ts';
 import { normalizeForComparison, stableDeepEqual } from './engine-utils.ts';
@@ -237,32 +236,14 @@ export class Forest {
     }
 
     messages = messages.filter(m => {
-      const toolCalls = getToolCalls(m)?.length ?? 0;
-      const contentUnknown = (m as unknown as { content?: unknown }).content;
-      if (typeof contentUnknown === 'string') {
-        return contentUnknown.trim().length > 0 || toolCalls > 0;
+      try {
+        const asV2 = normalizeMessage(m);
+        // Drop if empty after normalization-for-comparison
+        return normalizeForComparison(asV2) !== null;
+      } catch {
+        // If it cannot be normalized, exclude from append
+        return false;
       }
-      if (Array.isArray(contentUnknown)) {
-        // Treat as V2 ContentBlock[]
-        const hasToolUse = contentUnknown.some(
-          b => (b as { type?: string }).type === 'tool-use'
-        );
-        const hasText = contentUnknown.some(b => {
-          const blk = b as { type?: string; text?: unknown };
-          return (
-            blk.type === 'text' &&
-            typeof blk.text === 'string' &&
-            blk.text.trim().length > 0
-          );
-        });
-        // Allow assistant messages that are tool-use only; drop if empty after normalization
-        return (
-          hasText ||
-          (hasToolUse && (m as { role: string }).role === 'assistant')
-        );
-      }
-      // null/undefined: only keep if tool calls are present
-      return toolCalls > 0;
     });
 
     if (!messages.length) {
@@ -584,7 +565,25 @@ export class Forest {
         throw new Error(`Node not found or is a root: ${nodeId}`);
       }
 
-      const originalContent = nodeToEdit.message.content || '';
+      // Disallow edits when the message contains tool-use blocks.
+      let v2ForEditCheck: ReturnType<typeof normalizeMessage> | null = null;
+      try {
+        v2ForEditCheck = normalizeMessage(nodeToEdit.message);
+      } catch (_e) {
+        v2ForEditCheck = null; // Fall back to legacy behavior if not normalizable
+      }
+      if (
+        v2ForEditCheck &&
+        v2ForEditCheck.role === 'assistant' &&
+        v2ForEditCheck.content.some(b => b.type === 'tool-use')
+      ) {
+        throw new Error(
+          'Cannot edit a message containing tool-use blocks; only text-only messages can be edited.'
+        );
+      }
+
+      const originalContent =
+        (nodeToEdit.message.content as unknown as string) || '';
 
       // Simple case: No children. Edit in place.
       if (nodeToEdit.child_ids.length === 0) {

@@ -1326,6 +1326,49 @@ describe('Forest', () => {
         'No new nodes created'
       );
     });
+
+    it('should reject editing assistant messages that contain tool calls (tool-use)', async () => {
+      // Setup
+      const parent = mockStoreWrapper.createTestNode(
+        'parent_tool',
+        'root1',
+        null,
+        createMessage('user', 'Parent node')
+      );
+      const nodeWithTool = mockStoreWrapper.createTestNode(
+        'assistant_tool',
+        'root1',
+        parent.id,
+        {
+          role: 'assistant',
+          content: null,
+          tool_calls: [
+            {
+              id: 'call-1',
+              type: 'function',
+              function: { name: 'noop', arguments: '{}' }
+            }
+          ]
+        } as any
+      );
+      parent.child_ids = [nodeWithTool.id];
+      await mockStoreWrapper.mockStore.saveNode(parent);
+      await mockStoreWrapper.mockStore.saveNode(nodeWithTool);
+
+      // Execute & Verify
+      await assert.rejects(
+        () => forest.editNodeContent(nodeWithTool.id, 'new text'),
+        (err: any) => {
+          assert.equal(
+            err?.message?.includes(
+              'Cannot edit a message containing tool-use blocks'
+            ),
+            true
+          );
+          return true;
+        }
+      );
+    });
   });
 
   // Testing edge cases

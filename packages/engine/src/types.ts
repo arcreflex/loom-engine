@@ -198,6 +198,4 @@ export interface NodeDataV2 extends Omit<NodeData, 'message'> {
 
 export type NodeV2 = RootData | NodeDataV2;
 
-export function getToolCalls(message: Message) {
-  return message.role === 'assistant' ? message.tool_calls : undefined;
-}
+// Note: legacy tool_calls helper removed as Forest compares on V2 content blocks.
