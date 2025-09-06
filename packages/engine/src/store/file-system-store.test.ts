@@ -47,7 +47,7 @@ describe('FileSystemStore Cache', () => {
       message: {
         role: 'user',
         content: 'First test message'
-      },
+      } as any,
       metadata: {
         timestamp: new Date().toISOString(),
         original_root_id: rootId,
@@ -92,7 +92,7 @@ describe('FileSystemStore Cache', () => {
       message: {
         role: 'assistant',
         content: 'Second test message'
-      },
+      } as any,
       metadata: {
         timestamp: new Date().toISOString(),
         original_root_id: rootId,
@@ -160,7 +160,7 @@ describe('FileSystemStore Cache', () => {
       root_id: rootId,
       parent_id: rootId,
       child_ids: [],
-      message: { role: 'user', content: 'Test message' },
+      message: { role: 'user', content: 'Test message' } as any,
       metadata: {
         timestamp: new Date().toISOString(),
         original_root_id: rootId,

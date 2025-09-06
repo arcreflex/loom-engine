@@ -1,6 +1,7 @@
 import { mock } from 'node:test';
 import type {
   Message,
+  MessageV2,
   Node,
   NodeData,
   NodeId,
@@ -9,6 +10,7 @@ import type {
   RootId,
   SourceInfo
 } from './types.ts';
+import { normalizeMessage } from './content-blocks.ts';
 import type { NodeQueryCriteria } from './store/types.ts';
 import type { IProvider } from './providers/types.ts';
 import { OpenAIProvider } from './providers/openai.ts';
@@ -116,7 +118,7 @@ export function createMockStore() {
       id: string,
       rootId: string,
       parentId: string | null,
-      message: Message,
+      message: Message | MessageV2,
       source: SourceInfo = { type: 'user' }
     ): NodeData => {
       const nodeId = mockNodeId(id);
@@ -128,7 +130,7 @@ export function createMockStore() {
         root_id: rId,
         parent_id: parentId ? mockNodeId(parentId) : rId,
         child_ids: [],
-        message,
+        message: normalizeMessage(message as Message | MessageV2),
         metadata: {
           timestamp,
           original_root_id: rId,

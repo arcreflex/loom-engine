@@ -7,6 +7,7 @@ import type {
   RootConfig,
   ProviderName,
   Message,
+  MessageV2,
   NodeData,
   Node
 } from './types.ts'; // Adjust path as needed
@@ -142,7 +143,7 @@ describe('LoomEngine', () => {
       }: {
         result: GenerateResult;
         expectedRootConfig: RootConfig;
-        expectedMessages: Message[][];
+        expectedMessages: Array<Array<Message | MessageV2>>;
       }
     ) {
       assert.ok(Array.isArray(result.childNodes), 'Result is array');
@@ -154,18 +155,18 @@ describe('LoomEngine', () => {
 
       const actualMessages = [];
       for (let i = 0; i < result.childNodes.length; i++) {
-        const { root, messages } = await engine
-          .getForest()
-          .getMessages(result.childNodes[i].id);
-        assert.deepEqual(
-          root.config,
-          expectedRootConfig,
-          'Root config matches'
+        const { root, messages } = await engine.getMessages(
+          result.childNodes[i].id
         );
+        assert.deepEqual(root, expectedRootConfig, 'Root config matches');
         actualMessages.push(messages);
       }
 
-      assert.deepEqual(actualMessages, expectedMessages, 'Messages match');
+      const expectedNormalized = expectedMessages.map(arr =>
+        arr.map(m => normalizeMessage(m as Message | MessageV2))
+      );
+
+      assert.deepEqual(actualMessages, expectedNormalized, 'Messages match');
     }
 
     it('should create root, append user message, call provider, append assistant message for n=1', async () => {
@@ -581,11 +582,10 @@ describe('LoomEngine', () => {
         'assistant',
         'Final node is assistant'
       );
-      assert.strictEqual(
-        result.childNodes[0].message.content,
-        'I echoed your message successfully!',
-        'Final response content matches'
-      );
+      // V2: extract text content
+      const finalText0 =
+        (result.childNodes[0].message.content[0] as any)?.text ?? null;
+      assert.strictEqual(finalText0, 'I echoed your message successfully!');
 
       // Verify that 4 nodes were created: user, assistant (tool call), tool (result), assistant (final)
       assert.strictEqual(
@@ -601,31 +601,22 @@ describe('LoomEngine', () => {
         'user',
         'First node is user message'
       );
-      assert.strictEqual(
-        nodeArray[0].message.content,
-        'Echo "Hello World"',
-        'User message content matches'
-      );
+      const user0Text = (nodeArray[0].message.content[0] as any)?.text ?? null;
+      assert.strictEqual(user0Text, 'Echo "Hello World"');
 
       assert.strictEqual(
         nodeArray[1].message.role,
         'assistant',
         'Second node is assistant tool call'
       );
-      assert.deepStrictEqual(
-        nodeArray[1].message.tool_calls,
-        [
-          {
-            id: 'call_123',
-            type: 'function',
-            function: {
-              name: 'echo',
-              arguments: '{"message":"Hello World"}'
-            }
-          }
-        ],
-        'Assistant tool call matches'
+      // V2: assert tool-use block exists with expected id/name/parameters
+      const toolUse1 = (nodeArray[1].message.content as any[]).find(
+        b => b.type === 'tool-use'
       );
+      assert(toolUse1, 'Assistant tool call exists');
+      assert.strictEqual(toolUse1.id, 'call_123');
+      assert.strictEqual(toolUse1.name, 'echo');
+      assert.deepStrictEqual(toolUse1.parameters, { message: 'Hello World' });
 
       assert.strictEqual(
         nodeArray[2].message.role,
@@ -637,22 +628,16 @@ describe('LoomEngine', () => {
         'call_123',
         'Tool result has correct call ID'
       );
-      assert.strictEqual(
-        nodeArray[2].message.content,
-        '{"echo":"Hello World"}',
-        'Tool result content matches'
-      );
+      const tool2Text = (nodeArray[2].message.content[0] as any)?.text ?? null;
+      assert.strictEqual(tool2Text, '{"echo":"Hello World"}');
 
       assert.strictEqual(
         nodeArray[3].message.role,
         'assistant',
         'Fourth node is final assistant response'
       );
-      assert.strictEqual(
-        nodeArray[3].message.content,
-        'I echoed your message successfully!',
-        'Final assistant content matches'
-      );
+      const final3Text = (nodeArray[3].message.content[0] as any)?.text ?? null;
+      assert.strictEqual(final3Text, 'I echoed your message successfully!');
     });
 
     it('should execute multiple tool calls in one assistant turn and recurse', async () => {
@@ -721,10 +706,8 @@ describe('LoomEngine', () => {
       // Expect 1 final node returned
       assert.strictEqual(result.childNodes.length, 1);
       assert.strictEqual(result.childNodes[0].message.role, 'assistant');
-      assert.strictEqual(
-        result.childNodes[0].message.content,
-        'Both tools executed.'
-      );
+      const finalBoth = (result.childNodes[0].message.content[0] as any)?.text;
+      assert.strictEqual(finalBoth, 'Both tools executed.');
 
       // Verify two tool result nodes were created with matching IDs
       const created = Array.from(mockStoreWrapper.nodes.values());
@@ -820,11 +803,8 @@ describe('LoomEngine', () => {
         'call_456',
         'Tool result has correct call ID'
       );
-      assert.strictEqual(
-        progressNodes[0].message.content,
-        '{"echo":"Hello Progress"}',
-        'Tool result content correct'
-      );
+      const toolRes0 = (progressNodes[0].message.content[0] as any)?.text;
+      assert.strictEqual(toolRes0, '{"echo":"Hello Progress"}');
 
       const toolResultParent = mockStoreWrapper.nodes.get(
         progressNodes[0].parent_id
@@ -835,27 +815,20 @@ describe('LoomEngine', () => {
         'assistant',
         'First progress node is tool call'
       );
-      assert.strictEqual(
-        toolResultParent?.message.content,
-        null,
-        'Content of tool call is null'
+      const assistantBlocks = (toolResultParent as any)?.message?.content;
+      assert(Array.isArray(assistantBlocks), 'Assistant content is blocks');
+      const toolCalls = assistantBlocks.filter(
+        (b: any) => b.type === 'tool-use'
       );
-      assert.strictEqual(
-        toolResultParent?.message.tool_calls?.length,
-        1,
-        'Tool call exists'
-      );
+      assert.strictEqual(toolCalls.length, 1, 'Tool call exists');
 
       assert.strictEqual(
         progressNodes[1].message.role,
         'assistant',
         'Second progress node is final assistant'
       );
-      assert.strictEqual(
-        progressNodes[1].message.content,
-        'Progress tracking works!',
-        'Final assistant content correct'
-      );
+      const finalProgText = (progressNodes[1].message.content[0] as any)?.text;
+      assert.strictEqual(finalProgText, 'Progress tracking works!');
 
       // Verify final result matches the last progress node
       assert.strictEqual(result.childNodes.length, 1, 'One final result');
@@ -962,29 +935,17 @@ describe('LoomEngine', () => {
         assert.fail(`Unexpected first node role: ${firstNode.message.role}`);
       }
 
-      // Verify the assistant node has the expected tool-only structure
+      // Verify the assistant node has the expected tool-only structure (V2: tool-use block only)
       assert(assistantNode, 'Assistant node should exist');
       assert.strictEqual(assistantNode.message.role, 'assistant');
-      // After conversion conversion, tool-only message should have null content
-      assert.strictEqual(
-        assistantNode.message.content,
-        null,
-        'Tool-only assistant should have null content'
-      );
-      assert(assistantNode.message.tool_calls, 'Should have tool_calls');
-      assert.strictEqual(assistantNode.message.tool_calls.length, 1);
-      assert.strictEqual(
-        assistantNode.message.tool_calls[0].id,
-        'call_tool_only'
-      );
-      assert.strictEqual(
-        assistantNode.message.tool_calls[0].function.name,
-        'test_echo'
-      );
-      assert.strictEqual(
-        assistantNode.message.tool_calls[0].function.arguments,
-        '{"message":"Tool-only message test"}'
-      );
+      const onlyBlocks = assistantNode.message.content as any[];
+      const onlyToolUse = onlyBlocks.filter(b => b.type === 'tool-use');
+      assert.strictEqual(onlyToolUse.length, 1, 'One tool-use block');
+      assert.strictEqual(onlyToolUse[0].id, 'call_tool_only');
+      assert.strictEqual(onlyToolUse[0].name, 'test_echo');
+      assert.deepStrictEqual(onlyToolUse[0].parameters, {
+        message: 'Tool-only message test'
+      });
     });
   });
 
@@ -1004,7 +965,8 @@ describe('LoomEngine', () => {
 
       // Verify
       assert.equal(result.id, node.id, 'Same node ID returned');
-      assert.equal(result.message.content, 'Edited content', 'Content updated');
+      const editedText = (result.message.content[0] as any)?.text;
+      assert.equal(editedText, 'Edited content', 'Content updated');
       assert.equal(result.message.role, 'user', 'Role preserved');
       assert.deepEqual(
         result.metadata.source_info,
@@ -1035,11 +997,8 @@ describe('LoomEngine', () => {
 
       // Verify
       assert.notEqual(result.id, node.id, 'New node created');
-      assert.equal(
-        result.message.content,
-        'New content',
-        'New content applied'
-      );
+      const newContentText = (result.message.content[0] as any)?.text;
+      assert.equal(newContentText, 'New content', 'New content applied');
       assert.equal(result.message.role, 'user', 'Role preserved');
       assert.equal(
         mockStoreWrapper.nodes.size,
@@ -1186,7 +1145,11 @@ describe('LoomEngine', () => {
 
       // Verify - should work without errors
       assert.notEqual(result.id, node.id, 'New node created');
-      assert.equal(result.message.content, 'New content', 'Content updated');
+      assert.equal(
+        (result.message.content[0] as any)?.text,
+        'New content',
+        'Content updated'
+      );
     });
 
     it('should handle bookmark not found during move', async () => {
@@ -1230,7 +1193,11 @@ describe('LoomEngine', () => {
 
       // Verify - should work without errors, no bookmark update
       assert.notEqual(result.id, node.id, 'New node created');
-      assert.equal(result.message.content, 'New content', 'Content updated');
+      assert.equal(
+        (result.message.content[0] as any)?.text,
+        'New content',
+        'Content updated'
+      );
       assert.equal(
         mockConfigStore.update.mock.calls.length,
         0,

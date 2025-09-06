@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { Forest } from './forest.ts';
 import { createMockStore, mockNodeId, mockRootId } from './test-helpers.ts';
 import type { AssistantMessage, Message } from './types.ts';
+import { normalizeMessage } from './content-blocks.ts';
 
 describe('Forest V2-aware prefix matching', () => {
   it('reuses child when tool_call arguments differ only by key order', async () => {
@@ -37,7 +38,7 @@ describe('Forest V2-aware prefix matching', () => {
       root_id: rootId,
       parent_id: rootId,
       child_ids: [],
-      message: assistantWithTool,
+      message: normalizeMessage(assistantWithTool as any),
       metadata: {
         timestamp: new Date().toISOString(),
         original_root_id: rootId,
@@ -152,7 +153,7 @@ describe('Forest V2-aware prefix matching', () => {
       root_id: rootId,
       parent_id: rootId,
       child_ids: [],
-      message: { role: 'assistant', content: 'Hello' },
+      message: normalizeMessage({ role: 'assistant', content: 'Hello' } as any),
       metadata: {
         timestamp: new Date().toISOString(),
         original_root_id: rootId,
@@ -210,7 +211,7 @@ describe('Forest V2-aware prefix matching', () => {
       root_id: rootId,
       parent_id: rootId,
       child_ids: [bId],
-      message: { role: 'assistant', content: 'A' },
+      message: normalizeMessage({ role: 'assistant', content: 'A' } as any),
       metadata: {
         timestamp: new Date().toISOString(),
         original_root_id: rootId,
@@ -227,7 +228,7 @@ describe('Forest V2-aware prefix matching', () => {
       root_id: rootId,
       parent_id: aId,
       child_ids: [],
-      message: { role: 'assistant', content: 'B' },
+      message: normalizeMessage({ role: 'assistant', content: 'B' } as any),
       metadata: {
         timestamp: new Date().toISOString(),
         original_root_id: rootId,
@@ -247,7 +248,7 @@ describe('Forest V2-aware prefix matching', () => {
     // Now try to append a single assistant message 'A B' — should not match the existing two-node sequence
     const final = await forest.append(
       rootId,
-      [{ role: 'assistant', content: 'A B' }],
+      [normalizeMessage({ role: 'assistant', content: 'A B' } as any)],
       {
         source_info: {
           type: 'model',

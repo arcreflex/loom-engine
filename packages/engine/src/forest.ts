@@ -4,9 +4,12 @@ import {
   type NodeId,
   type RootId,
   type RootConfig,
-  type Message,
+  type MessageV2,
+  type LegacyMessage,
   type RootData,
-  type NodeMetadata
+  type NodeMetadata,
+  type NonEmptyArray,
+  type TextBlock
 } from './types.ts';
 import { normalizeMessage } from './content-blocks.ts';
 import { normalizeForComparison, stableDeepEqual } from './engine-utils.ts';
@@ -119,7 +122,7 @@ export class Forest {
    */
   async getMessages(
     nodeId: NodeId
-  ): Promise<{ root: RootData; messages: Message[] }> {
+  ): Promise<{ root: RootData; messages: MessageV2[] }> {
     const { root, path } = await this.getPath({ from: undefined, to: nodeId });
     return { root, messages: path.map(n => n.message) };
   }
@@ -216,7 +219,7 @@ export class Forest {
   async append(
     parentId: NodeId,
     /** The node id at which to start matching. */
-    messages: Message[],
+    messages: Array<MessageV2 | LegacyMessage>,
     /** The metadata to attach if we create a node */
     metadata: Omit<NodeMetadata, 'timestamp' | 'original_root_id'>
   ): Promise<Node> {
@@ -227,7 +230,7 @@ export class Forest {
 
   private async appendUnsafe(
     parentId: NodeId,
-    messages: Message[],
+    messages: Array<MessageV2 | LegacyMessage>,
     metadata: Omit<NodeMetadata, 'timestamp' | 'original_root_id'>
   ): Promise<Node> {
     const parentNode = await this.store.loadNode(parentId);
@@ -235,18 +238,21 @@ export class Forest {
       throw new Error(`Parent node not found: ${parentId}`);
     }
 
-    messages = messages.filter(m => {
+    // Convert to V2 and drop if empty after normalization-for-comparison
+    const v2Messages: MessageV2[] = [];
+    for (const m of messages as Array<MessageV2 | LegacyMessage>) {
       try {
-        const asV2 = normalizeMessage(m);
-        // Drop if empty after normalization-for-comparison
-        return normalizeForComparison(asV2) !== null;
+        const v2 = normalizeMessage(m);
+        if (normalizeForComparison(v2) !== null) {
+          v2Messages.push(v2);
+        }
       } catch {
-        // If it cannot be normalized, exclude from append
-        return false;
+        // Skip messages that cannot be normalized to V2
+        continue;
       }
-    });
+    }
 
-    if (!messages.length) {
+    if (!v2Messages.length) {
       return parentNode;
     }
 
@@ -256,7 +262,7 @@ export class Forest {
 
     // Implement prefix matching
     while (true) {
-      if (messageIndex >= messages.length) {
+      if (messageIndex >= v2Messages.length) {
         const nodeAtParent = await this.store.loadNode(currentParentId);
         if (!nodeAtParent) {
           throw new Error(`Current parent node not found: ${currentParentId}`);
@@ -267,9 +273,9 @@ export class Forest {
       const children = await this.getChildren(currentParentId);
 
       // Skip messages that normalize to empty for comparison
-      const currentMessage = messages[messageIndex];
+      const currentMessage = v2Messages[messageIndex];
       const normalizedCurrent = normalizeForComparison(
-        normalizeMessage(currentMessage)
+        normalizeMessage(currentMessage as MessageV2 | LegacyMessage)
       );
       if (!normalizedCurrent) {
         messageIndex++;
@@ -278,9 +284,7 @@ export class Forest {
 
       // Look for a child that matches the current message (V2-normalized, deep equality)
       const matchingChild = children.find(child => {
-        const normalizedChild = normalizeForComparison(
-          normalizeMessage(child.message)
-        );
+        const normalizedChild = normalizeForComparison(child.message);
         return (
           !!normalizedChild &&
           stableDeepEqual(normalizedChild, normalizedCurrent)
@@ -291,7 +295,7 @@ export class Forest {
         // Found a match, move to the next message and continue with this child as the new parent
         currentParentId = matchingChild.id;
         messageIndex++;
-        if (messageIndex >= messages.length) {
+        if (messageIndex >= v2Messages.length) {
           // All messages matched, return the current child node
           return matchingChild;
         }
@@ -303,7 +307,7 @@ export class Forest {
 
     // Create new nodes for the remaining messages
     const timestamp = new Date().toISOString();
-    const remainingMessages = messages.slice(messageIndex);
+    const remainingMessages: MessageV2[] = v2Messages.slice(messageIndex);
     let head = await this.store.loadNode(currentParentId);
     if (!head) {
       throw new Error(`Current parent node not found: ${currentParentId}`);
@@ -360,22 +364,27 @@ export class Forest {
       throw new Error(`Cannot split root node: ${nodeId}`);
     }
 
-    // Validate the message has content and position is valid
-    if (node.message.content == null) {
-      throw new Error(`Cannot split node with null content: ${nodeId}`);
-    }
-    if (position <= 0 || position >= node.message.content.length) {
-      throw new Error(
-        `Invalid message index for split: ${position}. Must be between 1 and ${node.message.content.length - 1}`
-      );
-    }
-
+    // V2-only: only split text-only user/assistant messages
     if (node.message.role === 'tool') {
       throw new Error(`Cannot split tool message: ${nodeId}`);
     }
-
-    const left = node.message.content.slice(0, position);
-    const right = node.message.content.slice(position);
+    const textBlocks = (node.message.content as TextBlock[]).filter(
+      b => b.type === 'text'
+    );
+    const allText = textBlocks.length === node.message.content.length;
+    if (!allText) {
+      throw new Error(
+        `Cannot split message containing non-text blocks: ${nodeId}`
+      );
+    }
+    const joined = textBlocks.map(b => b.text).join('');
+    if (position <= 0 || position >= joined.length) {
+      throw new Error(
+        `Invalid message index for split: ${position}. Must be between 1 and ${joined.length - 1}`
+      );
+    }
+    const left = joined.slice(0, position);
+    const right = joined.slice(position);
 
     // Create a new node to hold the messages up to the split point
     const timestamp = new Date().toISOString();
@@ -386,7 +395,7 @@ export class Forest {
       child_ids: [node.id], // Original node, which will now be the right-hand node, is the only child of the left-hand node
       message: {
         role: node.message.role,
-        content: left
+        content: [{ type: 'text', text: left }] as NonEmptyArray<TextBlock>
       },
       metadata: {
         timestamp,
@@ -402,7 +411,10 @@ export class Forest {
 
     // Reparent the original node to the new left-hand node
     const originalParentId = node.parent_id;
-    node.message.content = right;
+    node.message = {
+      role: node.message.role,
+      content: [{ type: 'text', text: right }] as NonEmptyArray<TextBlock>
+    };
     node.parent_id = lhsNode.id;
 
     // Update original parent's child_ids
@@ -565,15 +577,9 @@ export class Forest {
         throw new Error(`Node not found or is a root: ${nodeId}`);
       }
 
-      // Disallow edits when the message contains tool-use blocks.
-      let v2ForEditCheck: ReturnType<typeof normalizeMessage> | null = null;
-      try {
-        v2ForEditCheck = normalizeMessage(nodeToEdit.message);
-      } catch (_e) {
-        v2ForEditCheck = null; // Fall back to legacy behavior if not normalizable
-      }
+      // V2-only edits: disallow when the message contains tool-use blocks.
+      const v2ForEditCheck = nodeToEdit.message;
       if (
-        v2ForEditCheck &&
         v2ForEditCheck.role === 'assistant' &&
         v2ForEditCheck.content.some(b => b.type === 'tool-use')
       ) {
@@ -581,13 +587,25 @@ export class Forest {
           'Cannot edit a message containing tool-use blocks; only text-only messages can be edited.'
         );
       }
-
-      const originalContent =
-        (nodeToEdit.message.content as unknown as string) || '';
+      if (v2ForEditCheck.role === 'tool') {
+        throw new Error(`Cannot edit tool message: ${nodeId}`);
+      }
+      const originalContent = (v2ForEditCheck.content as TextBlock[])
+        .filter(b => b.type === 'text')
+        .map(b => b.text)
+        .join('');
 
       // Simple case: No children. Edit in place.
       if (nodeToEdit.child_ids.length === 0) {
-        nodeToEdit.message.content = newContent;
+        if (newContent.trim().length === 0) {
+          throw new Error('New content must be non-empty');
+        }
+        nodeToEdit.message = {
+          role: v2ForEditCheck.role,
+          content: [
+            { type: 'text', text: newContent }
+          ] as NonEmptyArray<TextBlock>
+        } as MessageV2;
         // Mark this edit's source.
         nodeToEdit.metadata.source_info = { type: 'user' };
         await this.store.saveNode(nodeToEdit);
@@ -623,9 +641,11 @@ export class Forest {
       // 3. Append the remainder of the new content.
       const newSuffix = newContent.slice(lcpLength);
       if (newSuffix.length > 0) {
-        const newMessage: Message = {
-          ...nodeToEdit.message,
-          content: newSuffix
+        const newMessage: MessageV2 = {
+          role: v2ForEditCheck.role,
+          content: [
+            { type: 'text', text: newSuffix }
+          ] as NonEmptyArray<TextBlock>
         };
         // `append` will create a new node for the suffix.
         return (await this.appendUnsafe(baseNode.id, [newMessage], {

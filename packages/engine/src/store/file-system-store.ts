@@ -1,18 +1,10 @@
 import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
-import type {
-  NodeData,
-  NodeId,
-  RootId,
-  RootData,
-  Node,
-  NodeDataV2
-} from '../types.ts';
+import type { NodeData, NodeId, RootId, RootData, Node } from '../types.ts';
 import type { ILoomStore, NodeQueryCriteria, NodeStructure } from './types.ts';
 import { initializeLog, log } from '../log.ts';
 import { isMessageV2, normalizeMessage } from '../content-blocks.ts';
-import { convertV2ToLegacy } from '../legacy-bridge.ts';
 
 class IdCache<T extends string> {
   known = new Set<T>();
@@ -118,11 +110,11 @@ export class FileSystemStore implements ILoomStore {
     // Ensure directories exist
     await fs.mkdir(nodesDir, { recursive: true });
 
-    // Write node data in canonical V2 message format
-    let toWrite: NodeDataV2;
+    // Write node data in canonical V2 message format (validate/normalize defensively)
+    let toWrite: NodeData;
     try {
       const v2 = normalizeMessage((nodeData as NodeData).message);
-      toWrite = { ...(nodeData as NodeData), message: v2 } as NodeDataV2;
+      toWrite = { ...(nodeData as NodeData), message: v2 } as NodeData;
     } catch (error) {
       const errorMessage = `Failed to normalize message for write (node ${nodeData.id}): ${
         error instanceof Error ? error.message : String(error)
@@ -187,7 +179,7 @@ export class FileSystemStore implements ILoomStore {
       try {
         const data = await fs.readFile(nodePath, 'utf-8');
         const raw = JSON.parse(data) as unknown;
-        return this.toLegacyNode(raw);
+        return this.toV2Node(raw);
       } catch (error) {
         // Check if this is a file not found error (return null) vs JSON parse error (fail loudly)
         if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') {
@@ -253,7 +245,7 @@ export class FileSystemStore implements ILoomStore {
 
         const nodePath = path.join(nodesDir, file);
         const data = await fs.readFile(nodePath, 'utf-8');
-        const node = this.toLegacyNode(JSON.parse(data) as unknown);
+        const node = this.toV2Node(JSON.parse(data) as unknown);
 
         // Filter by parent ID if specified
         if (parentId && node.parent_id !== parentId) {
@@ -323,22 +315,35 @@ export class FileSystemStore implements ILoomStore {
     log(this.basePath, msg);
   }
 
-  private isPersistedNodeV2(obj: unknown): obj is NodeDataV2 {
+  private isPersistedNodeV2(obj: unknown): obj is NodeData {
     if (!obj || typeof obj !== 'object') return false;
     const rec = obj as { message?: unknown };
     return isMessageV2(rec.message);
   }
 
-  private toLegacyNode(raw: unknown): NodeData {
+  private toV2Node(raw: unknown): NodeData {
+    // If already V2 on disk, return as-is (typed)
     if (this.isPersistedNodeV2(raw)) {
-      const { message, ...rest } = raw;
-      const legacy = convertV2ToLegacy(message);
-      return {
-        ...(rest as Omit<NodeDataV2, 'message'>),
-        message: legacy
-      } as NodeData;
+      return raw as NodeData;
     }
-    return raw as NodeData;
+    // Otherwise, forward-migrate legacy message to V2 on read
+    const rec = raw as NodeData & { message?: unknown };
+    if (!rec || typeof rec !== 'object' || !('message' in rec)) {
+      // Unexpected shape; let it flow and be caught by callers/tests
+      return raw as NodeData;
+    }
+    try {
+      const v2 = normalizeMessage(
+        rec.message as unknown as NodeData['message']
+      );
+      return { ...(rec as Omit<NodeData, 'message'>), message: v2 } as NodeData;
+    } catch (error) {
+      // Surface error to callers as per spec (fail loudly)
+      throw this.createNormalizationError(
+        'node (forward-migrate on read)',
+        error
+      );
+    }
   }
 
   /**
@@ -433,7 +438,7 @@ export class FileSystemStore implements ILoomStore {
    * @returns The node data with V2 message format, or null if not found
    * @throws {Error} if nodeId refers to a root, or if message normalization fails
    */
-  async loadNodeNormalized(nodeId: NodeId): Promise<NodeDataV2 | null> {
+  async loadNodeNormalized(nodeId: NodeId): Promise<NodeData | null> {
     // Fast-fail on obvious root IDs (format: 'root-<number>')
     if (/^root-\d+$/.test(nodeId)) {
       throw new Error(
@@ -456,7 +461,7 @@ export class FileSystemStore implements ILoomStore {
       // Normalize message to V2 format - this validates and converts
       const normalizedMessage = normalizeMessage(nodeData.message);
 
-      const result: NodeDataV2 = {
+      const result: NodeData = {
         ...nodeData,
         message: normalizedMessage
       };
@@ -472,26 +477,42 @@ export class FileSystemStore implements ILoomStore {
    * @returns An array of matching node data with V2 message format
    * @throws {Error} if any message normalization fails (indicates corrupted data)
    */
-  async findNodesNormalized(
-    criteria: NodeQueryCriteria
-  ): Promise<NodeDataV2[]> {
-    const nodes = await this.findNodes(criteria);
-    const normalized: NodeDataV2[] = [];
-
-    for (const node of nodes) {
-      try {
-        // Normalize each message to V2 format
-        const normalizedMessage = normalizeMessage(node.message);
-        const result: NodeDataV2 = {
-          ...node,
-          message: normalizedMessage
-        };
-        normalized.push(result);
-      } catch (error) {
-        throw this.createNormalizationError(`node ${node.id}`, error);
-      }
+  async findNodesNormalized(criteria: NodeQueryCriteria): Promise<NodeData[]> {
+    if (!criteria.rootId) {
+      throw new Error('rootId is required for findNodesNormalized');
     }
 
-    return normalized;
+    const nodesDir = this.nodesDirPath(criteria.rootId);
+    const out: NodeData[] = [];
+    const files = await fs.readdir(nodesDir);
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue;
+      const nodePath = path.join(nodesDir, file);
+      const data = await fs.readFile(nodePath, 'utf-8');
+      const raw = JSON.parse(data) as unknown;
+      // Normalize raw node message to V2 format; throw on any error
+      const recLike = raw as { message?: unknown } | null;
+      if (
+        !recLike ||
+        typeof recLike !== 'object' ||
+        recLike.message === undefined
+      ) {
+        throw this.createNormalizationError(
+          `node ${file}`,
+          new Error('Missing message field')
+        );
+      }
+      const rec = raw as NodeData;
+      try {
+        const normalizedMessage = normalizeMessage(rec.message);
+        out.push({ ...rec, message: normalizedMessage });
+      } catch (err) {
+        throw this.createNormalizationError(`node ${file}`, err);
+      }
+    }
+    // Filter by parent if requested
+    return criteria.parentId
+      ? out.filter(n => n.parent_id === criteria.parentId)
+      : out;
   }
 }

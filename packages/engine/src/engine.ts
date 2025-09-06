@@ -7,7 +7,6 @@ import {
   type RootId,
   type ProviderName,
   type RootConfig,
-  type Message,
   type NodeData,
   type RootData
 } from './types.ts';
@@ -19,10 +18,9 @@ import type { ConfigStore, Bookmark } from './config.ts';
 import { discoverMcpTools } from './mcp/client.ts';
 import { KNOWN_MODELS } from './browser.ts';
 import type { ProviderRequest } from './providers/types.ts';
-import { isMessageV2, normalizeMessage } from './content-blocks.ts';
+import { normalizeMessage } from './content-blocks.ts';
 import { getCodebaseContext } from './tools/introspect.ts';
 import { extractToolUseBlocks } from './providers/provider-utils.ts';
-import { convertV2ToLegacy } from './legacy-bridge.ts';
 // error classes no longer used directly here
 import {
   clampMaxTokens,
@@ -97,7 +95,7 @@ export class LoomEngine {
       model: modelName
     };
 
-    // Build V2 context and coalesce per spec, then convert back to legacy for provider
+    // Build V2 context and coalesce per spec
     const v2Coalesced = coalesceTextOnlyAdjacent(contextMessages, '');
     const estimatedInputTokens = estimateInputTokens(
       v2Coalesced,
@@ -135,12 +133,9 @@ export class LoomEngine {
           parameters,
           tools: undefined
         });
-        // Convert V2 message back to legacy format for forest
-        const legacyResponseMessage = convertV2ToLegacy(response.message);
-        const legacyHistory = contextMessages.map(convertV2ToLegacy);
         const responseNode = await this.forest.append(
           root.id,
-          [...legacyHistory, legacyResponseMessage],
+          [...contextMessages, response.message],
           {
             source_info: {
               type: 'model',
@@ -196,12 +191,12 @@ export class LoomEngine {
     root: RootData,
     providerName: ProviderName,
     modelName: string,
-    contextMessages: Array<Message | MessageV2>,
+    contextMessages: MessageV2[],
     parameters: ProviderRequest['parameters'],
     activeTools: string[]
   ): Promise<GenerateResult> {
     // The conversation history for this turn
-    const messages = [...contextMessages];
+    const messages: MessageV2[] = [...contextMessages];
 
     const provider = this.getProvider(providerName);
 
@@ -218,20 +213,12 @@ export class LoomEngine {
       ...toolParameters
     });
 
-    // Convert V2 message back to legacy format for forest
-    const assistantMessage = convertV2ToLegacy(response.message);
+    const assistantMessage = response.message;
 
     // Append the assistant's response (which may or may not have tool calls)
     const assistantNode = await this.forest.append(
       root.id,
-      [
-        ...messages.map(m =>
-          isMessageV2(m as unknown)
-            ? convertV2ToLegacy(m as MessageV2)
-            : (m as Message)
-        ),
-        assistantMessage
-      ],
+      [...messages, assistantMessage],
       {
         source_info: {
           type: 'model',
@@ -291,17 +278,9 @@ export class LoomEngine {
 
     let lastToolNode: NodeData | undefined;
     for (const toolResultMessage of toolResults) {
-      const legacyToolResult = convertV2ToLegacy(toolResultMessage);
       const toolNode = await this.forest.append(
         root.id,
-        [
-          ...messages.map(m =>
-            isMessageV2(m as unknown)
-              ? convertV2ToLegacy(m as MessageV2)
-              : (m as Message)
-          ),
-          legacyToolResult
-        ],
+        [...messages, toolResultMessage],
         {
           source_info: {
             type: 'tool_result',
@@ -318,7 +297,7 @@ export class LoomEngine {
       }
       lastToolNode = toolNode;
 
-      messages.push(legacyToolResult);
+      messages.push(toolResultMessage);
     }
     if (!lastToolNode) {
       return { childNodes: [assistantNode as NodeData] };
@@ -343,8 +322,7 @@ export class LoomEngine {
     nodeId: NodeId
   ): Promise<{ root: RootConfig; messages: MessageV2[] }> {
     const { root, messages } = await this.forest.getMessages(nodeId);
-    const v2 = messages.map(m => normalizeMessage(m));
-    return { root: root.config, messages: v2 };
+    return { root: root.config, messages };
   }
 
   async editNode(nodeId: NodeId, newContent: string): Promise<NodeData> {

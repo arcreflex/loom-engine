@@ -364,12 +364,19 @@ describe('Forest', () => {
       // Verify
       assert.ok(result.parent_id);
       assert.equal(result.root_id, parent.root_id);
-      assert.deepEqual(result.message, messages[1]);
+      // V2: compare normalized message content
+      assert.deepEqual(
+        result.message,
+        (await import('./content-blocks.ts')).normalizeMessage(
+          messages[1] as any
+        )
+      );
       assert.deepEqual(result.metadata.tags, metadata.tags);
 
+      const norm = (await import('./content-blocks.ts')).normalizeMessage;
       assert.deepEqual((await forest.getMessages(result.id)).messages, [
-        firstMessage,
-        ...messages
+        norm(firstMessage as any),
+        ...messages.map(m => norm(m as any))
       ]);
     });
 
@@ -448,7 +455,8 @@ describe('Forest', () => {
       // Verify
       assert.notEqual(result.id, existingChild.id); // Should be a new node
       assert.equal(result.parent_id, existingChild.id); // Parent should be the existing child
-      assert.deepEqual(result.message, messagesToAppend[1]); // Only the new message should be in the node
+      const norm2 = (await import('./content-blocks.ts')).normalizeMessage;
+      assert.deepEqual(result.message, norm2(messagesToAppend[1] as any));
     });
 
     it('should return existing node if all messages match', async () => {
@@ -559,7 +567,7 @@ describe('Forest', () => {
                           children: {},
                           id: 'child1',
                           message: {
-                            content: 'Child response',
+                            content: [{ type: 'text', text: 'Child response' }],
                             role: 'assistant'
                           },
                           role: 'assistant'
@@ -567,7 +575,12 @@ describe('Forest', () => {
                       },
                       id: 'node1',
                       message: {
-                        content: 'message that will be split into two parts.',
+                        content: [
+                          {
+                            type: 'text',
+                            text: 'message that will be split into two parts.'
+                          }
+                        ],
                         role: 'user'
                       },
                       role: 'user'
@@ -575,7 +588,7 @@ describe('Forest', () => {
                   },
                   id: lhsNode.id,
                   message: {
-                    content: 'This is a long ',
+                    content: [{ type: 'text', text: 'This is a long ' }],
                     role: 'user'
                   },
                   role: 'user'
@@ -583,7 +596,7 @@ describe('Forest', () => {
               },
               id: 'parent',
               message: {
-                content: 'Initial prompt',
+                content: [{ type: 'text', text: 'Initial prompt' }],
                 role: 'user'
               },
               role: 'user'
@@ -679,9 +692,10 @@ describe('Forest', () => {
       });
 
       // Execute & Verify - position too high
+      const msgLen = ((node.message.content as any[])[0]?.text as string)
+        .length;
       await assert.rejects(
-        async () =>
-          await forest.splitNode(node.id, node.message.content!.length),
+        async () => await forest.splitNode(node.id, msgLen),
         {
           name: 'Error',
           message: /Invalid message index for split/
@@ -1028,7 +1042,7 @@ describe('Forest', () => {
       // Verify
       assert.equal(result.id, node.id, 'Same node ID returned');
       assert.equal(
-        result.message.content,
+        (result.message.content as any[])[0]?.text,
         'Edited content',
         'Content was updated'
       );
@@ -1041,7 +1055,9 @@ describe('Forest', () => {
 
       // Verify in store
       const storedNode = await mockStoreWrapper.mockStore.loadNode(node.id);
-      const content = storedNode?.parent_id ? storedNode.message.content : null;
+      const content = storedNode?.parent_id
+        ? (storedNode.message.content as any[])[0]?.text
+        : null;
       assert.equal(content, 'Edited content', 'Content persisted in store');
     });
 
@@ -1080,7 +1096,7 @@ describe('Forest', () => {
       // Verify
       assert.notEqual(result.id, node.id, 'New node created');
       assert.equal(
-        result.message.content,
+        (result.message.content as any[])[0]?.text,
         'New content',
         'New content applied'
       );
@@ -1148,24 +1164,33 @@ describe('Forest', () => {
             parent: {
               id: 'parent',
               role: 'user',
-              message: { role: 'user', content: 'Parent node' },
+              message: {
+                role: 'user',
+                content: [{ type: 'text', text: 'Parent node' }]
+              },
               children: {
                 [splitParentId]: {
                   id: splitParentId,
                   role: 'user',
-                  message: { role: 'user', content: 'Original message ' },
+                  message: {
+                    role: 'user',
+                    content: [{ type: 'text', text: 'Original message ' }]
+                  },
                   children: {
                     node1: {
                       id: 'node1',
                       role: 'user',
-                      message: { role: 'user', content: 'content' },
+                      message: {
+                        role: 'user',
+                        content: [{ type: 'text', text: 'content' }]
+                      },
                       children: {
                         child1: {
                           id: 'child1',
                           role: 'assistant',
                           message: {
                             role: 'assistant',
-                            content: 'Child response'
+                            content: [{ type: 'text', text: 'Child response' }]
                           },
                           children: {}
                         }
@@ -1174,7 +1199,10 @@ describe('Forest', () => {
                     [editedNode.id]: {
                       id: editedNode.id,
                       role: 'user',
-                      message: { role: 'user', content: 'with new ending' },
+                      message: {
+                        role: 'user',
+                        content: [{ type: 'text', text: 'with new ending' }]
+                      },
                       children: {}
                     }
                   }
@@ -1220,11 +1248,8 @@ describe('Forest', () => {
 
       // Verify - should split and return the split node
       assert.notEqual(result.id, node.id, 'Split node returned');
-      assert.equal(
-        result.message.content,
-        'Original message',
-        'Content matches prefix'
-      );
+      const splitText = (result.message.content as any[])[0]?.text;
+      assert.equal(splitText, 'Original message', 'Content matches prefix');
       assert.equal(
         mockStoreWrapper.nodes.size,
         originalNodeCount + 1,
@@ -1261,7 +1286,7 @@ describe('Forest', () => {
       );
     });
 
-    it('should handle empty content edit', async () => {
+    it('should reject empty content edit under V2 constraints', async () => {
       // Setup
       const parent = mockStoreWrapper.createTestNode(
         'parent',
@@ -1280,16 +1305,9 @@ describe('Forest', () => {
       await mockStoreWrapper.mockStore.saveNode(parent);
       await mockStoreWrapper.mockStore.saveNode(node);
 
-      // Execute
-      const result = await forest.editNodeContent(node.id, '');
-
-      // Verify
-      assert.equal(result.id, node.id, 'Same node ID returned');
-      assert.equal(result.message.content, '', 'Content set to empty string');
-      assert.deepEqual(
-        result.metadata.source_info,
-        { type: 'user' },
-        'Source info updated'
+      // Execute & Verify: V2 disallows empty text blocks; should throw
+      await assert.rejects(
+        async () => await forest.editNodeContent(node.id, '')
       );
     });
 
@@ -1319,7 +1337,8 @@ describe('Forest', () => {
 
       // Verify
       assert.equal(result.id, node.id, 'Same node ID returned');
-      assert.equal(result.message.content, 'Same content', 'Content unchanged');
+      const unchangedText = (result.message.content as any[])[0]?.text;
+      assert.equal(unchangedText, 'Same content', 'Content unchanged');
       assert.equal(
         mockStoreWrapper.nodes.size,
         originalNodeCount,
@@ -1413,7 +1432,8 @@ describe('Forest', () => {
 
       // Check that all messages are in correct order
       for (let i = 0; i < result.messages.length; i++) {
-        assert.equal(result.messages[i].content, `Message at level ${i + 1}`);
+        const t = (result.messages[i].content as any[])[0]?.text;
+        assert.equal(t, `Message at level ${i + 1}`);
       }
     });
 

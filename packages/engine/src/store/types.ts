@@ -4,7 +4,6 @@ import type {
   RootData,
   Node,
   NodeData,
-  NodeDataV2,
   Role
 } from '../types.ts';
 
@@ -98,7 +97,7 @@ export interface ILoomStore {
    * @experimental This method is part of the V2 message format migration.
    *               Currently only implemented by FileSystemStore.
    */
-  loadNodeNormalized: (nodeId: NodeId) => Promise<NodeDataV2 | null>;
+  loadNodeNormalized: (nodeId: NodeId) => Promise<NodeData | null>;
 
   /**
    * Finds nodes matching criteria and normalizes their messages to V2 format.
@@ -108,7 +107,7 @@ export interface ILoomStore {
    * @experimental This method is part of the V2 message format migration.
    *               Currently only implemented by FileSystemStore.
    */
-  findNodesNormalized: (criteria: NodeQueryCriteria) => Promise<NodeDataV2[]>;
+  findNodesNormalized: (criteria: NodeQueryCriteria) => Promise<NodeData[]>;
 
   log(msg: unknown): void;
 }

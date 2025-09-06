@@ -183,19 +183,13 @@ export interface NodeData {
   /** The IDs of child nodes. */
   child_ids: NodeId[];
 
-  message: Message;
+  // Canonical message representation (V2 content blocks)
+  message: MessageV2;
 
   /** Metadata associated with this node. */
   metadata: NodeMetadata;
 }
 
 export type Node = RootData | NodeData;
-
-// V2 types for nodes with normalized messages
-export interface NodeDataV2 extends Omit<NodeData, 'message'> {
-  message: MessageV2;
-}
-
-export type NodeV2 = RootData | NodeDataV2;
 
 // Note: legacy tool_calls helper removed as Forest compares on V2 content blocks.

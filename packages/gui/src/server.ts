@@ -329,27 +329,40 @@ async function main() {
           .status(400)
           .json({ error: 'Content must be ContentBlock[] (text-only)' });
       }
-      const result = joinTextBlocksOrError(content, 'append');
-      if (!result.ok) {
-        return res.status(400).json({ error: result.error });
-      }
-      const textContent = result.text;
-
-      if (textContent.trim().length === 0) {
+      // Validate text-only blocks and non-empty text
+      if (content.length === 0) {
         return res
           .status(400)
-          .json({ error: 'Content must be non-empty after trimming' });
+          .json({ error: 'Content must include at least one text block' });
+      }
+      for (const b of content) {
+        if (isToolUseBlock(b)) {
+          return res
+            .status(400)
+            .json({ error: 'Appending tool-use blocks is not supported' });
+        }
+        if (!isTextBlock(b, true)) {
+          return res
+            .status(400)
+            .json({ error: 'Text blocks must be non-empty' });
+        }
       }
 
-      const newNode = await engine
-        .getForest()
-        .append(
-          parentId as NodeId,
-          [{ role: typedRole, content: textContent }],
+      const newNode = await engine.getForest().append(
+        parentId as NodeId,
+        [
           {
-            source_info: { type: 'user' }
+            role: typedRole,
+            content:
+              content as unknown as import('@ankhdt/loom-engine').NonEmptyArray<
+                import('@ankhdt/loom-engine').TextBlock
+              >
           }
-        );
+        ],
+        {
+          source_info: { type: 'user' }
+        }
+      );
 
       // Update current node ID in config
       await configStore.update({ currentNodeId: newNode.id });
