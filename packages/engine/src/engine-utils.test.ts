@@ -159,6 +159,33 @@ describe('estimateInputTokens', () => {
     const est = estimateInputTokens(msgs, 'You are');
     assert.equal(est, expected);
   });
+
+  it('counts assistant mixed blocks (text + tool-use)', () => {
+    const msgs: MessageV2[] = [
+      user(['Hi']),
+      assistant([
+        tb('Result:'),
+        { type: 'tool-use', id: 't1', name: 'calc', parameters: { a: 1 } }
+      ])
+    ];
+    const expected = Math.floor(
+      (JSON.stringify(msgs[0]).length + JSON.stringify(msgs[1]).length) * 0.3
+    );
+    const est = estimateInputTokens(msgs);
+    assert.equal(est, expected);
+  });
+
+  it('counts tool-only and tool messages', () => {
+    const msgs: MessageV2[] = [
+      assistant([{ type: 'tool-use', id: 'x', name: 'noop', parameters: {} }]),
+      tool('ok', 'x')
+    ];
+    const expected = Math.floor(
+      (JSON.stringify(msgs[0]).length + JSON.stringify(msgs[1]).length) * 0.3
+    );
+    const est = estimateInputTokens(msgs);
+    assert.equal(est, expected);
+  });
 });
 
 describe('clampMaxTokens', () => {
