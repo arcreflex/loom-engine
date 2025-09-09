@@ -17,7 +17,3 @@ export function extractToolUseBlocks(
   );
   return toolBlocks.length > 0 ? toolBlocks : undefined;
 }
-
-// Converts a V2 message back to legacy format for backward compatibility.
-// Throws specific error types to aid callers/tests.
-// Legacy conversion now handled at Forest/Engine edge; store performs migration on read/write.

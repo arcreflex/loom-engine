@@ -3,7 +3,7 @@ import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
 import { extractTextContent } from './provider-utils.ts';
 import type {
   ToolUseBlock,
-  AssistantMessageV2,
+  AssistantMessage,
   NonEmptyArray,
   ContentBlock
 } from '../types.ts';
@@ -249,7 +249,7 @@ export class GoogleProvider implements IProvider {
         throw new EmptyProviderResponseError('Google');
       }
 
-      const v2Message: AssistantMessageV2 = {
+      const v2Message: AssistantMessage = {
         role: 'assistant',
         content: contentBlocks as NonEmptyArray<ContentBlock>
       };

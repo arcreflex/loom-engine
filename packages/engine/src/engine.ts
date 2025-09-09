@@ -10,7 +10,7 @@ import {
   type NodeData,
   type RootData
 } from './types.ts';
-import type { NonEmptyArray, TextBlock, MessageV2 } from './types.ts';
+import type { NonEmptyArray, TextBlock, Message } from './types.ts';
 import { AnthropicProvider } from './providers/anthropic.ts';
 import { GoogleProvider } from './providers/google.ts';
 import { ToolRegistry } from './tools/registry.ts';
@@ -79,7 +79,7 @@ export class LoomEngine {
     rootId: RootId,
     providerName: ProviderName,
     modelName: string,
-    contextMessages: MessageV2[],
+    contextMessages: Message[],
     options: GenerateOptions,
     activeTools?: string[]
   ): Promise<GenerateResult> {
@@ -191,17 +191,17 @@ export class LoomEngine {
     root: RootData,
     providerName: ProviderName,
     modelName: string,
-    contextMessages: MessageV2[],
+    contextMessages: Message[],
     parameters: ProviderRequest['parameters'],
     activeTools: string[]
   ): Promise<GenerateResult> {
     // The conversation history for this turn
-    const messages: MessageV2[] = [...contextMessages];
+    const messages: Message[] = [...contextMessages];
 
     const provider = this.getProvider(providerName);
 
     // Limit to 5 iterations to prevent infinite loops
-    const v2Context: MessageV2[] = messages.map(m => normalizeMessage(m));
+    const v2Context: Message[] = messages.map(m => normalizeMessage(m));
     const v2Coalesced = coalesceTextOnlyAdjacent(v2Context, '');
     const toolParameters = this.getToolParameters(activeTools);
 
@@ -320,7 +320,7 @@ export class LoomEngine {
 
   async getMessages(
     nodeId: NodeId
-  ): Promise<{ root: RootConfig; messages: MessageV2[] }> {
+  ): Promise<{ root: RootConfig; messages: Message[] }> {
     const { root, messages } = await this.forest.getMessages(nodeId);
     return { root: root.config, messages };
   }

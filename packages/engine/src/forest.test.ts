@@ -5,7 +5,7 @@ import type {
   Node,
   NodeId,
   RootConfig,
-  Message,
+  MessageLegacy,
   NodeMetadata
 } from './types.ts';
 import { createMockStore, mockNodeId, mockRootId } from './test-helpers.ts';
@@ -14,7 +14,7 @@ import { createMockStore, mockNodeId, mockRootId } from './test-helpers.ts';
 const createMessage = (
   role: 'user' | 'assistant',
   content: string
-): Message => ({
+): MessageLegacy => ({
   role,
   content
 });

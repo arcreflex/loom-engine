@@ -6,8 +6,8 @@ import { createMockStore, mockProviders, mockRootId } from './test-helpers.ts'; 
 import type {
   RootConfig,
   ProviderName,
+  MessageLegacy,
   Message,
-  MessageV2,
   NodeData,
   Node
 } from './types.ts'; // Adjust path as needed
@@ -143,7 +143,7 @@ describe('LoomEngine', () => {
       }: {
         result: GenerateResult;
         expectedRootConfig: RootConfig;
-        expectedMessages: Array<Array<Message | MessageV2>>;
+        expectedMessages: Array<Array<MessageLegacy | Message>>;
       }
     ) {
       assert.ok(Array.isArray(result.childNodes), 'Result is array');
@@ -163,7 +163,7 @@ describe('LoomEngine', () => {
       }
 
       const expectedNormalized = expectedMessages.map(arr =>
-        arr.map(m => normalizeMessage(m as Message | MessageV2))
+        arr.map(m => normalizeMessage(m as MessageLegacy | Message))
       );
 
       assert.deepEqual(actualMessages, expectedNormalized, 'Messages match');
@@ -177,7 +177,7 @@ describe('LoomEngine', () => {
       const root = createTestRoot('r1', { systemPrompt });
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const userMessages: Message[] = [
+      const userMessages: MessageLegacy[] = [
         { role: 'user', content: 'Write a poem' }
       ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
@@ -220,7 +220,7 @@ describe('LoomEngine', () => {
       const root = createTestRoot('r2', { systemPrompt });
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const userMessages: Message[] = [
+      const userMessages: MessageLegacy[] = [
         { role: 'user', content: 'Write a poem' }
       ];
       const optionsN2 = { n: 2, max_tokens: 100, temperature: 0.7 };
@@ -247,7 +247,7 @@ describe('LoomEngine', () => {
     it('should append correctly if user message prefix already exists', async () => {
       const systemPrompt = 'You are a poet';
       const rootConfig: RootConfig = { systemPrompt };
-      const existingMessages: Message[] = [
+      const existingMessages: MessageLegacy[] = [
         { role: 'user', content: 'Write a poem' },
         { role: 'assistant', content: 'A short poem.' }
       ];
@@ -300,7 +300,7 @@ describe('LoomEngine', () => {
       const rootConfig: RootConfig = { systemPrompt };
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const existingMessages: Message[] = [
+      const existingMessages: MessageLegacy[] = [
         { role: 'user', content: 'Write a poem' },
         { role: 'assistant', content: 'The first line is' },
         { role: 'assistant', content: ' finished later.' }
@@ -390,7 +390,9 @@ describe('LoomEngine', () => {
       const rootConfig: RootConfig = { systemPrompt };
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4o-2024-08-06'; // known caps: out=16384
-      const existingMessages: Message[] = [{ role: 'user', content: 'Short' }];
+      const existingMessages: MessageLegacy[] = [
+        { role: 'user', content: 'Short' }
+      ];
 
       const rootId = mockRootId('rootClamp');
       const root = createTestRoot(rootId.toString(), rootConfig);
@@ -435,7 +437,7 @@ describe('LoomEngine', () => {
 
     it('should throw an error for unsupported provider types', async () => {
       const root = createTestRoot('r5', { systemPrompt: 'test' });
-      const userMessages: Message[] = [
+      const userMessages: MessageLegacy[] = [
         { role: 'user', content: 'Write a poem' }
       ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
@@ -471,7 +473,7 @@ describe('LoomEngine', () => {
       const root = createTestRoot('r6', { systemPrompt: 'test' });
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const userMessages: Message[] = [
+      const userMessages: MessageLegacy[] = [
         { role: 'user', content: 'Write a poem' }
       ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
@@ -508,7 +510,7 @@ describe('LoomEngine', () => {
       });
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const userMessages: Message[] = [
+      const userMessages: MessageLegacy[] = [
         { role: 'user', content: 'Echo "Hello World"' }
       ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
@@ -646,7 +648,9 @@ describe('LoomEngine', () => {
       });
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const userMessages: Message[] = [{ role: 'user', content: 'Echo twice' }];
+      const userMessages: MessageLegacy[] = [
+        { role: 'user', content: 'Echo twice' }
+      ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
       const activeTools = ['echo'];
 
@@ -729,7 +733,7 @@ describe('LoomEngine', () => {
       });
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const userMessages: Message[] = [
+      const userMessages: MessageLegacy[] = [
         { role: 'user', content: 'Echo "Hello Progress"' }
       ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
@@ -897,7 +901,7 @@ describe('LoomEngine', () => {
         async (args: any) => `Echo: ${args.message}`
       );
 
-      const userMessages: Message[] = [
+      const userMessages: MessageLegacy[] = [
         { role: 'user', content: 'Use the echo tool' }
       ];
 

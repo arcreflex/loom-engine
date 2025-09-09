@@ -1,7 +1,7 @@
 import type { ProviderRequest } from './providers/types.ts';
 
 // =====================
-// ContentBlock (V2) types
+// ContentBlock types
 // =====================
 
 /**
@@ -40,12 +40,16 @@ export type Role = 'user' | 'assistant' | 'tool';
 
 export type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter';
 
-export interface UserMessage {
+// =====================
+// Legacy message types (string-based)
+// =====================
+
+export interface UserMessageLegacy {
   role: 'user';
   content: string | null;
 }
 
-export interface AssistantMessage {
+export interface AssistantMessageLegacy {
   role: 'assistant';
   content: string | null;
   tool_calls?: {
@@ -58,43 +62,46 @@ export interface AssistantMessage {
   }[];
 }
 
-export interface ToolMessage {
+export interface ToolMessageLegacy {
   role: 'tool';
   content: string | null;
   tool_call_id: string;
 }
 
-export type Message = UserMessage | AssistantMessage | ToolMessage;
+export type MessageLegacy =
+  | UserMessageLegacy
+  | AssistantMessageLegacy
+  | ToolMessageLegacy;
 
 // =====================
-// V2 message types (ContentBlock-based)
+// message types (ContentBlock-based)
 // =====================
-export interface UserMessageV2 {
+export interface UserMessage {
   role: 'user';
   // User messages can only contain text blocks
   content: NonEmptyArray<TextBlock>;
 }
 
-export interface AssistantMessageV2 {
+export interface AssistantMessage {
   role: 'assistant';
   // Assistant messages can contain both text and tool-use blocks
   content: NonEmptyArray<ContentBlock>;
 }
 
-export interface ToolMessageV2 {
+export interface ToolMessage {
   role: 'tool';
   // Tool messages can only contain text blocks
   content: NonEmptyArray<TextBlock>;
   tool_call_id: string;
 }
 
-export type MessageV2 = UserMessageV2 | AssistantMessageV2 | ToolMessageV2;
+export type Message = UserMessage | AssistantMessage | ToolMessage;
 
 // Legacy aliases for clarity at call-sites during migration
-export type LegacyUserMessage = UserMessage;
-export type LegacyAssistantMessage = AssistantMessage;
-export type LegacyToolMessage = ToolMessage;
-export type LegacyMessage = Message;
+export type LegacyUserMessage = UserMessageLegacy;
+export type LegacyAssistantMessage = AssistantMessageLegacy;
+export type LegacyToolMessage = ToolMessageLegacy;
+export type LegacyMessage = MessageLegacy;
 
 /**
  * Configuration for a conversation root.
@@ -184,7 +191,7 @@ export interface NodeData {
   child_ids: NodeId[];
 
   // Canonical message representation (V2 content blocks)
-  message: MessageV2;
+  message: Message;
 
   /** Metadata associated with this node. */
   metadata: NodeMetadata;

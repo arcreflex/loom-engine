@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { Forest } from './forest.ts';
 import { createMockStore, mockNodeId, mockRootId } from './test-helpers.ts';
-import type { AssistantMessage, Message } from './types.ts';
+import type { AssistantMessageLegacy, MessageLegacy } from './types.ts';
 import { normalizeMessage } from './content-blocks.ts';
 
 describe('Forest V2-aware prefix matching', () => {
@@ -20,7 +20,7 @@ describe('Forest V2-aware prefix matching', () => {
     });
 
     // Create one assistant node under root with a tool call
-    const assistantWithTool: AssistantMessage = {
+    const assistantWithTool: AssistantMessageLegacy = {
       role: 'assistant',
       content: null,
       tool_calls: [
@@ -58,7 +58,7 @@ describe('Forest V2-aware prefix matching', () => {
 
     // Now attempt to append an assistant message that is semantically same tool call
     // but with different key order in arguments JSON
-    const incomingMessages: Message[] = [
+    const incomingMessages: MessageLegacy[] = [
       {
         role: 'assistant',
         content: null,

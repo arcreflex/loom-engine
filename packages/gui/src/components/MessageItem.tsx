@@ -7,7 +7,7 @@ import {
   type ContentBlock,
   type TextBlock,
   type ToolUseBlock,
-  type MessageV2
+  type Message
 } from '@ankhdt/loom-engine';
 import { type DisplayMessage } from '../types';
 import {
@@ -55,7 +55,7 @@ function blocksToText(blocks: ContentBlock[]): string {
     .join('');
 }
 
-function getToolUseBlocks(msg: MessageV2): ToolUseBlock[] {
+function getToolUseBlocks(msg: Message): ToolUseBlock[] {
   if (msg.role !== 'assistant') return [];
   return msg.content.filter(isToolUseBlock);
 }

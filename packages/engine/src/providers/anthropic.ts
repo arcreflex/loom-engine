@@ -4,7 +4,7 @@ import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
 import { extractTextContent } from './provider-utils.ts';
 import type {
   ContentBlock,
-  AssistantMessageV2,
+  AssistantMessage,
   NonEmptyArray
 } from '../types.ts';
 import {
@@ -236,7 +236,7 @@ export class AnthropicProvider implements IProvider {
       }
 
       // Return V2 message with content blocks in original order
-      const v2Message: AssistantMessageV2 = {
+      const v2Message: AssistantMessage = {
         role: 'assistant',
         content: contentBlocks as NonEmptyArray<ContentBlock>
       };

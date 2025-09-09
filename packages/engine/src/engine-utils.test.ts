@@ -8,7 +8,7 @@ import {
   clampMaxTokens
 } from './engine-utils.ts';
 import type {
-  MessageV2,
+  Message,
   TextBlock,
   ContentBlock,
   NonEmptyArray
@@ -18,18 +18,18 @@ function tb(text: string): TextBlock {
   return { type: 'text', text };
 }
 
-function assistant(blocks: ContentBlock[]): MessageV2 {
+function assistant(blocks: ContentBlock[]): Message {
   return { role: 'assistant', content: blocks as NonEmptyArray<ContentBlock> };
 }
 
-function user(texts: string[]): MessageV2 {
+function user(texts: string[]): Message {
   return {
     role: 'user',
     content: texts.map(tb) as NonEmptyArray<TextBlock>
   };
 }
 
-function tool(text: string, id = 'call-1'): MessageV2 {
+function tool(text: string, id = 'call-1'): Message {
   return {
     role: 'tool',
     content: [tb(text)] as NonEmptyArray<TextBlock>,
@@ -107,7 +107,7 @@ describe('normalizeForComparison', () => {
 
 describe('coalesceTextOnlyAdjacent', () => {
   it('coalesces adjacent text-only user/assistant but not tool', () => {
-    const msgs: MessageV2[] = [
+    const msgs: Message[] = [
       user(['A']),
       user(['B']),
       assistant([tb('C')]),
@@ -133,7 +133,7 @@ describe('coalesceTextOnlyAdjacent', () => {
   });
 
   it('joins multi-block text messages into a single block per coalesced pair', () => {
-    const msgs: MessageV2[] = [
+    const msgs: Message[] = [
       user(['Hello, ', 'world']),
       user(['! ', 'How are you?'])
     ];
@@ -149,7 +149,7 @@ describe('coalesceTextOnlyAdjacent', () => {
 
 describe('estimateInputTokens', () => {
   it('includes system prompt and JSON length of messages', () => {
-    const msgs: MessageV2[] = [user(['Hello']), assistant([tb('World')])];
+    const msgs: Message[] = [user(['Hello']), assistant([tb('World')])];
     const expected = Math.floor(
       ('You are'.length +
         JSON.stringify(msgs[0]).length +
@@ -161,7 +161,7 @@ describe('estimateInputTokens', () => {
   });
 
   it('counts assistant mixed blocks (text + tool-use)', () => {
-    const msgs: MessageV2[] = [
+    const msgs: Message[] = [
       user(['Hi']),
       assistant([
         tb('Result:'),
@@ -176,7 +176,7 @@ describe('estimateInputTokens', () => {
   });
 
   it('counts tool-only and tool messages', () => {
-    const msgs: MessageV2[] = [
+    const msgs: Message[] = [
       assistant([{ type: 'tool-use', id: 'x', name: 'noop', parameters: {} }]),
       tool('ok', 'x')
     ];

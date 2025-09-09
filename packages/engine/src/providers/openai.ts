@@ -8,7 +8,7 @@ import {
 } from './provider-utils.ts';
 import type {
   ContentBlock,
-  AssistantMessageV2,
+  AssistantMessage,
   NonEmptyArray
 } from '../types.ts';
 import {
@@ -228,7 +228,7 @@ export class OpenAIProvider implements IProvider {
         throw new EmptyProviderResponseError('OpenAI');
       }
 
-      const v2Message: AssistantMessageV2 = {
+      const v2Message: AssistantMessage = {
         role: 'assistant',
         content: contentBlocks as NonEmptyArray<ContentBlock>
       };

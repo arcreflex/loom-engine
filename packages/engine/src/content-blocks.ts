@@ -1,12 +1,12 @@
 import type {
   ContentBlock,
-  MessageV2,
+  Message,
   LegacyMessage,
+  AssistantMessageLegacy,
+  ToolMessageLegacy,
+  UserMessage,
   AssistantMessage,
   ToolMessage,
-  UserMessageV2,
-  AssistantMessageV2,
-  ToolMessageV2,
   TextBlock,
   ToolUseBlock,
   NonEmptyArray
@@ -94,7 +94,7 @@ function isNonEmptyArray<T>(
  * - User messages must only contain text blocks
  * Note: This function performs validation but does not throw errors.
  */
-export function isMessageV2(m: unknown): m is MessageV2 {
+export function isMessageV2(m: unknown): m is Message {
   if (!m || typeof m !== 'object') return false;
 
   const msg = m as {
@@ -276,7 +276,7 @@ export function legacyToContentBlocks(message: LegacyMessage): ContentBlock[] {
  * @throws {Error} if message is invalid or cannot be normalized to valid V2
  * @throws {ToolArgumentParseError} if tool arguments in legacy message cannot be parsed
  */
-export function normalizeMessage(msg: LegacyMessage | MessageV2): MessageV2 {
+export function normalizeMessage(msg: LegacyMessage | Message): Message {
   // If already V2, validate and return
   if (isMessageV2(msg)) return msg;
 
@@ -288,7 +288,7 @@ export function normalizeMessage(msg: LegacyMessage | MessageV2): MessageV2 {
     if (textBlocks.length === 0) {
       throw new Error('User message must contain at least one text block');
     }
-    const user: UserMessageV2 = {
+    const user: UserMessage = {
       role: 'user',
       content: textBlocks as NonEmptyArray<TextBlock>
     };
@@ -300,9 +300,9 @@ export function normalizeMessage(msg: LegacyMessage | MessageV2): MessageV2 {
   }
 
   if (msg.role === 'assistant') {
-    const blocks = legacyToContentBlocks(msg as AssistantMessage);
+    const blocks = legacyToContentBlocks(msg as AssistantMessageLegacy);
     // legacyToContentBlocks already ensures blocks.length > 0
-    const assistant: AssistantMessageV2 = {
+    const assistant: AssistantMessage = {
       role: 'assistant',
       content: blocks as NonEmptyArray<ContentBlock>
     };
@@ -314,7 +314,7 @@ export function normalizeMessage(msg: LegacyMessage | MessageV2): MessageV2 {
   }
 
   // Handle tool messages
-  const toolMsg = msg as ToolMessage;
+  const toolMsg = msg as ToolMessageLegacy;
 
   // Validate tool_call_id
   if (!toolMsg.tool_call_id || toolMsg.tool_call_id.trim().length === 0) {
@@ -337,7 +337,7 @@ export function normalizeMessage(msg: LegacyMessage | MessageV2): MessageV2 {
     throw new Error('Cannot normalize tool message with empty content');
   }
 
-  const tool: ToolMessageV2 = {
+  const tool: ToolMessage = {
     role: 'tool',
     content: blocks as NonEmptyArray<TextBlock>,
     tool_call_id: toolMsg.tool_call_id
