@@ -19,7 +19,7 @@ Conceptual model and invariants of roots, nodes, messages, and metadata.
 - **Content**: Exactly one Message object
 - **Representation**: Forest represents each role turn as a node; the path from root to a node is the conversation history
 
-### Message (V2-only)
+### Message
 
 Three distinct message roles:
 
@@ -27,13 +27,13 @@ Three distinct message roles:
 2. **Assistant messages**: Model responses (may include tool use requests)
 3. **Tool messages**: Results from tool execution
 
-Canonical V2 properties:
+Canonical properties:
 
 - `role`: "user" | "assistant" | "tool"
 - `content`: Non-empty array of ContentBlock (see below). Empty arrays are not allowed
 - `tool_call_id` (tool messages only): Reference to the tool-use block `id` that prompted this result
 
-### ContentBlock (V2)
+### ContentBlock
 
 Canonical message content is an ordered list of content blocks:
 
@@ -49,7 +49,7 @@ Older data formats represented messages as:
 - `content: string | null`
 - `tool_calls: ToolCall[]` on assistant messages
 
-FileSystemStore MUST normalize legacy-on-disk messages to the new canonical form on read:
+FileSystemStore MUST normalize legacy-on-disk messages to the canonical form on read:
 
 - Non-empty `content` becomes a single `{ type: 'text', text }` block
 - Each legacy `tool_calls[]` entry becomes a `{ type: 'tool-use', id, name, parameters }` block

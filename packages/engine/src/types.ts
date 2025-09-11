@@ -97,12 +97,6 @@ export interface ToolMessage {
 
 export type Message = UserMessage | AssistantMessage | ToolMessage;
 
-// Legacy aliases for clarity at call-sites during migration
-export type LegacyUserMessage = UserMessageLegacy;
-export type LegacyAssistantMessage = AssistantMessageLegacy;
-export type LegacyToolMessage = ToolMessageLegacy;
-export type LegacyMessage = MessageLegacy;
-
 /**
  * Configuration for a conversation root.
  */

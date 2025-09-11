@@ -1,7 +1,7 @@
 import type { Logger } from '../log.ts';
 import { KNOWN_MODELS } from './known-models.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
-import { extractTextContent } from './provider-utils.ts';
+import { extractTextContent, assertValidMessage } from '../content-blocks.ts';
 import type {
   ContentBlock,
   AssistantMessage,
@@ -56,13 +56,15 @@ export class AnthropicProvider implements IProvider {
         timeout: 10 * 60 * 1000 // see https://github.com/anthropics/anthropic-sdk-typescript?tab=readme-ov-file#long-requests
       });
 
-      // Messages are V2 per ProviderRequest contract
+      // Messages are in canonical blocks format per ProviderRequest contract
       const v2Messages = request.messages;
 
-      // Convert V2 messages to Anthropic format
+      // Convert messages to Anthropic format
       const anthropicMessages: Anthropic.MessageParam[] = [];
       for (let i = 0; i < v2Messages.length; i++) {
         const msg = v2Messages[i];
+        // Defensive validation at boundary
+        assertValidMessage(msg);
 
         if (msg.role === 'tool') {
           // For tool messages, create a user message with tool result content
@@ -213,7 +215,7 @@ export class AnthropicProvider implements IProvider {
         'Anthropic response:\n' + JSON.stringify(response, null, 2)
       );
 
-      // Convert Anthropic response to V2 message format preserving order
+      // Convert Anthropic response to block message format preserving order
       const contentBlocks: ContentBlock[] = [];
 
       // Process response content blocks in order
@@ -235,7 +237,7 @@ export class AnthropicProvider implements IProvider {
         throw new EmptyProviderResponseError('Anthropic');
       }
 
-      // Return V2 message with content blocks in original order
+      // Return assistant message with content blocks in original order
       const v2Message: AssistantMessage = {
         role: 'assistant',
         content: contentBlocks as NonEmptyArray<ContentBlock>

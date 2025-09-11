@@ -15,11 +15,10 @@ export interface ToolDefinitionForProvider {
 
 /**
  * Request to a language model provider.
- * During the V2 migration, providers will handle both Message and MessageV2 formats.
  */
 export interface ProviderRequest {
   systemMessage: string | undefined;
-  /** The full context history of messages in V2 format. */
+  /** The full context history of messages in canonical blocks format. */
   messages: Message[];
 
   model: string;
@@ -42,10 +41,9 @@ export interface ProviderRequest {
 
 /**
  * Response from a language model provider.
- * During the V2 migration, providers will return MessageV2 format.
  */
 export interface ProviderResponse {
-  /** The generated message in V2 format. */
+  /** The generated message in canonical blocks format. */
   message: Message;
 
   /** Usage information from the provider. */

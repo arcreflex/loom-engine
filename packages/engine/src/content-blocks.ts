@@ -1,7 +1,7 @@
 import type {
   ContentBlock,
   Message,
-  LegacyMessage,
+  MessageLegacy,
   AssistantMessageLegacy,
   ToolMessageLegacy,
   UserMessage,
@@ -94,7 +94,7 @@ function isNonEmptyArray<T>(
  * - User messages must only contain text blocks
  * Note: This function performs validation but does not throw errors.
  */
-export function isMessageV2(m: unknown): m is Message {
+export function isMessage(m: unknown): m is Message {
   if (!m || typeof m !== 'object') return false;
 
   const msg = m as {
@@ -189,7 +189,8 @@ function assertPlainObject(
  * @throws {ToolArgumentParseError} if tool arguments cannot be parsed as JSON
  * @throws {Error} if the resulting content array would be empty
  */
-export function legacyToContentBlocks(message: LegacyMessage): ContentBlock[] {
+/** @internal */
+function legacyToContentBlocks(message: MessageLegacy): ContentBlock[] {
   // Tool messages should be handled separately in normalizeMessage
   if (message.role === 'tool') {
     throw new Error(
@@ -276,9 +277,9 @@ export function legacyToContentBlocks(message: LegacyMessage): ContentBlock[] {
  * @throws {Error} if message is invalid or cannot be normalized to valid V2
  * @throws {ToolArgumentParseError} if tool arguments in legacy message cannot be parsed
  */
-export function normalizeMessage(msg: LegacyMessage | Message): Message {
+export function normalizeMessage(msg: MessageLegacy | Message): Message {
   // If already V2, validate and return
-  if (isMessageV2(msg)) return msg;
+  if (isMessage(msg)) return msg;
 
   // Convert legacy to V2
   if (msg.role === 'user') {
@@ -293,7 +294,7 @@ export function normalizeMessage(msg: LegacyMessage | Message): Message {
       content: textBlocks as NonEmptyArray<TextBlock>
     };
     // Validate the result
-    if (!isMessageV2(user)) {
+    if (!isMessage(user)) {
       throw new Error('Failed to create valid V2 user message');
     }
     return user;
@@ -307,7 +308,7 @@ export function normalizeMessage(msg: LegacyMessage | Message): Message {
       content: blocks as NonEmptyArray<ContentBlock>
     };
     // Validate the result
-    if (!isMessageV2(assistant)) {
+    if (!isMessage(assistant)) {
       throw new Error('Failed to create valid V2 assistant message');
     }
     return assistant;
@@ -344,8 +345,87 @@ export function normalizeMessage(msg: LegacyMessage | Message): Message {
   };
 
   // Validate the result
-  if (!isMessageV2(tool)) {
+  if (!isMessage(tool)) {
     throw new Error('Failed to create valid V2 tool message');
   }
   return tool;
+}
+
+// Narrow role guards (explicit role + content-shape)
+export function isUserMessage(m: unknown): m is UserMessage {
+  if (!isMessage(m)) return false;
+  return (
+    m.role === 'user' &&
+    Array.isArray(m.content) &&
+    m.content.length > 0 &&
+    (m.content as ContentBlock[]).every(b => isNonEmptyTextBlock(b))
+  );
+}
+
+export function isAssistantMessage(m: unknown): m is AssistantMessage {
+  if (!isMessage(m)) return false;
+  return (
+    m.role === 'assistant' &&
+    Array.isArray(m.content) &&
+    m.content.length > 0 &&
+    (m.content as ContentBlock[]).every(
+      b => isToolUseBlock(b) || isNonEmptyTextBlock(b)
+    )
+  );
+}
+
+export function isToolMessage(m: unknown): m is ToolMessage {
+  if (!isMessage(m)) return false;
+  return (
+    m.role === 'tool' &&
+    typeof (m as ToolMessage).tool_call_id === 'string' &&
+    (m as ToolMessage).tool_call_id.trim().length > 0 &&
+    Array.isArray(m.content) &&
+    m.content.length > 0 &&
+    (m.content as ContentBlock[]).every(b => isNonEmptyTextBlock(b))
+  );
+}
+
+export function assertValidMessage(m: unknown): asserts m is Message {
+  if (!isMessage(m)) {
+    throw new Error('Invalid message: failed structural validation');
+  }
+}
+
+// --- ContentBlock utilities previously in content-blocks-convert.ts ---
+
+// Coalesce adjacent text blocks to a single text block, preserving formatting by
+// inserting a newline between adjacent text blocks.
+export function coalesceAdjacentTextBlocks(
+  blocks: ContentBlock[]
+): ContentBlock[] {
+  if (blocks.length === 0) return [];
+  const out: ContentBlock[] = [];
+  for (const b of blocks) {
+    const prev = out[out.length - 1];
+    if (prev && prev.type === 'text' && b.type === 'text') {
+      prev.text = prev.text + '\n' + b.text;
+      continue;
+    }
+    out.push({ ...b });
+  }
+  return out;
+}
+
+// Extracts text content from ContentBlock array. Returns null if no text blocks.
+// Multiple adjacent text blocks are coalesced first (with newlines between them);
+// groups are then joined by a newline, preserving code-like formatting.
+export function extractTextContent(blocks: ContentBlock[]): string | null {
+  const coalesced = coalesceAdjacentTextBlocks(blocks);
+  const textBlocks = coalesced.filter((b): b is TextBlock => b.type === 'text');
+  if (textBlocks.length === 0) return null;
+  return textBlocks.map(b => b.text).join('\n');
+}
+
+// Extracts tool-use blocks from ContentBlock array. Returns [] when none.
+export function extractToolUseBlocks(blocks: ContentBlock[]): ToolUseBlock[] {
+  const toolBlocks = blocks.filter(
+    (b): b is ToolUseBlock => b.type === 'tool-use'
+  );
+  return toolBlocks;
 }

@@ -58,18 +58,6 @@ export class GoogleDuplicateFunctionError extends Error {
 }
 
 /**
- * Thrown when an unexpected tool call type is encountered
- */
-export class UnexpectedToolCallTypeError extends Error {
-  constructor(actualType: string, expectedType: string = 'function') {
-    super(
-      `Unexpected tool call type '${actualType}', expected '${expectedType}'`
-    );
-    this.name = 'UnexpectedToolCallTypeError';
-  }
-}
-
-/**
  * Thrown when validation fails for assistant messages
  */
 export class InvalidAssistantMessageError extends Error {

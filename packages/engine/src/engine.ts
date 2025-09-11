@@ -20,7 +20,7 @@ import { KNOWN_MODELS } from './browser.ts';
 import type { ProviderRequest } from './providers/types.ts';
 import { normalizeMessage } from './content-blocks.ts';
 import { getCodebaseContext } from './tools/introspect.ts';
-import { extractToolUseBlocks } from './providers/provider-utils.ts';
+import { extractToolUseBlocks } from './content-blocks.ts';
 // error classes no longer used directly here
 import {
   clampMaxTokens,

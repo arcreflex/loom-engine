@@ -5,7 +5,7 @@ import {
   type RootId,
   type RootConfig,
   type Message,
-  type LegacyMessage,
+  type MessageLegacy,
   type RootData,
   type NodeMetadata,
   type NonEmptyArray,
@@ -219,7 +219,7 @@ export class Forest {
   async append(
     parentId: NodeId,
     /** The node id at which to start matching. */
-    messages: Array<Message | LegacyMessage>,
+    messages: Array<Message | MessageLegacy>,
     /** The metadata to attach if we create a node */
     metadata: Omit<NodeMetadata, 'timestamp' | 'original_root_id'>
   ): Promise<Node> {
@@ -230,7 +230,7 @@ export class Forest {
 
   private async appendUnsafe(
     parentId: NodeId,
-    messages: Array<Message | LegacyMessage>,
+    messages: Array<Message | MessageLegacy>,
     metadata: Omit<NodeMetadata, 'timestamp' | 'original_root_id'>
   ): Promise<Node> {
     const parentNode = await this.store.loadNode(parentId);
@@ -240,7 +240,7 @@ export class Forest {
 
     // Convert to V2 and drop if empty after normalization-for-comparison
     const v2Messages: Message[] = [];
-    for (const m of messages as Array<Message | LegacyMessage>) {
+    for (const m of messages as Array<Message | MessageLegacy>) {
       try {
         const v2 = normalizeMessage(m);
         if (normalizeForComparison(v2) !== null) {
@@ -275,7 +275,7 @@ export class Forest {
       // Skip messages that normalize to empty for comparison
       const currentMessage = v2Messages[messageIndex];
       const normalizedCurrent = normalizeForComparison(
-        normalizeMessage(currentMessage as Message | LegacyMessage)
+        normalizeMessage(currentMessage as Message | MessageLegacy)
       );
       if (!normalizedCurrent) {
         messageIndex++;

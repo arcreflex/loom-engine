@@ -1,11 +1,12 @@
 import type { Logger } from '../log.ts';
 import { KNOWN_MODELS } from './known-models.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
+import { toolCallsToToolUseBlocks } from './provider-utils.ts';
 import {
   extractTextContent,
   extractToolUseBlocks,
-  toolCallsToToolUseBlocks
-} from './provider-utils.ts';
+  assertValidMessage
+} from '../content-blocks.ts';
 import type {
   ContentBlock,
   AssistantMessage,
@@ -68,12 +69,14 @@ export class OpenAIProvider implements IProvider {
         });
       }
 
-      // Messages are V2 per ProviderRequest contract
+      // Messages are in canonical blocks format per ProviderRequest contract
       const v2Messages = request.messages;
 
-      // Convert V2 messages to OpenAI format
+      // Convert messages to OpenAI format
       for (let i = 0; i < v2Messages.length; i++) {
         const msg = v2Messages[i];
+        // Defensive validation at boundary
+        assertValidMessage(msg);
         if (msg.role === 'tool') {
           // Tool messages have text content and tool_call_id
           const textContent = extractTextContent(msg.content);
@@ -108,7 +111,7 @@ export class OpenAIProvider implements IProvider {
 
           // Extract and convert tool-use blocks to OpenAI tool_calls
           const toolUseBlocks = extractToolUseBlocks(msg.content);
-          if (toolUseBlocks) {
+          if (toolUseBlocks.length > 0) {
             assistantMessage.tool_calls = toolUseBlocks.map(tb => ({
               id: tb.id,
               type: 'function' as const,
@@ -120,7 +123,7 @@ export class OpenAIProvider implements IProvider {
           }
 
           // Throw if neither content nor tool_calls exist - this should not happen
-          if (textContent == null && !toolUseBlocks) {
+          if (textContent == null && toolUseBlocks.length === 0) {
             throw new Error(
               `Assistant message has neither text content nor tool-use blocks. This indicates a malformed message.`
             );
@@ -199,7 +202,7 @@ export class OpenAIProvider implements IProvider {
       const choice = response.choices[0];
       const responseMessage = choice.message;
 
-      // Convert OpenAI response to V2 message format.
+      // Convert OpenAI response to block message format.
       // ORDERING LIMITATION: OpenAI's API returns text content and tool_calls as separate fields,
       // not as an interleaved array. We append text first, then tool-use blocks.
       // This means we cannot preserve the exact interleaving if the model intended

@@ -32,11 +32,11 @@ The data directory (default `~/.loom/`) contains:
 
 ### Legacy Compatibility (forward-migration)
 
-- Write path: FileSystemStore persists nodes in the canonical V2 format.
+- Write path: FileSystemStore persists nodes in the canonical blocks format.
 - Read paths:
-  - `loadNode` / `findNodes` return canonical V2 messages (`content: ContentBlock[]`).
-  - `loadNodeNormalized` / `findNodesNormalized` also return V2 and validate/normalize strictly, failing loudly on malformed data.
-- Legacy node files (on disk) are normalized to V2 on read. Assistant tool-use-only remains `content: [ { type: 'tool-use', ... } ]`.
+  - `loadNode` / `findNodes` return canonical messages (`content: ContentBlock[]`).
+  - `loadNodeStrict` / `findNodesStrict` also validate/normalize strictly, failing loudly on malformed data.
+- Legacy node files (on disk) are normalized to blocks on read. Assistant tool-use-only remains `content: [ { type: 'tool-use', ... } ]`.
 
 ### Equality and Caching
 

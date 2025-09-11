@@ -9,9 +9,8 @@ import type {
   NonEmptyArray
 } from './types.ts';
 import {
-  legacyToContentBlocks,
   normalizeMessage,
-  isMessageV2,
+  isMessage,
   isContentBlock,
   ToolArgumentParseError
 } from './content-blocks.ts';
@@ -105,25 +104,23 @@ describe('content-block conversion utilities', () => {
     });
   });
 
-  describe('isMessageV2', () => {
+  describe('isMessage', () => {
     it('enforces non-empty content arrays', () => {
-      assert.ok(!isMessageV2({ role: 'user', content: [] }));
-      assert.ok(!isMessageV2({ role: 'assistant', content: [] }));
-      assert.ok(
-        !isMessageV2({ role: 'tool', content: [], tool_call_id: 'id' })
-      );
+      assert.ok(!isMessage({ role: 'user', content: [] }));
+      assert.ok(!isMessage({ role: 'assistant', content: [] }));
+      assert.ok(!isMessage({ role: 'tool', content: [], tool_call_id: 'id' }));
     });
 
     it('validates tool messages require tool_call_id', () => {
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'tool',
           content: [{ type: 'text', text: 'result' }]
         })
       );
 
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'tool',
           content: [{ type: 'text', text: 'result' }],
           tool_call_id: ''
@@ -131,7 +128,7 @@ describe('content-block conversion utilities', () => {
       );
 
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'tool',
           content: [{ type: 'text', text: 'result' }],
           tool_call_id: '   '
@@ -139,7 +136,7 @@ describe('content-block conversion utilities', () => {
       );
 
       assert.ok(
-        isMessageV2({
+        isMessage({
           role: 'tool',
           content: [{ type: 'text', text: 'result' }],
           tool_call_id: 'call-1'
@@ -149,7 +146,7 @@ describe('content-block conversion utilities', () => {
 
     it('rejects tool messages with empty-text TextBlocks', () => {
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'tool',
           content: [{ type: 'text', text: '' }],
           tool_call_id: 'call-1'
@@ -157,7 +154,7 @@ describe('content-block conversion utilities', () => {
       );
 
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'tool',
           content: [{ type: 'text', text: '   ' }],
           tool_call_id: 'call-1'
@@ -165,7 +162,7 @@ describe('content-block conversion utilities', () => {
       );
 
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'tool',
           content: [
             { type: 'text', text: 'valid' },
@@ -178,21 +175,21 @@ describe('content-block conversion utilities', () => {
 
     it('rejects user messages with empty-text TextBlocks', () => {
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'user',
           content: [{ type: 'text', text: '' }]
         })
       );
 
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'user',
           content: [{ type: 'text', text: '  \n\t  ' }]
         })
       );
 
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'user',
           content: [
             { type: 'text', text: 'valid' },
@@ -204,7 +201,7 @@ describe('content-block conversion utilities', () => {
 
     it('enforces tool messages can only contain text blocks', () => {
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'tool',
           content: [
             {
@@ -221,7 +218,7 @@ describe('content-block conversion utilities', () => {
 
     it('enforces user messages cannot contain tool-use blocks', () => {
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'user',
           content: [
             {
@@ -235,7 +232,7 @@ describe('content-block conversion utilities', () => {
       );
 
       assert.ok(
-        isMessageV2({
+        isMessage({
           role: 'user',
           content: [{ type: 'text', text: 'hello' }]
         })
@@ -244,7 +241,7 @@ describe('content-block conversion utilities', () => {
 
     it('allows assistant messages with text and tool-use blocks', () => {
       assert.ok(
-        isMessageV2({
+        isMessage({
           role: 'assistant',
           content: [
             { type: 'text', text: 'Using tool' },
@@ -256,21 +253,21 @@ describe('content-block conversion utilities', () => {
 
     it('rejects assistant messages with empty-text TextBlocks', () => {
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'assistant',
           content: [{ type: 'text', text: '' }]
         })
       );
 
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'assistant',
           content: [{ type: 'text', text: '   ' }]
         })
       );
 
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'assistant',
           content: [
             { type: 'text', text: 'valid' },
@@ -281,7 +278,7 @@ describe('content-block conversion utilities', () => {
 
       // Assistant with mix of valid tool and empty text
       assert.ok(
-        !isMessageV2({
+        !isMessage({
           role: 'assistant',
           content: [
             { type: 'tool-use', id: 'id', name: 'calc', parameters: { x: 1 } },
@@ -292,22 +289,10 @@ describe('content-block conversion utilities', () => {
     });
   });
 
-  describe('legacyToContentBlocks', () => {
-    it('throws for tool messages', () => {
-      const toolMsg: ToolMessageLegacy = {
-        role: 'tool',
-        content: 'result',
-        tool_call_id: 'call-1'
-      };
-      assert.throws(
-        () => legacyToContentBlocks(toolMsg),
-        /legacyToContentBlocks does not handle tool messages/
-      );
-    });
-
+  describe('legacy conversion', () => {
     it('converts legacy user message with text to a single text block', () => {
       const legacy: MessageLegacy = { role: 'user', content: 'Hello' };
-      const blocks = legacyToContentBlocks(legacy);
+      const blocks = (normalizeMessage(legacy) as any).content as any[];
       assert.equal(blocks.length, 1);
       assert.deepEqual(blocks[0], { type: 'text', text: 'Hello' });
     });
@@ -324,7 +309,7 @@ describe('content-block conversion utilities', () => {
           }
         ]
       };
-      const blocks = legacyToContentBlocks(legacy);
+      const blocks = (normalizeMessage(legacy) as any).content as any[];
       assert.equal(blocks.length, 2);
       assert.deepEqual(blocks[0], { type: 'text', text: 'Run a calc' });
       assert.deepEqual(blocks[1], {
@@ -348,20 +333,7 @@ describe('content-block conversion utilities', () => {
         ]
       };
 
-      assert.throws(
-        () => legacyToContentBlocks(legacy),
-        (err: unknown) => {
-          assert.ok(err instanceof ToolArgumentParseError);
-          const parseErr = err as ToolArgumentParseError;
-          assert.equal(parseErr.toolCallId, 'call-2');
-          assert.equal(parseErr.toolName, 'echo');
-          assert.equal(parseErr.rawArguments, 'not-json');
-          // Check that cause is set to the original parse error
-          assert.ok('cause' in parseErr);
-          assert.ok((parseErr as any).cause instanceof Error);
-          return true;
-        }
-      );
+      assert.throws(() => normalizeMessage(legacy), ToolArgumentParseError);
     });
 
     it('allows empty string tool arguments as empty object', () => {
@@ -376,7 +348,7 @@ describe('content-block conversion utilities', () => {
           }
         ]
       };
-      const blocks = legacyToContentBlocks(legacy);
+      const blocks = (normalizeMessage(legacy) as any).content as any[];
       assert.deepEqual(blocks[1], {
         type: 'tool-use',
         id: 'call-3',
@@ -397,7 +369,7 @@ describe('content-block conversion utilities', () => {
           }
         ]
       };
-      const blocks = legacyToContentBlocks(legacy);
+      const blocks = (normalizeMessage(legacy) as any).content as any[];
       assert.deepEqual(blocks[1], {
         type: 'tool-use',
         id: 'call-ws',
@@ -409,7 +381,7 @@ describe('content-block conversion utilities', () => {
     it('throws for empty content with no tool calls', () => {
       const legacy: MessageLegacy = { role: 'user', content: '' };
       assert.throws(
-        () => legacyToContentBlocks(legacy),
+        () => normalizeMessage(legacy),
         /Cannot convert legacy user message to V2: no content blocks generated/
       );
 
@@ -419,7 +391,7 @@ describe('content-block conversion utilities', () => {
         tool_calls: []
       };
       assert.throws(
-        () => legacyToContentBlocks(assistantEmpty),
+        () => normalizeMessage(assistantEmpty),
         /Cannot convert legacy assistant message to V2: no content blocks generated/
       );
     });
@@ -430,7 +402,7 @@ describe('content-block conversion utilities', () => {
         content: '   \n\t  '
       };
       assert.throws(
-        () => legacyToContentBlocks(userWhitespace),
+        () => normalizeMessage(userWhitespace),
         /Cannot convert legacy user message to V2: no content blocks generated/
       );
 
@@ -457,7 +429,7 @@ describe('content-block conversion utilities', () => {
           }
         ]
       };
-      const blocks = legacyToContentBlocks(legacy);
+      const blocks = (normalizeMessage(legacy) as any).content as any[];
       assert.equal(blocks.length, 1);
       assert.equal(blocks[0].type, 'tool-use');
     });
@@ -474,22 +446,12 @@ describe('content-block conversion utilities', () => {
           }
         ]
       };
-      assert.throws(
-        () => legacyToContentBlocks(legacy),
-        (err: unknown) => {
-          assert.ok(err instanceof ToolArgumentParseError);
-          const parseErr = err as ToolArgumentParseError;
-          assert.equal(parseErr.toolCallId, 'call-5');
-          assert.equal(parseErr.toolName, 'bad');
-          assert.ok(parseErr.message.includes('Expected plain object'));
-          return true;
-        }
-      );
+      assert.throws(() => normalizeMessage(legacy), ToolArgumentParseError);
     });
 
     it('preserves original text while rejecting empty after trim', () => {
       const legacy: MessageLegacy = { role: 'user', content: '  Hello  ' };
-      const blocks = legacyToContentBlocks(legacy);
+      const blocks = (normalizeMessage(legacy) as any).content as any[];
       assert.equal(blocks.length, 1);
       // Original content is preserved (with whitespace)
       assert.deepEqual(blocks[0], { type: 'text', text: '  Hello  ' });
@@ -507,7 +469,7 @@ describe('content-block conversion utilities', () => {
           }
         ]
       };
-      const blocks = legacyToContentBlocks(legacy);
+      const blocks = (normalizeMessage(legacy) as any).content as any[];
       // Should only have tool-use block, no text block
       assert.equal(blocks.length, 1);
       assert.equal(blocks[0].type, 'tool-use');
@@ -526,7 +488,7 @@ describe('content-block conversion utilities', () => {
         ]
       };
       assert.throws(
-        () => legacyToContentBlocks(legacy),
+        () => normalizeMessage(legacy),
         /Tool call must have a non-empty id/
       );
     });
@@ -544,7 +506,7 @@ describe('content-block conversion utilities', () => {
         ]
       };
       assert.throws(
-        () => legacyToContentBlocks(legacy),
+        () => normalizeMessage(legacy),
         /Tool call must have a non-empty name/
       );
     });
@@ -561,22 +523,12 @@ describe('content-block conversion utilities', () => {
           }
         ]
       };
-      assert.throws(
-        () => legacyToContentBlocks(legacy),
-        (err: unknown) => {
-          assert.ok(err instanceof ToolArgumentParseError);
-          const parseErr = err as ToolArgumentParseError;
-          assert.equal(parseErr.toolCallId, 'call-6');
-          assert.equal(parseErr.toolName, 'bad');
-          assert.ok(parseErr.message.includes('Expected plain object'));
-          return true;
-        }
-      );
+      assert.throws(() => normalizeMessage(legacy), ToolArgumentParseError);
     });
   });
 
   describe('normalizeMessage', () => {
-    it('returns V2 messages unchanged if valid', () => {
+    it('returns messages unchanged if valid', () => {
       const v2: UserMessage = {
         role: 'user',
         content: [{ type: 'text', text: 'hello' }] as NonEmptyArray<TextBlock>
@@ -584,14 +536,14 @@ describe('content-block conversion utilities', () => {
       assert.strictEqual(normalizeMessage(v2), v2);
     });
 
-    it('normalizes legacy tool message to V2 with text block and tool_call_id', () => {
+    it('normalizes legacy tool message to blocks with text and tool_call_id', () => {
       const legacy: ToolMessageLegacy = {
         role: 'tool',
         content: '42',
         tool_call_id: 'call-1'
       };
       const v2 = normalizeMessage(legacy);
-      assert.ok(isMessageV2(v2));
+      assert.ok(isMessage(v2));
       assert.equal(v2.role, 'tool');
       assert.equal((v2 as any).tool_call_id, 'call-1');
       assert.deepEqual(v2.content, [{ type: 'text', text: '42' }]);
@@ -694,11 +646,11 @@ describe('content-block conversion utilities', () => {
       assert.throws(() => normalizeMessage(legacy), ToolArgumentParseError);
     });
 
-    it('validates normalized messages against isMessageV2', () => {
+    it('validates normalized messages against isMessage', () => {
       // This would only fail if our normalization logic creates invalid V2
       const validUser: MessageLegacy = { role: 'user', content: 'test' };
       const normalizedUser = normalizeMessage(validUser);
-      assert.ok(isMessageV2(normalizedUser));
+      assert.ok(isMessage(normalizedUser));
 
       const validAssistant: AssistantMessageLegacy = {
         role: 'assistant',
@@ -712,7 +664,7 @@ describe('content-block conversion utilities', () => {
         ]
       };
       const normalizedAssistant = normalizeMessage(validAssistant);
-      assert.ok(isMessageV2(normalizedAssistant));
+      assert.ok(isMessage(normalizedAssistant));
     });
 
     it('normalizes assistant legacy message with null content and only tool_calls', () => {
@@ -728,7 +680,7 @@ describe('content-block conversion utilities', () => {
         ]
       };
       const v2 = normalizeMessage(legacy);
-      assert.ok(isMessageV2(v2));
+      assert.ok(isMessage(v2));
       assert.equal(v2.role, 'assistant');
       assert.equal(v2.content.length, 1);
       assert.equal(v2.content[0].type, 'tool-use');

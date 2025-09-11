@@ -1,17 +1,9 @@
 import type { ToolUseBlock } from '../types.ts';
 import { ToolArgumentParseError } from '../content-blocks.ts';
-import { UnexpectedToolCallTypeError } from './errors.ts';
-import {
-  extractTextContent,
-  extractToolUseBlocks
-} from '../content-blocks-convert.ts';
+import { UnexpectedToolCallTypeError } from '../errors.ts';
+import { extractTextContent, extractToolUseBlocks } from '../content-blocks.ts';
 
-/**
- * Converts a message array to V2 format, handling both legacy and V2 inputs.
- * This is used by providers to ensure they work with the V2 format internally.
- * Handles mixed arrays where some messages may be V2 and others legacy.
- */
-// Normalization shim removed: adapters now accept V2-only inputs.
+// Adapters accept block-based messages only; legacy normalization handled upstream.
 
 /**
  * Extracts text content from ContentBlock array.

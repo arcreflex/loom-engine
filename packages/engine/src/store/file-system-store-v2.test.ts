@@ -63,7 +63,7 @@ describe('FileSystemStore V2 Message Format', () => {
     );
 
     // Load through FileSystemStore's normalized method
-    const loaded = await store.loadNodeNormalized(nodeId);
+    const loaded = await store.loadNodeStrict(nodeId);
     assert(loaded, 'Node should be loaded');
     assert('message' in loaded, 'Should be a NodeDataV2');
 
@@ -129,7 +129,7 @@ describe('FileSystemStore V2 Message Format', () => {
     );
 
     // Load through FileSystemStore's normalized method
-    const loaded = await store.loadNodeNormalized(nodeId);
+    const loaded = await store.loadNodeStrict(nodeId);
     assert(loaded, 'Node should be loaded');
     assert('message' in loaded, 'Should be a NodeDataV2');
 
@@ -201,7 +201,7 @@ describe('FileSystemStore V2 Message Format', () => {
     );
 
     // Load through FileSystemStore's normalized method
-    const loaded = await store.loadNodeNormalized(nodeId);
+    const loaded = await store.loadNodeStrict(nodeId);
     assert(loaded, 'Node should be loaded');
     assert('message' in loaded, 'Should be a NodeDataV2');
 
@@ -269,7 +269,7 @@ describe('FileSystemStore V2 Message Format', () => {
     );
 
     // Load through FileSystemStore's normalized method
-    const loaded = await store.loadNodeNormalized(nodeId);
+    const loaded = await store.loadNodeStrict(nodeId);
     assert(loaded, 'Node should be loaded');
     assert('message' in loaded, 'Should be a NodeDataV2');
 
@@ -294,7 +294,7 @@ describe('FileSystemStore V2 Message Format', () => {
     });
   });
 
-  it('should persist messages in V2 format on write and convert to legacy on load', async () => {
+  it('should persist and load messages in V2 format', async () => {
     // Create test root
     const rootId = store.generateRootId();
     const rootData: RootData = {
@@ -504,7 +504,7 @@ describe('FileSystemStore V2 Message Format', () => {
     await assert.rejects(async () => await readFile(badPath, 'utf-8'));
   });
 
-  it('should normalize messages in findNodesNormalized', async () => {
+  it('should normalize messages in findNodesStrict', async () => {
     // Create test root
     const rootId = store.generateRootId();
     const rootData: RootData = {
@@ -574,7 +574,7 @@ describe('FileSystemStore V2 Message Format', () => {
     );
 
     // Find nodes through FileSystemStore's normalized method
-    const nodes = await store.findNodesNormalized({ rootId });
+    const nodes = await store.findNodesStrict({ rootId });
     assert.equal(nodes.length, 2);
 
     // Check that both messages have been normalized
@@ -645,7 +645,7 @@ describe('FileSystemStore V2 Message Format', () => {
     );
 
     // Load and verify normalization
-    const loaded = await store.loadNodeNormalized(nodeId);
+    const loaded = await store.loadNodeStrict(nodeId);
     assert(loaded, 'Node should be loaded');
     assert('message' in loaded, 'Should be a NodeDataV2');
 
@@ -734,7 +734,7 @@ describe('FileSystemStore V2 Message Format', () => {
     );
 
     // Load and verify ordering
-    const loaded = await store.loadNodeNormalized(nodeId);
+    const loaded = await store.loadNodeStrict(nodeId);
     assert(loaded, 'Node should be loaded');
     assert('message' in loaded, 'Should be a NodeDataV2');
 
@@ -822,7 +822,7 @@ describe('FileSystemStore V2 Message Format', () => {
 
     // Should throw ToolArgumentParseError
     await assert.rejects(
-      async () => await store.loadNodeNormalized(nodeId),
+      async () => await store.loadNodeStrict(nodeId),
       (error: any) => {
         assert(error.message.includes('Failed to normalize message'));
         // Check that error has cause
@@ -885,7 +885,7 @@ describe('FileSystemStore V2 Message Format', () => {
 
     // Should fail when normalizing empty message
     await assert.rejects(
-      async () => await store.loadNodeNormalized(nodeId),
+      async () => await store.loadNodeStrict(nodeId),
       (error: Error) => {
         assert(error.message.includes('Failed to normalize message'));
         assert(error.cause, 'Should have error cause');
@@ -948,7 +948,7 @@ describe('FileSystemStore V2 Message Format', () => {
     );
 
     // Load and verify only tool-use block exists
-    const loaded = await store.loadNodeNormalized(nodeId);
+    const loaded = await store.loadNodeStrict(nodeId);
     assert(loaded, 'Node should be loaded');
     assert('message' in loaded, 'Should be a NodeDataV2');
 
@@ -978,12 +978,12 @@ describe('FileSystemStore V2 Message Format', () => {
 
     // Try to load a non-existent node
     const missingNodeId = `${rootId}/node-999` as NodeId;
-    const result = await store.loadNodeNormalized(missingNodeId);
+    const result = await store.loadNodeStrict(missingNodeId);
 
     assert.equal(result, null, 'Should return null for non-existent node');
   });
 
-  it('should throw when loadNodeNormalized is called with a root ID', async () => {
+  it('should throw when loadNodeStrict is called with a root ID', async () => {
     // Create test root
     const rootId = store.generateRootId();
     const rootData: RootData = {
@@ -996,11 +996,9 @@ describe('FileSystemStore V2 Message Format', () => {
 
     // Should throw when trying to normalize a root
     await assert.rejects(
-      async () => await store.loadNodeNormalized(rootId),
+      async () => await store.loadNodeStrict(rootId),
       (error: Error) => {
-        assert(
-          error.message.includes('loadNodeNormalized called with root ID')
-        );
+        assert(error.message.includes('loadNodeStrict called with root ID'));
         assert(error.message.includes('Use loadNode for roots'));
         return true;
       }
@@ -1042,9 +1040,9 @@ describe('FileSystemStore V2 Message Format', () => {
       }
     );
 
-    // loadNodeNormalized should also throw since loadNode throws
+    // loadNodeStrict should also throw since loadNode throws
     await assert.rejects(
-      async () => await store.loadNodeNormalized(nodeId),
+      async () => await store.loadNodeStrict(nodeId),
       (error: Error) => {
         assert(error.message.includes('Failed to load node'));
         return true;
@@ -1052,7 +1050,7 @@ describe('FileSystemStore V2 Message Format', () => {
     );
   });
 
-  it('should fail loudly when findNodesNormalized encounters invalid tool arguments', async () => {
+  it('should fail loudly when findNodesStrict encounters invalid tool arguments', async () => {
     // Create test root
     const rootId = store.generateRootId();
     const rootData: RootData = {
@@ -1130,10 +1128,8 @@ describe('FileSystemStore V2 Message Format', () => {
       JSON.stringify(invalidNode, null, 2)
     );
 
-    // findNodesNormalized fails loudly on invalid tool args
-    await assert.rejects(
-      async () => await store.findNodesNormalized({ rootId })
-    );
+    // findNodesStrict fails loudly on invalid tool args
+    await assert.rejects(async () => await store.findNodesStrict({ rootId }));
   });
 
   it('should fail on V2 messages with empty content arrays', async () => {
@@ -1179,7 +1175,7 @@ describe('FileSystemStore V2 Message Format', () => {
 
     // Should fail validation when trying to normalize
     await assert.rejects(
-      async () => await store.loadNodeNormalized(nodeId),
+      async () => await store.loadNodeStrict(nodeId),
       (error: Error) => {
         assert(error.message.includes('Failed to normalize message'));
         return true;
@@ -1228,7 +1224,7 @@ describe('FileSystemStore V2 Message Format', () => {
 
     // Should fail validation
     await assert.rejects(
-      async () => await store.loadNodeNormalized(nodeId),
+      async () => await store.loadNodeStrict(nodeId),
       (error: Error) => {
         assert(error.message.includes('Failed to normalize message'));
         return true;
@@ -1278,7 +1274,7 @@ describe('FileSystemStore V2 Message Format', () => {
 
     // Should fail validation
     await assert.rejects(
-      async () => await store.loadNodeNormalized(nodeId),
+      async () => await store.loadNodeStrict(nodeId),
       (error: Error) => {
         assert(error.message.includes('Failed to normalize message'));
         return true;
@@ -1325,7 +1321,7 @@ describe('FileSystemStore V2 Message Format', () => {
 
     // Should fail validation
     await assert.rejects(
-      async () => await store.loadNodeNormalized(nodeId),
+      async () => await store.loadNodeStrict(nodeId),
       (error: Error) => {
         assert(error.message.includes('Failed to normalize message'));
         return true;
@@ -1379,7 +1375,7 @@ describe('FileSystemStore V2 Message Format', () => {
 
     // Should fail validation
     await assert.rejects(
-      async () => await store.loadNodeNormalized(nodeId),
+      async () => await store.loadNodeStrict(nodeId),
       (error: Error) => {
         assert(error.message.includes('Failed to normalize message'));
         return true;
@@ -1387,7 +1383,7 @@ describe('FileSystemStore V2 Message Format', () => {
     );
   });
 
-  it('should fail loudly when findNodesNormalized encounters node with invalid V2 structure', async () => {
+  it('should fail loudly when findNodesStrict encounters node with invalid content structure', async () => {
     // Create test root
     const rootId = store.generateRootId();
     const rootData: RootData = {
@@ -1450,9 +1446,9 @@ describe('FileSystemStore V2 Message Format', () => {
       JSON.stringify(invalidNode, null, 2)
     );
 
-    // findNodesNormalized should fail loudly when encountering invalid structure
+    // findNodesStrict should fail loudly when encountering invalid structure
     await assert.rejects(
-      async () => await store.findNodesNormalized({ rootId }),
+      async () => await store.findNodesStrict({ rootId }),
       (error: Error) => {
         assert(error.message.includes('Failed to normalize message'));
         // Should have cause

@@ -4,7 +4,7 @@ import path from 'path';
 import type { NodeData, NodeId, RootId, RootData, Node } from '../types.ts';
 import type { ILoomStore, NodeQueryCriteria, NodeStructure } from './types.ts';
 import { initializeLog, log } from '../log.ts';
-import { isMessageV2, normalizeMessage } from '../content-blocks.ts';
+import { isMessage, normalizeMessage } from '../content-blocks.ts';
 
 class IdCache<T extends string> {
   known = new Set<T>();
@@ -318,7 +318,7 @@ export class FileSystemStore implements ILoomStore {
   private isPersistedNodeV2(obj: unknown): obj is NodeData {
     if (!obj || typeof obj !== 'object') return false;
     const rec = obj as { message?: unknown };
-    return isMessageV2(rec.message);
+    return isMessage(rec.message);
   }
 
   private toV2Node(raw: unknown): NodeData {
@@ -438,11 +438,11 @@ export class FileSystemStore implements ILoomStore {
    * @returns The node data with V2 message format, or null if not found
    * @throws {Error} if nodeId refers to a root, or if message normalization fails
    */
-  async loadNodeNormalized(nodeId: NodeId): Promise<NodeData | null> {
+  async loadNodeStrict(nodeId: NodeId): Promise<NodeData | null> {
     // Fast-fail on obvious root IDs (format: 'root-<number>')
     if (/^root-\d+$/.test(nodeId)) {
       throw new Error(
-        `loadNodeNormalized called with root ID ${nodeId}. Use loadNode for roots.`
+        `loadNodeStrict called with root ID ${nodeId}. Use loadNode for roots.`
       );
     }
 
@@ -452,7 +452,7 @@ export class FileSystemStore implements ILoomStore {
     // Double-check this is a node, not a root (in case of other root ID formats)
     if (!('message' in node)) {
       throw new Error(
-        `loadNodeNormalized called with root ID ${nodeId}. Use loadNode for roots.`
+        `loadNodeStrict called with root ID ${nodeId}. Use loadNode for roots.`
       );
     }
 
@@ -477,9 +477,9 @@ export class FileSystemStore implements ILoomStore {
    * @returns An array of matching node data with V2 message format
    * @throws {Error} if any message normalization fails (indicates corrupted data)
    */
-  async findNodesNormalized(criteria: NodeQueryCriteria): Promise<NodeData[]> {
+  async findNodesStrict(criteria: NodeQueryCriteria): Promise<NodeData[]> {
     if (!criteria.rootId) {
-      throw new Error('rootId is required for findNodesNormalized');
+      throw new Error('rootId is required for findNodesStrict');
     }
 
     const nodesDir = this.nodesDirPath(criteria.rootId);

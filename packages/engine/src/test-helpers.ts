@@ -98,12 +98,12 @@ export function createMockStore() {
 
     log: console.log.bind(console),
 
-    // normalized helpers (not used in these tests)
-    loadNodeNormalized: mock.fn(async () => {
-      throw new Error('loadNodeNormalized not implemented in mock store');
+    // strict helpers (not used in these tests)
+    loadNodeStrict: mock.fn(async () => {
+      throw new Error('loadNodeStrict not implemented in mock store');
     }),
-    findNodesNormalized: mock.fn(async () => {
-      throw new Error('findNodesNormalized not implemented in mock store');
+    findNodesStrict: mock.fn(async () => {
+      throw new Error('findNodesStrict not implemented in mock store');
     })
   } satisfies import('./store/types.ts').ILoomStore;
 
@@ -172,3 +172,5 @@ export const mockProviders = () => {
   );
   return mockProviderInstance;
 };
+
+// (no test-only builders exported from here)

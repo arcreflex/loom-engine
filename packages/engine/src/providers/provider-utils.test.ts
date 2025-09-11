@@ -1,12 +1,12 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { toolCallsToToolUseBlocks } from './provider-utils.ts';
 import {
-  toolCallsToToolUseBlocks,
   extractTextContent,
-  extractToolUseBlocks
-} from './provider-utils.ts';
-import { ToolArgumentParseError } from '../content-blocks.ts';
-import { UnexpectedToolCallTypeError } from './errors.ts';
+  extractToolUseBlocks,
+  ToolArgumentParseError
+} from '../content-blocks.ts';
+import { UnexpectedToolCallTypeError } from '../errors.ts';
 //
 
 describe('provider-utils', () => {
@@ -188,16 +188,16 @@ describe('provider-utils', () => {
       const textContent = extractTextContent(blocks);
       const toolBlocks = extractToolUseBlocks(blocks);
 
-      // Text content should be concatenated with newline to preserve formatting
+      // Text content groups separated by non-text are joined with newline
       assert.strictEqual(textContent, 'First text\nSecond text');
 
       // Tool blocks should be in order
-      assert.strictEqual(toolBlocks?.length, 2);
-      assert.strictEqual(toolBlocks?.[0].id, 'tool1');
-      assert.strictEqual(toolBlocks?.[1].id, 'tool2');
+      assert.strictEqual(toolBlocks.length, 2);
+      assert.strictEqual(toolBlocks[0].id, 'tool1');
+      assert.strictEqual(toolBlocks[1].id, 'tool2');
     });
 
-    it('preserves formatting with newline joining', () => {
+    it('joins adjacent text blocks with newline to preserve formatting', () => {
       const blocks = [
         { type: 'text' as const, text: 'function hello() {' },
         { type: 'text' as const, text: '  return "world";' },
@@ -205,7 +205,7 @@ describe('provider-utils', () => {
       ];
 
       const textContent = extractTextContent(blocks);
-      // Should join with newlines to preserve code formatting
+      // Adjacent text blocks are coalesced with newlines to preserve formatting
       assert.strictEqual(
         textContent,
         'function hello() {\n  return "world";\n}'

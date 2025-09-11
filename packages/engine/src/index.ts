@@ -27,15 +27,22 @@ export type {
   Role
 } from './types.ts';
 export {
-  isMessageV2,
+  isMessage,
   isContentBlock,
   isTextBlock,
   isNonEmptyTextBlock,
   isToolUseBlock,
-  legacyToContentBlocks,
   normalizeMessage,
-  ToolArgumentParseError
+  ToolArgumentParseError,
+  isUserMessage,
+  isAssistantMessage,
+  isToolMessage,
+  assertValidMessage,
+  extractTextContent,
+  extractToolUseBlocks,
+  coalesceAdjacentTextBlocks
 } from './content-blocks.ts';
+export { coalesceTextOnlyAdjacent } from './engine-utils.ts';
 export * from './tools/types.ts';
 export { Forest } from './forest.ts';
 export * from './config.ts';

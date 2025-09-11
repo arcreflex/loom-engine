@@ -1,6 +1,6 @@
 import type { Logger } from '../log.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
-import { extractTextContent } from './provider-utils.ts';
+import { extractTextContent, assertValidMessage } from '../content-blocks.ts';
 import type {
   ToolUseBlock,
   AssistantMessage,
@@ -60,12 +60,14 @@ export class GoogleProvider implements IProvider {
       // Prepare messages, including system message if provided
       const messages: Content[] = [];
 
-      // Messages are V2 per ProviderRequest contract
+      // Messages are in canonical blocks format per ProviderRequest contract
       const v2Messages = request.messages;
 
-      // Convert V2 messages to Google format
+      // Convert messages to Google format
       for (let i = 0; i < v2Messages.length; i++) {
         const msg = v2Messages[i];
+        // Defensive validation at boundary
+        assertValidMessage(msg);
         if (msg.role === 'tool') {
           // For tool messages, create a model message with function response
           const textContent = extractTextContent(msg.content);
@@ -216,7 +218,7 @@ export class GoogleProvider implements IProvider {
       const response = await this.ai.models.generateContent(req);
       this.logger.log('Google response:\n' + JSON.stringify(response, null, 2));
 
-      // Convert Google response to V2 message format.
+      // Convert Google response to block message format.
       // ORDERING LIMITATION: Google's SDK returns text and functionCalls as separate fields,
       // not as an interleaved array. We append text first, then tool-use blocks.
       // This means we cannot preserve the exact interleaving if the model intended

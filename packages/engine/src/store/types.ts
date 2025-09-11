@@ -89,25 +89,21 @@ export interface ILoomStore {
   listAllNodeStructures: () => Promise<NodeStructure[]>;
 
   /**
-   * Loads a node from the store by its ID and normalizes its message to V2 format.
+   * Loads a node and strictly validates/normalizes its message (blocks format).
    * Only accepts node IDs, not root IDs.
    * @param nodeId - The ID of the node to load (must be a node, not a root)
-   * @returns The node data with V2 message format, or null if not found
+   * @returns The node data with canonical message format, or null if not found
    * @throws {Error} if nodeId refers to a root, or if message normalization fails
-   * @experimental This method is part of the V2 message format migration.
-   *               Currently only implemented by FileSystemStore.
    */
-  loadNodeNormalized: (nodeId: NodeId) => Promise<NodeData | null>;
+  loadNodeStrict: (nodeId: NodeId) => Promise<NodeData | null>;
 
   /**
-   * Finds nodes matching criteria and normalizes their messages to V2 format.
+   * Finds nodes matching criteria and strictly validates/normalizes their messages.
    * @param criteria - The criteria to match
-   * @returns An array of matching node data with V2 message format
+   * @returns An array of matching node data
    * @throws {Error} if any message normalization fails (indicates corrupted data)
-   * @experimental This method is part of the V2 message format migration.
-   *               Currently only implemented by FileSystemStore.
    */
-  findNodesNormalized: (criteria: NodeQueryCriteria) => Promise<NodeData[]>;
+  findNodesStrict: (criteria: NodeQueryCriteria) => Promise<NodeData[]>;
 
   log(msg: unknown): void;
 }
