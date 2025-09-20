@@ -140,3 +140,30 @@ export const KNOWN_MODELS: {
     cost: { input: 15, output: 60, cached_input: 7.5 }
   }
 };
+
+export interface ModelCatalogEntry extends ProviderModelSpec {
+  key: `${ProviderName}/${string}`;
+}
+
+export function listModels(filter?: {
+  provider?: ProviderName;
+}): ModelCatalogEntry[] {
+  return Object.entries(KNOWN_MODELS)
+    .filter(
+      (entry): entry is [`${ProviderName}/${string}`, ProviderModelSpec] => {
+        const [, spec] = entry;
+        return spec !== undefined;
+      }
+    )
+    .map(([key, spec]) => ({ key, ...spec }))
+    .filter(entry =>
+      filter?.provider ? entry.provider === filter.provider : true
+    )
+    .sort((a, b) => a.key.localeCompare(b.key));
+}
+
+export function getModelSpec(
+  key: `${ProviderName}/${string}`
+): ProviderModelSpec | undefined {
+  return KNOWN_MODELS[key];
+}

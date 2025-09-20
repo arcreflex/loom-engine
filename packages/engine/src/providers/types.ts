@@ -67,9 +67,13 @@ export interface IProvider {
   /**
    * Generates a completion from the provider.
    * @param request - The request parameters
+   * @param signal - Optional abort signal allowing the caller to cancel the request
    * @returns A Promise resolving to the provider's response
    */
-  generate(_request: ProviderRequest): Promise<ProviderResponse>;
+  generate(
+    _request: ProviderRequest,
+    signal?: AbortSignal
+  ): Promise<ProviderResponse>;
 }
 
 export interface ProviderModelSpec {

@@ -18,3 +18,24 @@ export class UnexpectedToolCallTypeError extends Error {
     this.name = 'UnexpectedToolCallTypeError';
   }
 }
+
+export class ToolsOnlySupportNSingletonError extends Error {
+  constructor() {
+    super('Tool calling currently only supports n=1');
+    this.name = 'ToolsOnlySupportNSingletonError';
+  }
+}
+
+export class ToolIterationLimitExceededError extends Error {
+  constructor(limit: number) {
+    super(`Exceeded maximum tool iterations (${limit}).`);
+    this.name = 'ToolIterationLimitExceededError';
+  }
+}
+
+export class GenerationAbortedError extends Error {
+  constructor(reason?: string) {
+    super(reason ? `Generation aborted: ${reason}` : 'Generation aborted');
+    this.name = 'GenerationAbortedError';
+  }
+}

@@ -99,11 +99,23 @@ export function createMockStore() {
     log: console.log.bind(console),
 
     // strict helpers (not used in these tests)
-    loadNodeStrict: mock.fn(async () => {
-      throw new Error('loadNodeStrict not implemented in mock store');
+    loadNodeStrict: mock.fn(async (nodeId: NodeId) => {
+      const node = nodes.get(nodeId);
+      if (!node) {
+        return null;
+      }
+      return { ...node };
     }),
-    findNodesStrict: mock.fn(async () => {
-      throw new Error('findNodesStrict not implemented in mock store');
+    findNodesStrict: mock.fn(async (criteria: NodeQueryCriteria) => {
+      return Array.from(nodes.values())
+        .filter(node => {
+          if (criteria.rootId && node.root_id !== criteria.rootId) return false;
+          if (criteria.parentId && node.parent_id !== criteria.parentId) {
+            return false;
+          }
+          return true;
+        })
+        .map(node => ({ ...node }));
     })
   } satisfies import('./store/types.ts').ILoomStore;
 

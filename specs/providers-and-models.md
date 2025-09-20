@@ -17,6 +17,7 @@ All provider implementations must conform to a common behavioral interface for c
 - Map internal `tool-use` blocks to provider tool call representations
 - Preserve tool correlation IDs across request/response cycles
 - Apply provider-specific message constraints
+- Preserve the V2 content block contract end-to-end; providers must not reintroduce legacy `tool_calls` arrays in persisted data
 
 ### Tool Choice Semantics
 
@@ -71,6 +72,7 @@ type ContentBlock =
 - Map `tool-use` blocks to OpenAI `tool_calls` array on assistant messages
 - Function name and arguments preserved
 - Tool call IDs come from provider responses and are preserved
+- Ordering limitation: OpenAI responses deliver text and `tool_calls` separately; the engine appends text content first and then tool-use blocks to maintain a consistent V2 structure
 
 **Anthropic Format**
 
@@ -83,6 +85,7 @@ type ContentBlock =
 - Converts to function call format
 - Parameter mapping to Google's schema requirements
 - Handles response format differences
+- Ordering limitation: Google responses expose text and function calls separately; the engine appends text content before synthesized tool-use blocks to preserve contract
 
 ### Bidirectional Conversion
 

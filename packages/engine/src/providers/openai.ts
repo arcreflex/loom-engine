@@ -45,7 +45,10 @@ export class OpenAIProvider implements IProvider {
    * @param request - The request parameters
    * @returns A Promise resolving to the provider's response
    */
-  async generate(request: ProviderRequest): Promise<ProviderResponse> {
+  async generate(
+    request: ProviderRequest,
+    signal?: AbortSignal
+  ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'OpenAI API key is required. Provide it explicitly or set OPENAI_API_KEY environment variable.'
@@ -53,6 +56,14 @@ export class OpenAIProvider implements IProvider {
     }
 
     try {
+      if (signal?.aborted) {
+        const reason =
+          signal.reason instanceof Error
+            ? signal.reason
+            : new Error('OpenAI request aborted');
+        throw reason;
+      }
+
       const openai = new OpenAI({
         apiKey: this.apiKey,
         baseURL: this.baseURL
@@ -196,7 +207,9 @@ export class OpenAIProvider implements IProvider {
       } as const;
 
       this.logger.log('OpenAI request:\n' + JSON.stringify(req, null, 2));
-      const response = await openai.chat.completions.create(req);
+      const response = await openai.chat.completions.create(req, {
+        signal
+      });
       this.logger.log('OpenAI response:\n' + JSON.stringify(response, null, 2));
 
       const choice = response.choices[0];
@@ -248,6 +261,13 @@ export class OpenAIProvider implements IProvider {
         rawResponse: response
       };
     } catch (error) {
+      if (signal?.aborted) {
+        const reason =
+          signal.reason instanceof Error
+            ? signal.reason
+            : new Error('OpenAI request aborted');
+        throw reason;
+      }
       // Handle API errors
       const errorMessage =
         error instanceof Error

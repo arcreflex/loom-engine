@@ -14,7 +14,7 @@ The GUI aims for a calm, fast, and legible terminal‑inspired feel. Visuals are
 
 ## Views
 
-- HomeView: Bookmarks, roots list, and multi‑root graph with hover previews
+- HomeView: Bookmarks, recent leaves (`listRecentLeaves`), roots list, and multi‑root graph with hover previews
 - NodeView: Conversation context, child navigator, graph, tools, input
 - GraphView: React Flow + Dagre layout for conversation trees
 
@@ -93,14 +93,18 @@ The GUI aims for a calm, fast, and legible terminal‑inspired feel. Visuals are
 
 ## Generation & Streaming
 
-- SSE: Discrete status updates with complete nodes (no token‑level streaming); subscription is set up when a node is pending generation and cleaned up on navigation
-- Auto‑navigation: On SSE completion, if exactly one child was added, auto‑navigate to it; otherwise reload current node state
+- Engine session API: The backend invokes `generateStream()` and fans its events out over SSE/websocket. Respect the event order (`provider_request` → `provider_response` → `assistant_node` → optional `tool_result_node` → `done`/`error`).
+- Cancellation: The UI should expose a cancel affordance that either calls `session.abort(reason)` or aborts the associated `AbortController`, surfacing a `GenerationAbortedError` event to subscribers.
+- Auto‑navigation: On completion, if exactly one child was added, auto‑navigate to it; otherwise reload current node state
 - Pending placeholder: When generating, ContextView shows an animated “…” placeholder at the end
 
 ## Server contracts surfaced in UI
 
 - Token estimate: Node responses include an approximate contextTokens count for display
 - Append/Edit validation: Server only accepts text content for append/edit; tool‑use blocks and empty content are rejected with explicit errors
+- Tree traversal: Use `getSubtree(nodeId, { depth })` to hydrate node panes efficiently; reserve `getAllNodeStructures()` for diagnostics/graph view fallbacks.
+- Recents: `listRecentLeaves(limit)` powers “Recent” menus without a full tree traversal.
+- Bookmarks: `listBookmarks()`, `addBookmark(nodeId, title)`, `removeBookmark(nodeId)` are the supported bookmark primitives; avoid touching config.toml directly.
 
 ## Core Flows
 

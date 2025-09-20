@@ -11,7 +11,9 @@ import type {
   NodeData,
   Node
 } from './types.ts'; // Adjust path as needed
+import type { ProviderRequest } from './providers/types.ts';
 import { normalizeMessage } from './content-blocks.ts';
+import { ToolsOnlySupportNSingletonError } from './errors.ts';
 
 describe('LoomEngine', () => {
   let engine: LoomEngine;
@@ -338,36 +340,42 @@ describe('LoomEngine', () => {
         'Provider called once'
       );
       // Ensure provider receives 2 messages (assistant coalesced)
-      const firstCall = mockProviderInstance.generate.mock.calls[0]
-        .arguments[0] as any;
-      assert.strictEqual(firstCall.messages.length, 2);
+      const callArgs = mockProviderInstance.generate.mock.calls[0].arguments;
+      const [requestArg, signalArg] = callArgs as [
+        ProviderRequest,
+        AbortSignal
+      ];
+      assert(
+        signalArg instanceof AbortSignal,
+        'AbortSignal provided to provider'
+      );
+      assert.strictEqual(requestArg.messages.length, 2);
 
       assert.deepEqual(
-        mockProviderInstance.generate.mock.calls[0].arguments,
-        [
-          {
-            systemMessage: 'system message',
-            messages: [
-              {
-                role: 'user',
-                content: [{ type: 'text', text: 'Write a poem' }]
-              },
-              {
-                role: 'assistant',
-                content: [
-                  { type: 'text', text: 'The first line is finished later.' }
-                ]
-              }
-            ],
-            model: 'gpt-4',
-            parameters: {
-              max_tokens: 100,
-              temperature: 0.7,
-              model: 'gpt-4'
+        requestArg,
+        {
+          systemMessage: 'system message',
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'Write a poem' }]
             },
-            tools: undefined
-          }
-        ],
+            {
+              role: 'assistant',
+              content: [
+                { type: 'text', text: 'The first line is finished later.' }
+              ]
+            }
+          ],
+          model: 'gpt-4',
+          parameters: {
+            max_tokens: 100,
+            temperature: 0.7,
+            model: 'gpt-4'
+          },
+          tools: undefined,
+          tool_choice: undefined
+        },
         'Provider called with coalesced adjacent assistant V2 messages'
       );
 
@@ -501,6 +509,33 @@ describe('LoomEngine', () => {
         mockProviderInstance.generate.mock.callCount(),
         1,
         'Provider was called once'
+      );
+    });
+
+    it('throws a ToolsOnlySupportNSingletonError when requesting multiple tool generations', async () => {
+      const root = createTestRoot('r6-tools', { systemPrompt: 'test' });
+      const providerName: ProviderName = 'openai';
+      const modelName = 'gpt-4';
+      const userMessages: MessageLegacy[] = [
+        { role: 'user', content: 'Use a tool' }
+      ];
+      const options = { n: 2, max_tokens: 100, temperature: 0.7 };
+      await assert.rejects(
+        () =>
+          engine.generate(
+            root.id,
+            providerName,
+            modelName,
+            userMessages.map(m => normalizeMessage(m)),
+            options,
+            ['echo']
+          ),
+        ToolsOnlySupportNSingletonError
+      );
+      assert.strictEqual(
+        mockProviderInstance.generate.mock.callCount(),
+        0,
+        'Provider not called when n>1 with tools'
       );
     });
 

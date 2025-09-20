@@ -29,6 +29,7 @@ The data directory (default `~/.loom/`) contains:
   - `{ type: 'text', text: string }`
   - `{ type: 'tool-use', id: string, name: string, parameters: object }` (assistant only)
 - Tool result messages include `tool_call_id` referencing a prior `tool-use` block `id`.
+- Persisted nodes never contain legacy `tool_calls` arrays; any legacy files are normalized to the block format on read before being written back.
 
 ### Legacy Compatibility (forward-migration)
 
