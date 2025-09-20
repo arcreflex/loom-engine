@@ -8,9 +8,9 @@ importers:
 
   .:
     devDependencies:
-      '@arcreflex/agent-precommit':
-        specifier: ^1.0.13
-        version: 1.0.13(@types/node@22.17.0)(typescript@5.8.3)(ws@8.18.1)(zod@3.25.76)
+      '@arcreflex/ai-review':
+        specifier: ^1.0.15
+        version: 1.0.15(@types/node@22.17.0)(typescript@5.8.3)(ws@8.18.1)(zod@3.25.76)
       '@eslint/js':
         specifier: ^9.24.0
         version: 9.32.0
@@ -238,8 +238,8 @@ packages:
     resolution: {integrity: sha512-d4c+fg+xy9e46c8+YnrrgIQR45CZlAi7PwdzIfDXDM6ACxEZli1/fxhURsq30ZpMZy6LvSkr41jGq5aF5TD7rQ==}
     hasBin: true
 
-  '@arcreflex/agent-precommit@1.0.13':
-    resolution: {integrity: sha512-FZp5iLybweZ6HYAQdJS5/Yp1+vj86LjXivGNtMqtGkiii0fk6JSkJIUwRTZ2WhYXtQk1MOi0yBJT2jKyOEaCAA==}
+  '@arcreflex/ai-review@1.0.15':
+    resolution: {integrity: sha512-B0af0tHVcqMUt1ylUtSBG11YG2Uf6Pie9Y5d+gD2ctfkI/jcVxcFubVPA/4mdlEKT3N5j3YAPJh6wgN/mwpARA==}
     hasBin: true
 
   '@asamuzakjp/css-color@3.2.0':
@@ -2842,8 +2842,8 @@ packages:
       zod:
         optional: true
 
-  openai@5.12.2:
-    resolution: {integrity: sha512-xqzHHQch5Tws5PcKR2xsZGX9xtch+JQFz5zb14dGqlshmmDAFBFEWmeIpf7wVqWV+w7Emj7jRgkNJakyKE0tYQ==}
+  openai@5.22.0:
+    resolution: {integrity: sha512-uSsYZ+vw9JxUwnMTcT9bj5sGM5qY/4du2BIf1KSqDRZF9nhSlJYsBLPRwBZTOW+HNyjwGviR0SsoDPv5lpPrBw==}
     hasBin: true
     peerDependencies:
       ws: ^8.18.0
@@ -3903,8 +3903,8 @@ packages:
   zwitch@2.0.4:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
-  zx@8.8.0:
-    resolution: {integrity: sha512-v0VZXgSHusDvTtZROno3Ws8xkE1uNSSwH/yF8Fm+ZwBrYhr+bRNNpsnTJ32eR/t6umc7lAz5WqdP800ugW9zFA==}
+  zx@8.8.2:
+    resolution: {integrity: sha512-JuCw+diiuDihAtDC/ClDjaP3spsOxfFAMWrSa+esdU+YnBwYGuFef+B127zQ3x2FHOFULQ4NbaX/95d5260eYQ==}
     engines: {node: '>= 12.17.0'}
     hasBin: true
 
@@ -3921,11 +3921,11 @@ snapshots:
 
   '@anthropic-ai/sdk@0.52.0': {}
 
-  '@arcreflex/agent-precommit@1.0.13(@types/node@22.17.0)(typescript@5.8.3)(ws@8.18.1)(zod@3.25.76)':
+  '@arcreflex/ai-review@1.0.15(@types/node@22.17.0)(typescript@5.8.3)(ws@8.18.1)(zod@3.25.76)':
     dependencies:
-      openai: 5.12.2(ws@8.18.1)(zod@3.25.76)
+      openai: 5.22.0(ws@8.18.1)(zod@3.25.76)
       ts-node: 10.9.2(@types/node@22.17.0)(typescript@5.8.3)
-      zx: 8.8.0
+      zx: 8.8.2
     transitivePeerDependencies:
       - '@swc/core'
       - '@swc/wasm'
@@ -6927,7 +6927,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
 
-  openai@5.12.2(ws@8.18.1)(zod@3.25.76):
+  openai@5.22.0(ws@8.18.1)(zod@3.25.76):
     optionalDependencies:
       ws: 8.18.1
       zod: 3.25.76
@@ -8042,4 +8042,4 @@ snapshots:
 
   zwitch@2.0.4: {}
 
-  zx@8.8.0: {}
+  zx@8.8.2: {}
