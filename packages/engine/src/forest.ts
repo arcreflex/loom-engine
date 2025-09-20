@@ -195,6 +195,132 @@ export class Forest {
     return this.store.findNodes({ parentId: node.id, rootId });
   }
 
+  async getSubtree(
+    startNodeId: NodeId,
+    options?: { depth?: number }
+  ): Promise<{
+    root: RootData;
+    nodes: Array<
+      Pick<
+        NodeData,
+        'id' | 'parent_id' | 'child_ids' | 'message' | 'metadata' | 'root_id'
+      >
+    >;
+  }> {
+    const depthLimit = options?.depth;
+    if (depthLimit !== undefined && depthLimit < 0) {
+      throw new Error('Depth must be non-negative when provided.');
+    }
+
+    let startNode: NodeData | null = null;
+    try {
+      startNode = await this.store.loadNodeStrict(startNodeId);
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        !error.message.includes('loadNodeStrict called with root ID')
+      ) {
+        throw error;
+      }
+    }
+
+    let root: RootData | null = null;
+    const queue: Array<{ id: NodeId; depth: number }> = [];
+    const visited = new Set<NodeId>();
+
+    if (startNode) {
+      root = await this.store.loadRootInfo(startNode.root_id);
+      if (!root) {
+        throw new Error(`Root not found for node ${startNodeId}`);
+      }
+      queue.push({ id: startNode.id, depth: 0 });
+    } else {
+      root = await this.store.loadRootInfo(startNodeId as RootId);
+      if (!root) {
+        throw new Error(`Node not found: ${startNodeId}`);
+      }
+      if (depthLimit === 0) {
+        return { root, nodes: [] };
+      }
+      for (const childId of root.child_ids) {
+        queue.push({ id: childId, depth: 1 });
+      }
+    }
+
+    const collected: Array<
+      Pick<
+        NodeData,
+        'id' | 'parent_id' | 'child_ids' | 'message' | 'metadata' | 'root_id'
+      >
+    > = [];
+
+    while (queue.length > 0) {
+      const { id, depth } = queue.shift()!;
+      if (visited.has(id)) {
+        continue;
+      }
+      visited.add(id);
+
+      if (depthLimit !== undefined && depth > depthLimit) {
+        continue;
+      }
+
+      const node = await this.store.loadNodeStrict(id);
+      if (!node) {
+        continue;
+      }
+
+      collected.push({
+        id: node.id,
+        parent_id: node.parent_id,
+        child_ids: [...node.child_ids],
+        message: node.message,
+        metadata: node.metadata,
+        root_id: node.root_id
+      });
+
+      if (depthLimit !== undefined && depth >= depthLimit) {
+        continue;
+      }
+
+      for (const childId of node.child_ids) {
+        queue.push({ id: childId, depth: depth + 1 });
+      }
+    }
+
+    return { root: root!, nodes: collected };
+  }
+
+  async listRecentLeaves(limit: number): Promise<NodeData[]> {
+    if (limit <= 0) {
+      return [];
+    }
+
+    const structures = await this.store.listAllNodeStructures();
+    const leaves = structures
+      .filter(
+        struct => struct.parent_id !== null && struct.child_ids.length === 0
+      )
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+      .slice(0, limit);
+
+    const result: NodeData[] = [];
+    for (const leaf of leaves) {
+      try {
+        const node = await this.store.loadNodeStrict(leaf.id);
+        if (node) {
+          result.push(node);
+        }
+      } catch (error) {
+        this.store.log(
+          `[Forest] Failed to load node ${leaf.id} while listing leaves: ${error}`
+        );
+      }
+    }
+
+    return result;
+  }
+
   async getSiblings(nodeId: NodeId): Promise<NodeData[]> {
     // Get the node
     const node = await this.store.loadNode(nodeId);

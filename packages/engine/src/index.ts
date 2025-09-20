@@ -52,3 +52,4 @@ import * as providers from './providers/index.ts';
 export { providers };
 export * from './providers/known-models.ts';
 export { parseModelString } from './parse-model-string.ts';
+export { tailEngineLog, type LogTail, logPath } from './log.ts';

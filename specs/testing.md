@@ -62,7 +62,7 @@ Packages use different runners suited to their environment:
 - Unit tests mock external dependencies for speed and determinism.
 - Integration tests mock network boundaries, not internal logic.
 - Choose realistic responses and include error paths.
-- SSE: prefer discrete event simulation over token‑level streaming in tests.
+- SSE/streaming: prefer discrete event simulation using the `GenerateEvent` iterator instead of token‑level streaming mocks.
 
 ## Async & Concurrency
 

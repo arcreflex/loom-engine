@@ -26,19 +26,27 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 
 ### LoomEngine Capabilities
 
-**Core Operations**: Generate with n>1 fanout and tool-calling recursion; edit nodes with bookmark management; message retrieval for V2 context construction.
+**Core Operations**: Streaming generation sessions with optional cancellation; legacy `generate()` built atop streaming; edit nodes with bookmark management; message retrieval for V2 context construction.
 
-**Guarantees**: Conservative token limit clamping; coalesces adjacent same-role messages when safe (text-only blocks); surfaces provider/tool errors; appends results with model/tool metadata; V2-only message flows end-to-end.
+**Guarantees**: Conservative token limit clamping; coalesces adjacent same-role messages when safe (text-only blocks); surfaces provider/tool errors as session `error` events; appends results with model/tool metadata; V2-only message flows end-to-end.
 
 ### Key Behaviors
 
 - **Generation flow**: Context construction → provider call → tool execution loop → result appending
-- **Multi-completion**: Parallel generation using Promise.all for n>1 requests
+- **Multi-completion**: Sequential provider calls for each completion (still reusing shared context)
 - **Tool calling constraint**: When tools are active, multiple completions are not supported
 - **Token estimation**: Character-based heuristic with model capability clamping
-- **Tool recursion**: GenerateResult.next enables streaming tool execution to UI
+- **Tool recursion**: Streaming iterator emits tool results and final assistant responses; `generate()` resolves via the same session
 - **Bookmark integration**: editNode moves bookmarks when creating new nodes
 - **Append filtering**: Drop messages that contain only empty text content; allow assistant messages with `tool-use` blocks even with no text
+
+### Streaming & Cancellation
+
+- **GenerateSession**: `generateStream()` returns `{ id, abort, [Symbol.asyncIterator]() }`. Only a single iterator is supported per session.
+- **Event order**: Each provider call emits `provider_request` → `provider_response` → `assistant_node`. Tool execution emits a `tool_result_node` per appended tool result. Terminal states are either `done` (with final node list) or `error` (with an Error instance).
+- **Cancellation**: An optional `AbortSignal` can be provided to `generateStream()` and adapters. Calling `session.abort(reason)` or aborting the signal resolves the in-flight provider call (where supported) and results in a single `error` event carrying a `GenerationAbortedError` (or adapter-specific Abort error).
+- **Legacy API**: `generate()` consumes the streaming session internally to maintain backwards compatibility.
+- **Tool loop guard**: `GenerateOptions.maxToolIterations` (default 5) bounds recursive tool-calling. Exceeding the limit yields an `error` event with `ToolIterationLimitExceededError`.
 
 ### Provider Orchestration
 
@@ -72,20 +80,19 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 
 #### Multi-completion Generation (n>1)
 
-1. Prepare shared message context
-2. Make parallel provider API calls using Promise.all
-3. Collect multiple response variants
-4. Create separate branches for each completion
-5. Return array of generated nodes
+1. Prepare shared message context once
+2. Sequentially call the provider per completion, reusing the context
+3. Append each completion as its own branch
+4. Emit an `assistant_node` event for every appended node and collect them in the final `done` event
+5. Return array of generated nodes (legacy `generate()` collects the final nodes from streaming)
 
 #### Tool-calling Generation
 
 1. Include tool definitions in provider request
 2. Receive assistant message possibly containing `tool-use` blocks
-3. Execute each tool-use block through ToolRegistry
+3. Execute each tool-use block through ToolRegistry (events emitted per tool result)
 4. Append tool results to conversation
-5. Recurse with tool results included in context
-6. Continue until no more tool-use blocks are generated
+5. Recurse with tool results included in context until either no tool-use blocks remain or `maxToolIterations` is reached
 
 ### Model Capabilities Management
 

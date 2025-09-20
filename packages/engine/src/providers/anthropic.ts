@@ -42,7 +42,10 @@ export class AnthropicProvider implements IProvider {
    * @param request - The request parameters
    * @returns A Promise resolving to the provider's response
    */
-  async generate(request: ProviderRequest): Promise<ProviderResponse> {
+  async generate(
+    request: ProviderRequest,
+    signal?: AbortSignal
+  ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Anthropic API key is required. Provide it explicitly or set ANTHROPIC_API_KEY environment variable.'
@@ -50,6 +53,14 @@ export class AnthropicProvider implements IProvider {
     }
 
     try {
+      if (signal?.aborted) {
+        const reason =
+          signal.reason instanceof Error
+            ? signal.reason
+            : new Error('Anthropic request aborted');
+        throw reason;
+      }
+
       const anthropic = new Anthropic({
         apiKey: this.apiKey,
         baseURL: this.baseURL,
@@ -209,7 +220,7 @@ export class AnthropicProvider implements IProvider {
 
       this.logger.log('Anthropic request:\n' + JSON.stringify(req, null, 2));
 
-      const response = await anthropic.messages.create(req);
+      const response = await anthropic.messages.create(req, { signal });
 
       this.logger.log(
         'Anthropic response:\n' + JSON.stringify(response, null, 2)
@@ -255,6 +266,13 @@ export class AnthropicProvider implements IProvider {
         rawResponse: response
       };
     } catch (error) {
+      if (signal?.aborted) {
+        const reason =
+          signal.reason instanceof Error
+            ? signal.reason
+            : new Error('Anthropic request aborted');
+        throw reason;
+      }
       // Handle API errors
       const errorMessage =
         error instanceof Error

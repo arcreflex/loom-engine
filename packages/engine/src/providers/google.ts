@@ -44,7 +44,10 @@ export class GoogleProvider implements IProvider {
    * @param request - The request parameters
    * @returns A Promise resolving to the provider's response
    */
-  async generate(request: ProviderRequest): Promise<ProviderResponse> {
+  async generate(
+    request: ProviderRequest,
+    signal?: AbortSignal
+  ): Promise<ProviderResponse> {
     // Map to track tool-use ID to function name for tool results
     const toolIdToName = new Map<string, string>();
     // Track function names to detect collisions
@@ -57,6 +60,14 @@ export class GoogleProvider implements IProvider {
     }
 
     try {
+      if (signal?.aborted) {
+        const reason =
+          signal.reason instanceof Error
+            ? signal.reason
+            : new Error('Google request aborted');
+        throw reason;
+      }
+
       // Prepare messages, including system message if provided
       const messages: Content[] = [];
 
@@ -266,6 +277,13 @@ export class GoogleProvider implements IProvider {
         rawResponse: response
       };
     } catch (error) {
+      if (signal?.aborted) {
+        const reason =
+          signal.reason instanceof Error
+            ? signal.reason
+            : new Error('Google request aborted');
+        throw reason;
+      }
       // Handle API errors
       const errorMessage =
         error instanceof Error
