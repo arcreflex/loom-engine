@@ -13,15 +13,17 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4.1.0
+        with:
+          standalone: true
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install pnpm
-        run: corepack prepare pnpm@9 --activate
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -36,15 +38,17 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4.1.0
+        with:
+          standalone: true
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install pnpm
-        run: corepack prepare pnpm@9 --activate
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -59,15 +63,17 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4.1.0
+        with:
+          standalone: true
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
-
-      - name: Install pnpm
-        run: corepack prepare pnpm@9 --activate
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
