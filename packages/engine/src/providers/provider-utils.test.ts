@@ -6,7 +6,7 @@ import {
   extractToolUseBlocks
 } from './provider-utils.ts';
 import { ToolArgumentParseError } from '../content-blocks.ts';
-import { UnexpectedToolCallTypeError } from './errors.ts';
+import { UnexpectedToolCallTypeError } from '../errors.ts';
 //
 
 describe('provider-utils', () => {

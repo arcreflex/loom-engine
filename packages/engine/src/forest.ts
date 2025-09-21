@@ -4,7 +4,7 @@ import {
   type NodeId,
   type RootId,
   type RootConfig,
-  type MessageV2,
+  type Message,
   type LegacyMessage,
   type RootData,
   type NodeMetadata,
@@ -122,7 +122,7 @@ export class Forest {
    */
   async getMessages(
     nodeId: NodeId
-  ): Promise<{ root: RootData; messages: MessageV2[] }> {
+  ): Promise<{ root: RootData; messages: Message[] }> {
     const { root, path } = await this.getPath({ from: undefined, to: nodeId });
     return { root, messages: path.map(n => n.message) };
   }
@@ -219,7 +219,7 @@ export class Forest {
   async append(
     parentId: NodeId,
     /** The node id at which to start matching. */
-    messages: Array<MessageV2 | LegacyMessage>,
+    messages: Array<Message | LegacyMessage>,
     /** The metadata to attach if we create a node */
     metadata: Omit<NodeMetadata, 'timestamp' | 'original_root_id'>
   ): Promise<Node> {
@@ -230,7 +230,7 @@ export class Forest {
 
   private async appendUnsafe(
     parentId: NodeId,
-    messages: Array<MessageV2 | LegacyMessage>,
+    messages: Array<Message | LegacyMessage>,
     metadata: Omit<NodeMetadata, 'timestamp' | 'original_root_id'>
   ): Promise<Node> {
     const parentNode = await this.store.loadNode(parentId);
@@ -239,8 +239,8 @@ export class Forest {
     }
 
     // Convert to V2 and drop if empty after normalization-for-comparison
-    const v2Messages: MessageV2[] = [];
-    for (const m of messages as Array<MessageV2 | LegacyMessage>) {
+    const v2Messages: Message[] = [];
+    for (const m of messages as Array<Message | LegacyMessage>) {
       try {
         const v2 = normalizeMessage(m);
         if (normalizeForComparison(v2) !== null) {
@@ -275,7 +275,7 @@ export class Forest {
       // Skip messages that normalize to empty for comparison
       const currentMessage = v2Messages[messageIndex];
       const normalizedCurrent = normalizeForComparison(
-        normalizeMessage(currentMessage as MessageV2 | LegacyMessage)
+        normalizeMessage(currentMessage as Message | LegacyMessage)
       );
       if (!normalizedCurrent) {
         messageIndex++;
@@ -307,7 +307,7 @@ export class Forest {
 
     // Create new nodes for the remaining messages
     const timestamp = new Date().toISOString();
-    const remainingMessages: MessageV2[] = v2Messages.slice(messageIndex);
+    const remainingMessages: Message[] = v2Messages.slice(messageIndex);
     let head = await this.store.loadNode(currentParentId);
     if (!head) {
       throw new Error(`Current parent node not found: ${currentParentId}`);
@@ -605,7 +605,7 @@ export class Forest {
           content: [
             { type: 'text', text: newContent }
           ] as NonEmptyArray<TextBlock>
-        } as MessageV2;
+        } as Message;
         // Mark this edit's source.
         nodeToEdit.metadata.source_info = { type: 'user' };
         await this.store.saveNode(nodeToEdit);
@@ -641,7 +641,7 @@ export class Forest {
       // 3. Append the remainder of the new content.
       const newSuffix = newContent.slice(lcpLength);
       if (newSuffix.length > 0) {
-        const newMessage: MessageV2 = {
+        const newMessage: Message = {
           role: v2ForEditCheck.role,
           content: [
             { type: 'text', text: newSuffix }

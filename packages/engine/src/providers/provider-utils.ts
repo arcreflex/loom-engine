@@ -1,6 +1,6 @@
 import type { ToolUseBlock } from '../types.ts';
 import { ToolArgumentParseError } from '../content-blocks.ts';
-import { UnexpectedToolCallTypeError } from './errors.ts';
+import { UnexpectedToolCallTypeError } from '../errors.ts';
 import {
   extractTextContent,
   extractToolUseBlocks

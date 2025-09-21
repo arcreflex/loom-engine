@@ -11,7 +11,7 @@ import {
   RootId,
   type ProviderName,
   GenerateResult,
-  type MessageV2,
+  type Message,
   // Types for request validation
   type ContentBlock,
   type Role,
@@ -783,7 +783,7 @@ async function filterOutBookmarkedDescendants(
 
 // Token counting utility
 function estimateTokenCount(
-  messages: MessageV2[],
+  messages: Message[],
   systemPrompt?: string
 ): number {
   try {

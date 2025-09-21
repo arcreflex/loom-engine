@@ -1,10 +1,10 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import type {
-  AssistantMessage,
-  Message,
-  ToolMessage,
-  UserMessageV2,
+  LegacyAssistantMessage,
+  LegacyMessage,
+  LegacyToolMessage,
+  UserMessage,
   TextBlock,
   NonEmptyArray
 } from './types.ts';
@@ -294,7 +294,7 @@ describe('content-block conversion utilities', () => {
 
   describe('legacyToContentBlocks', () => {
     it('throws for tool messages', () => {
-      const toolMsg: ToolMessage = {
+      const toolMsg: LegacyToolMessage = {
         role: 'tool',
         content: 'result',
         tool_call_id: 'call-1'
@@ -306,14 +306,14 @@ describe('content-block conversion utilities', () => {
     });
 
     it('converts legacy user message with text to a single text block', () => {
-      const legacy: Message = { role: 'user', content: 'Hello' };
+      const legacy: LegacyMessage = { role: 'user', content: 'Hello' };
       const blocks = legacyToContentBlocks(legacy);
       assert.equal(blocks.length, 1);
       assert.deepEqual(blocks[0], { type: 'text', text: 'Hello' });
     });
 
     it('converts legacy assistant message with text and tool_calls to ordered blocks', () => {
-      const legacy: AssistantMessage = {
+      const legacy: LegacyAssistantMessage = {
         role: 'assistant',
         content: 'Run a calc',
         tool_calls: [
@@ -336,7 +336,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('throws ToolArgumentParseError for invalid JSON tool args', () => {
-      const legacy: AssistantMessage = {
+      const legacy: LegacyAssistantMessage = {
         role: 'assistant',
         content: null,
         tool_calls: [
@@ -365,7 +365,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('allows empty string tool arguments as empty object', () => {
-      const legacy: AssistantMessage = {
+      const legacy: LegacyAssistantMessage = {
         role: 'assistant',
         content: 'test',
         tool_calls: [
@@ -386,7 +386,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('treats whitespace-only tool arguments as empty object', () => {
-      const legacy: AssistantMessage = {
+      const legacy: LegacyAssistantMessage = {
         role: 'assistant',
         content: 'test',
         tool_calls: [
@@ -407,13 +407,13 @@ describe('content-block conversion utilities', () => {
     });
 
     it('throws for empty content with no tool calls', () => {
-      const legacy: Message = { role: 'user', content: '' };
+      const legacy: LegacyMessage = { role: 'user', content: '' };
       assert.throws(
         () => legacyToContentBlocks(legacy),
         /Cannot convert legacy user message to V2: no content blocks generated/
       );
 
-      const assistantEmpty: AssistantMessage = {
+      const assistantEmpty: LegacyAssistantMessage = {
         role: 'assistant',
         content: null,
         tool_calls: []
@@ -425,13 +425,16 @@ describe('content-block conversion utilities', () => {
     });
 
     it('treats whitespace-only content as empty and throws', () => {
-      const userWhitespace: Message = { role: 'user', content: '   \n\t  ' };
+      const userWhitespace: LegacyMessage = {
+        role: 'user',
+        content: '   \n\t  '
+      };
       assert.throws(
         () => legacyToContentBlocks(userWhitespace),
         /Cannot convert legacy user message to V2: no content blocks generated/
       );
 
-      const toolWhitespace: ToolMessage = {
+      const toolWhitespace: LegacyToolMessage = {
         role: 'tool',
         content: '  \t  ',
         tool_call_id: 'call-1'
@@ -443,7 +446,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('converts assistant with only tool_calls and null content', () => {
-      const legacy: AssistantMessage = {
+      const legacy: LegacyAssistantMessage = {
         role: 'assistant',
         content: null,
         tool_calls: [
@@ -460,7 +463,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('throws ToolArgumentParseError for tool arguments that are arrays', () => {
-      const legacy: AssistantMessage = {
+      const legacy: LegacyAssistantMessage = {
         role: 'assistant',
         content: null,
         tool_calls: [
@@ -485,7 +488,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('preserves original text while rejecting empty after trim', () => {
-      const legacy: Message = { role: 'user', content: '  Hello  ' };
+      const legacy: LegacyMessage = { role: 'user', content: '  Hello  ' };
       const blocks = legacyToContentBlocks(legacy);
       assert.equal(blocks.length, 1);
       // Original content is preserved (with whitespace)
@@ -493,7 +496,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('handles assistant with whitespace-only content and valid tool_calls', () => {
-      const legacy: AssistantMessage = {
+      const legacy: LegacyAssistantMessage = {
         role: 'assistant',
         content: '   ',
         tool_calls: [
@@ -511,7 +514,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('throws for tool calls with empty id', () => {
-      const legacy: AssistantMessage = {
+      const legacy: LegacyAssistantMessage = {
         role: 'assistant',
         content: 'test',
         tool_calls: [
@@ -529,7 +532,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('throws for tool calls with whitespace-only name', () => {
-      const legacy: AssistantMessage = {
+      const legacy: LegacyAssistantMessage = {
         role: 'assistant',
         content: 'test',
         tool_calls: [
@@ -547,7 +550,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('throws ToolArgumentParseError for tool arguments that are null', () => {
-      const legacy: AssistantMessage = {
+      const legacy: LegacyAssistantMessage = {
         role: 'assistant',
         content: null,
         tool_calls: [
@@ -574,7 +577,7 @@ describe('content-block conversion utilities', () => {
 
   describe('normalizeMessage', () => {
     it('returns V2 messages unchanged if valid', () => {
-      const v2: UserMessageV2 = {
+      const v2: UserMessage = {
         role: 'user',
         content: [{ type: 'text', text: 'hello' }] as NonEmptyArray<TextBlock>
       };
@@ -582,7 +585,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('normalizes legacy tool message to V2 with text block and tool_call_id', () => {
-      const legacy: ToolMessage = {
+      const legacy: LegacyToolMessage = {
         role: 'tool',
         content: '42',
         tool_call_id: 'call-1'
@@ -595,7 +598,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('throws for tool message with empty content', () => {
-      const legacy: ToolMessage = {
+      const legacy: LegacyToolMessage = {
         role: 'tool',
         content: '',
         tool_call_id: 'call-1'
@@ -607,7 +610,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('throws for tool message with whitespace-only content', () => {
-      const legacy: ToolMessage = {
+      const legacy: LegacyToolMessage = {
         role: 'tool',
         content: '   \n\t  ',
         tool_call_id: 'call-1'
@@ -641,13 +644,13 @@ describe('content-block conversion utilities', () => {
     });
 
     it('throws for user message with empty content', () => {
-      const legacy: Message = { role: 'user', content: '' };
+      const legacy: LegacyMessage = { role: 'user', content: '' };
       assert.throws(
         () => normalizeMessage(legacy),
         /Cannot convert legacy user message to V2: no content blocks generated/
       );
 
-      const whitespace: Message = { role: 'user', content: '  \t\n  ' };
+      const whitespace: LegacyMessage = { role: 'user', content: '  \t\n  ' };
       assert.throws(
         () => normalizeMessage(whitespace),
         /Cannot convert legacy user message to V2: no content blocks generated/
@@ -655,7 +658,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('throws for assistant message with empty content and no tool calls', () => {
-      const emptyAssistant: AssistantMessage = {
+      const emptyAssistant: LegacyAssistantMessage = {
         role: 'assistant',
         content: '',
         tool_calls: []
@@ -665,7 +668,7 @@ describe('content-block conversion utilities', () => {
         /Cannot convert legacy assistant message to V2: no content blocks generated/
       );
 
-      const whitespaceAssistant: AssistantMessage = {
+      const whitespaceAssistant: LegacyAssistantMessage = {
         role: 'assistant',
         content: '   ',
         tool_calls: []
@@ -677,7 +680,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('propagates ToolArgumentParseError from legacyToContentBlocks', () => {
-      const legacy: AssistantMessage = {
+      const legacy: LegacyAssistantMessage = {
         role: 'assistant',
         content: 'test',
         tool_calls: [
@@ -693,11 +696,11 @@ describe('content-block conversion utilities', () => {
 
     it('validates normalized messages against isMessageV2', () => {
       // This would only fail if our normalization logic creates invalid V2
-      const validUser: Message = { role: 'user', content: 'test' };
+      const validUser: LegacyMessage = { role: 'user', content: 'test' };
       const normalizedUser = normalizeMessage(validUser);
       assert.ok(isMessageV2(normalizedUser));
 
-      const validAssistant: AssistantMessage = {
+      const validAssistant: LegacyAssistantMessage = {
         role: 'assistant',
         content: 'response',
         tool_calls: [
@@ -713,7 +716,7 @@ describe('content-block conversion utilities', () => {
     });
 
     it('normalizes assistant legacy message with null content and only tool_calls', () => {
-      const legacy: AssistantMessage = {
+      const legacy: LegacyAssistantMessage = {
         role: 'assistant',
         content: null,
         tool_calls: [

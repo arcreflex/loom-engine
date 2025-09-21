@@ -40,12 +40,12 @@ export type Role = 'user' | 'assistant' | 'tool';
 
 export type ProviderName = 'openai' | 'anthropic' | 'google' | 'openrouter';
 
-export interface UserMessage {
+export interface LegacyUserMessage {
   role: 'user';
   content: string | null;
 }
 
-export interface AssistantMessage {
+export interface LegacyAssistantMessage {
   role: 'assistant';
   content: string | null;
   tool_calls?: {
@@ -58,43 +58,40 @@ export interface AssistantMessage {
   }[];
 }
 
-export interface ToolMessage {
+export interface LegacyToolMessage {
   role: 'tool';
   content: string | null;
   tool_call_id: string;
 }
 
-export type Message = UserMessage | AssistantMessage | ToolMessage;
+export type LegacyMessage =
+  | LegacyUserMessage
+  | LegacyAssistantMessage
+  | LegacyToolMessage;
 
 // =====================
 // V2 message types (ContentBlock-based)
 // =====================
-export interface UserMessageV2 {
+export interface UserMessage {
   role: 'user';
   // User messages can only contain text blocks
   content: NonEmptyArray<TextBlock>;
 }
 
-export interface AssistantMessageV2 {
+export interface AssistantMessage {
   role: 'assistant';
   // Assistant messages can contain both text and tool-use blocks
   content: NonEmptyArray<ContentBlock>;
 }
 
-export interface ToolMessageV2 {
+export interface ToolMessage {
   role: 'tool';
   // Tool messages can only contain text blocks
   content: NonEmptyArray<TextBlock>;
   tool_call_id: string;
 }
 
-export type MessageV2 = UserMessageV2 | AssistantMessageV2 | ToolMessageV2;
-
-// Legacy aliases for clarity at call-sites during migration
-export type LegacyUserMessage = UserMessage;
-export type LegacyAssistantMessage = AssistantMessage;
-export type LegacyToolMessage = ToolMessage;
-export type LegacyMessage = Message;
+export type Message = UserMessage | AssistantMessage | ToolMessage;
 
 /**
  * Configuration for a conversation root.
@@ -184,7 +181,7 @@ export interface NodeData {
   child_ids: NodeId[];
 
   // Canonical message representation (V2 content blocks)
-  message: MessageV2;
+  message: Message;
 
   /** Metadata associated with this node. */
   metadata: NodeMetadata;

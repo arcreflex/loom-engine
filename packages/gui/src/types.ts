@@ -4,7 +4,7 @@ import {
   NodeId,
   ProviderName,
   // V2 content-block message types
-  MessageV2
+  Message
 } from '@ankhdt/loom-engine';
 
 export const PENDING_GENERATION = Symbol('PENDING_GENERATION');
@@ -21,7 +21,7 @@ export type GetNodeResponse = Node & {
   pendingGeneration?: { status: 'pending' | 'idle' };
 };
 
-export type DisplayMessage = MessageV2 & {
+export type DisplayMessage = Message & {
   nodeId: NodeId;
   timestamp?: string; // Add timestamp property
   sourceProvider?: ProviderName; // Provider used to generate this message (for assistant messages)

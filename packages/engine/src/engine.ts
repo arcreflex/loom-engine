@@ -10,17 +10,28 @@ import {
   type NodeData,
   type RootData
 } from './types.ts';
-import type { NonEmptyArray, TextBlock, MessageV2 } from './types.ts';
+import type {
+  NonEmptyArray,
+  TextBlock,
+  Message,
+  ToolUseBlock
+} from './types.ts';
 import { AnthropicProvider } from './providers/anthropic.ts';
 import { GoogleProvider } from './providers/google.ts';
 import { ToolRegistry } from './tools/registry.ts';
 import type { ConfigStore, Bookmark } from './config.ts';
 import { discoverMcpTools } from './mcp/client.ts';
 import { KNOWN_MODELS } from './browser.ts';
-import type { ProviderRequest } from './providers/types.ts';
+import type { IProvider, ProviderRequest } from './providers/types.ts';
 import { normalizeMessage } from './content-blocks.ts';
 import { getCodebaseContext } from './tools/introspect.ts';
 import { extractToolUseBlocks } from './providers/provider-utils.ts';
+import {
+  MaxToolIterationsExceededError,
+  ToolsOnlySupportNSingletonError,
+  throwIfAborted,
+  toError
+} from './errors.ts';
 // error classes no longer used directly here
 import {
   clampMaxTokens,
@@ -28,10 +39,17 @@ import {
   estimateInputTokens
 } from './engine-utils.ts';
 
+const DEFAULT_MAX_TOOL_ITERATIONS = 8;
+
+type GenerateStreamEvent =
+  | { type: 'assistant_node'; nodes: NodeData[]; hasMore: boolean }
+  | { type: 'tool_result_node'; nodes: NodeData[]; hasMore: boolean };
+
 export interface GenerateOptions {
   n: number;
   max_tokens: number;
   temperature: number;
+  maxToolIterations?: number;
 }
 
 export interface GenerateResult {
@@ -79,9 +97,10 @@ export class LoomEngine {
     rootId: RootId,
     providerName: ProviderName,
     modelName: string,
-    contextMessages: MessageV2[],
+    contextMessages: Message[],
     options: GenerateOptions,
-    activeTools?: string[]
+    activeTools?: string[],
+    signal?: AbortSignal
   ): Promise<GenerateResult> {
     const root = await this.forest.getRoot(rootId);
     if (!root) {
@@ -96,7 +115,10 @@ export class LoomEngine {
     };
 
     // Build V2 context and coalesce per spec
-    const v2Coalesced = coalesceTextOnlyAdjacent(contextMessages, '');
+    const normalizedContext = contextMessages.map(message =>
+      normalizeMessage(message)
+    );
+    const v2Coalesced = coalesceTextOnlyAdjacent(normalizedContext, '');
     const estimatedInputTokens = estimateInputTokens(
       v2Coalesced,
       root.config.systemPrompt
@@ -109,33 +131,49 @@ export class LoomEngine {
     );
 
     if (activeTools && activeTools.length > 0) {
-      // Tool-calling logic (only supports n=1)
       if (options.n > 1) {
-        throw new Error('Tool calling currently only supports n=1');
+        throw new ToolsOnlySupportNSingletonError(options.n);
       }
 
-      return this.toolCall(
+      const toolParameters = this.getToolParameters(activeTools);
+      const maxToolIterations =
+        options.maxToolIterations ?? DEFAULT_MAX_TOOL_ITERATIONS;
+
+      const stream = this.toolGenerateStream({
         root,
+        provider,
         providerName,
         modelName,
-        contextMessages,
+        messages: [...normalizedContext],
         parameters,
-        activeTools
-      );
+        toolParameters,
+        maxToolIterations,
+        signal
+      });
+
+      return this.consumeGenerateStream(stream);
     }
+
+    throwIfAborted(signal);
 
     const childNodes = await Promise.all(
       Array.from({ length: options.n }).map(async () => {
-        const response = await provider.generate({
-          systemMessage: root.config.systemPrompt,
-          messages: v2Coalesced,
-          model: modelName,
-          parameters,
-          tools: undefined
-        });
+        throwIfAborted(signal);
+        const response = await provider.generate(
+          {
+            systemMessage: root.config.systemPrompt,
+            messages: v2Coalesced,
+            model: modelName,
+            parameters,
+            tools: undefined,
+            tool_choice: undefined
+          },
+          signal
+        );
+        throwIfAborted(signal);
         const responseNode = await this.forest.append(
           root.id,
-          [...contextMessages, response.message],
+          [...normalizedContext, response.message],
           {
             source_info: {
               type: 'model',
@@ -187,140 +225,177 @@ export class LoomEngine {
     return {};
   }
 
-  private async toolCall(
-    root: RootData,
-    providerName: ProviderName,
-    modelName: string,
-    contextMessages: MessageV2[],
-    parameters: ProviderRequest['parameters'],
-    activeTools: string[]
+  private async consumeGenerateStream(
+    iterator: AsyncGenerator<GenerateStreamEvent>
   ): Promise<GenerateResult> {
-    // The conversation history for this turn
-    const messages: MessageV2[] = [...contextMessages];
-
-    const provider = this.getProvider(providerName);
-
-    // Limit to 5 iterations to prevent infinite loops
-    const v2Context: MessageV2[] = messages.map(m => normalizeMessage(m));
-    const v2Coalesced = coalesceTextOnlyAdjacent(v2Context, '');
-    const toolParameters = this.getToolParameters(activeTools);
-
-    const response = await provider.generate({
-      systemMessage: root.config.systemPrompt,
-      messages: v2Coalesced,
-      model: modelName,
-      parameters,
-      ...toolParameters
-    });
-
-    const assistantMessage = response.message;
-
-    // Append the assistant's response (which may or may not have tool calls)
-    const assistantNode = await this.forest.append(
-      root.id,
-      [...messages, assistantMessage],
-      {
-        source_info: {
-          type: 'model',
-          provider: providerName,
-          model_name: modelName,
-          parameters,
-          finish_reason: response.finish_reason,
-          usage: response.usage,
-          ...toolParameters
-        }
-      }
-    );
-
-    // Update the message history with the assistant's turn
-    messages.push(assistantMessage);
-
-    // Extract tool-use blocks from V2 response for robust correlation handling
-    const toolUse = extractToolUseBlocks(response.message.content) ?? [];
-    if (toolUse.length === 0) {
-      // If no tool calls, this is the final response.
-      return { childNodes: [assistantNode as NodeData] };
+    const { value, done } = await iterator.next();
+    if (done || !value) {
+      return { childNodes: [] };
     }
 
-    // --- If there are tool calls, execute them ---
-    const toolResults = await Promise.all(
-      toolUse.map(async toolBlock => {
-        try {
-          const result = await this.toolRegistry.execute(
-            toolBlock.name,
-            toolBlock.parameters
-          );
-          const v2 = {
-            role: 'tool' as const,
-            content: [
-              { type: 'text' as const, text: result }
-            ] as NonEmptyArray<TextBlock>,
-            tool_call_id: toolBlock.id
-          };
-          return v2;
-        } catch (error) {
-          const v2 = {
-            role: 'tool' as const,
-            content: [
-              {
-                type: 'text' as const,
-                text: JSON.stringify({ error: String(error) })
-              }
-            ] as NonEmptyArray<TextBlock>,
-            tool_call_id: toolBlock.id
-          };
-          return v2;
-        }
-      })
-    );
+    const result: GenerateResult = {
+      childNodes: value.nodes
+    };
 
-    // Append each tool result as a new node and update message history
+    if (value.hasMore) {
+      result.next = this.consumeGenerateStream(iterator);
+    }
 
-    let lastToolNode: NodeData | undefined;
-    for (const toolResultMessage of toolResults) {
-      const toolNode = await this.forest.append(
+    return result;
+  }
+
+  private async *toolGenerateStream({
+    root,
+    provider,
+    providerName,
+    modelName,
+    messages,
+    parameters,
+    toolParameters,
+    maxToolIterations,
+    signal
+  }: {
+    root: RootData;
+    provider: IProvider;
+    providerName: ProviderName;
+    modelName: string;
+    messages: Message[];
+    parameters: ProviderRequest['parameters'];
+    toolParameters: Pick<ProviderRequest, 'tools' | 'tool_choice'>;
+    maxToolIterations: number;
+    signal?: AbortSignal;
+  }): AsyncGenerator<GenerateStreamEvent> {
+    let iterations = 0;
+
+    while (true) {
+      throwIfAborted(signal);
+      const v2Context = coalesceTextOnlyAdjacent(
+        messages.map(message => normalizeMessage(message)),
+        ''
+      );
+
+      const response = await provider.generate(
+        {
+          systemMessage: root.config.systemPrompt,
+          messages: v2Context,
+          model: modelName,
+          parameters,
+          ...toolParameters
+        },
+        signal
+      );
+      throwIfAborted(signal);
+
+      const assistantNode = await this.forest.append(
         root.id,
-        [...messages, toolResultMessage],
+        [...messages, response.message],
         {
           source_info: {
-            type: 'tool_result',
-            tool_name:
-              toolUse.find(tb => tb.id === toolResultMessage.tool_call_id)
-                ?.name ?? 'unknown'
+            type: 'model',
+            provider: providerName,
+            model_name: modelName,
+            parameters,
+            finish_reason: response.finish_reason,
+            usage: response.usage,
+            ...toolParameters
           }
         }
       );
-      if (!toolNode.parent_id) {
+      if (!assistantNode.parent_id) {
         throw new Error(
           'Expected result of appending >0 nodes to be a non-root node.'
         );
       }
-      lastToolNode = toolNode;
 
-      messages.push(toolResultMessage);
-    }
-    if (!lastToolNode) {
-      return { childNodes: [assistantNode as NodeData] };
-    }
+      messages.push(response.message);
 
-    // Continue the loop to send the tool results back to the model
-    const next = this.toolCall(
-      root,
-      providerName,
-      modelName,
-      messages,
-      parameters,
-      activeTools
-    );
-    return {
-      childNodes: [lastToolNode],
-      next
-    };
+      const toolUse = extractToolUseBlocks(response.message.content) ?? [];
+      const hasToolUse = toolUse.length > 0;
+
+      yield {
+        type: 'assistant_node',
+        nodes: [assistantNode as NodeData],
+        hasMore: hasToolUse
+      };
+
+      if (!hasToolUse) {
+        return;
+      }
+
+      iterations += 1;
+      if (iterations > maxToolIterations) {
+        throw new MaxToolIterationsExceededError(maxToolIterations);
+      }
+
+      for (const toolBlock of toolUse) {
+        const toolResultMessage = await this.executeToolBlock(
+          toolBlock,
+          signal
+        );
+
+        const toolNode = await this.forest.append(
+          root.id,
+          [...messages, toolResultMessage],
+          {
+            source_info: {
+              type: 'tool_result',
+              tool_name: toolBlock.name ?? 'unknown'
+            }
+          }
+        );
+        if (!toolNode.parent_id) {
+          throw new Error(
+            'Expected result of appending >0 nodes to be a non-root node.'
+          );
+        }
+
+        messages.push(toolResultMessage);
+
+        yield {
+          type: 'tool_result_node',
+          nodes: [toolNode as NodeData],
+          hasMore: true
+        };
+      }
+    }
+  }
+
+  private async executeToolBlock(
+    toolBlock: ToolUseBlock,
+    signal?: AbortSignal
+  ): Promise<Message> {
+    throwIfAborted(signal);
+    try {
+      const result = await this.toolRegistry.execute(
+        toolBlock.name,
+        toolBlock.parameters
+      );
+      throwIfAborted(signal);
+      const text = typeof result === 'string' ? result : String(result);
+      return {
+        role: 'tool',
+        content: [{ type: 'text', text }] as NonEmptyArray<TextBlock>,
+        tool_call_id: toolBlock.id
+      } as Message;
+    } catch (error) {
+      throwIfAborted(signal);
+      const err = toError(error);
+      return {
+        role: 'tool',
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ error: err.message })
+          }
+        ] as NonEmptyArray<TextBlock>,
+        tool_call_id: toolBlock.id
+      } as Message;
+    }
   }
 
   async getMessages(
     nodeId: NodeId
-  ): Promise<{ root: RootConfig; messages: MessageV2[] }> {
+  ): Promise<{ root: RootConfig; messages: Message[] }> {
     const { root, messages } = await this.forest.getMessages(nodeId);
     return { root: root.config, messages };
   }

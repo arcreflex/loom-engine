@@ -1,6 +1,6 @@
 import type {
   ContentBlock,
-  MessageV2,
+  Message,
   NonEmptyArray,
   TextBlock
 } from './types.ts';
@@ -43,7 +43,7 @@ export function stableDeepEqual(a: unknown, b: unknown): boolean {
 }
 
 // Drop empty text blocks (trimmed) for comparison; return null if empty after filtering
-export function normalizeForComparison(message: MessageV2): MessageV2 | null {
+export function normalizeForComparison(message: Message): Message | null {
   if (message.role === 'tool') {
     const content = message.content
       .map(b => (b.type === 'text' ? trimTextBlock(b) : b))
@@ -81,12 +81,12 @@ function trimTextBlock(b: TextBlock): TextBlock {
 
 // Coalesce only adjacent text-only user/assistant messages. Never coalesce tool messages
 export function coalesceTextOnlyAdjacent(
-  messages: MessageV2[],
+  messages: Message[],
   separator = ''
-): MessageV2[] {
+): Message[] {
   if (messages.length === 0) return [];
 
-  const out: MessageV2[] = [];
+  const out: Message[] = [];
   for (const msg of messages) {
     const prev = out[out.length - 1];
     if (!prev) {
@@ -120,7 +120,7 @@ export function coalesceTextOnlyAdjacent(
       const newPrevBlocks: NonEmptyArray<TextBlock> = [
         { type: 'text', text: mergedText }
       ];
-      out[out.length - 1] = { ...prev, content: newPrevBlocks } as MessageV2;
+      out[out.length - 1] = { ...prev, content: newPrevBlocks } as Message;
     } else {
       out.push(msg);
     }
@@ -129,7 +129,7 @@ export function coalesceTextOnlyAdjacent(
 }
 
 export function estimateInputTokens(
-  messages: MessageV2[],
+  messages: Message[],
   systemPrompt?: string
 ): number {
   const sys = systemPrompt ? systemPrompt.length : 0;

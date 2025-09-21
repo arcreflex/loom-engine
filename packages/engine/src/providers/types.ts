@@ -1,4 +1,4 @@
-import type { MessageV2, ProviderName } from '../types.ts';
+import type { Message, ProviderName } from '../types.ts';
 import type { JSONSchema7 } from 'json-schema';
 
 /**
@@ -15,12 +15,12 @@ export interface ToolDefinitionForProvider {
 
 /**
  * Request to a language model provider.
- * During the V2 migration, providers will handle both Message and MessageV2 formats.
+ * During the V2 migration, providers will handle both Message and legacy formats.
  */
 export interface ProviderRequest {
   systemMessage: string | undefined;
   /** The full context history of messages in V2 format. */
-  messages: MessageV2[];
+  messages: Message[];
 
   model: string;
 
@@ -42,11 +42,11 @@ export interface ProviderRequest {
 
 /**
  * Response from a language model provider.
- * During the V2 migration, providers will return MessageV2 format.
+ * During the V2 migration, providers will return Message format.
  */
 export interface ProviderResponse {
   /** The generated message in V2 format. */
-  message: MessageV2;
+  message: Message;
 
   /** Usage information from the provider. */
   usage?: {
@@ -69,9 +69,13 @@ export interface IProvider {
   /**
    * Generates a completion from the provider.
    * @param request - The request parameters
+   * @param signal - Optional abort signal to cancel the request
    * @returns A Promise resolving to the provider's response
    */
-  generate(_request: ProviderRequest): Promise<ProviderResponse>;
+  generate(
+    _request: ProviderRequest,
+    signal?: AbortSignal
+  ): Promise<ProviderResponse>;
 }
 
 export interface ProviderModelSpec {

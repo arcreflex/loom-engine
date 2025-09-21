@@ -8,7 +8,7 @@ import {
 } from './provider-utils.ts';
 import type {
   ContentBlock,
-  AssistantMessageV2,
+  AssistantMessage,
   NonEmptyArray
 } from '../types.ts';
 import {
@@ -16,6 +16,12 @@ import {
   MalformedToolMessageError,
   MissingMessageContentError
 } from './errors.ts';
+import {
+  createAbortError,
+  isAbortError,
+  toError,
+  throwIfAborted
+} from '../errors.ts';
 import OpenAI from 'openai';
 
 /**
@@ -44,7 +50,10 @@ export class OpenAIProvider implements IProvider {
    * @param request - The request parameters
    * @returns A Promise resolving to the provider's response
    */
-  async generate(request: ProviderRequest): Promise<ProviderResponse> {
+  async generate(
+    request: ProviderRequest,
+    signal?: AbortSignal
+  ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'OpenAI API key is required. Provide it explicitly or set OPENAI_API_KEY environment variable.'
@@ -52,6 +61,7 @@ export class OpenAIProvider implements IProvider {
     }
 
     try {
+      throwIfAborted(signal);
       const openai = new OpenAI({
         apiKey: this.apiKey,
         baseURL: this.baseURL
@@ -193,7 +203,10 @@ export class OpenAIProvider implements IProvider {
       } as const;
 
       this.logger.log('OpenAI request:\n' + JSON.stringify(req, null, 2));
-      const response = await openai.chat.completions.create(req);
+      const response = await openai.chat.completions.create(
+        req,
+        signal ? { signal } : undefined
+      );
       this.logger.log('OpenAI response:\n' + JSON.stringify(response, null, 2));
 
       const choice = response.choices[0];
@@ -228,7 +241,7 @@ export class OpenAIProvider implements IProvider {
         throw new EmptyProviderResponseError('OpenAI');
       }
 
-      const v2Message: AssistantMessageV2 = {
+      const v2Message: AssistantMessage = {
         role: 'assistant',
         content: contentBlocks as NonEmptyArray<ContentBlock>
       };
@@ -245,14 +258,13 @@ export class OpenAIProvider implements IProvider {
         rawResponse: response
       };
     } catch (error) {
-      // Handle API errors
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : 'Unknown error occurred when calling OpenAI API';
+      if (isAbortError(error) || signal?.aborted) {
+        throw createAbortError(signal?.reason ?? error);
+      }
 
-      console.error('OpenAI API error:', error);
-      throw new Error(`OpenAI provider error: ${errorMessage}`);
+      const err = toError(error);
+      console.error('OpenAI API error:', err);
+      throw new Error(`OpenAI provider error: ${err.message}`);
     }
   }
 }

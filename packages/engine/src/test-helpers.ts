@@ -1,7 +1,7 @@
 import { mock } from 'node:test';
 import type {
   Message,
-  MessageV2,
+  LegacyMessage,
   Node,
   NodeData,
   NodeId,
@@ -118,7 +118,7 @@ export function createMockStore() {
       id: string,
       rootId: string,
       parentId: string | null,
-      message: Message | MessageV2,
+      message: LegacyMessage | Message,
       source: SourceInfo = { type: 'user' }
     ): NodeData => {
       const nodeId = mockNodeId(id);
@@ -130,7 +130,7 @@ export function createMockStore() {
         root_id: rId,
         parent_id: parentId ? mockNodeId(parentId) : rId,
         child_ids: [],
-        message: normalizeMessage(message as Message | MessageV2),
+        message: normalizeMessage(message as LegacyMessage | Message),
         metadata: {
           timestamp,
           original_root_id: rId,

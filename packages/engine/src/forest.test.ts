@@ -6,7 +6,10 @@ import type {
   NodeId,
   RootConfig,
   Message,
-  NodeMetadata
+  NodeMetadata,
+  NonEmptyArray,
+  TextBlock,
+  ContentBlock
 } from './types.ts';
 import { createMockStore, mockNodeId, mockRootId } from './test-helpers.ts';
 
@@ -14,10 +17,16 @@ import { createMockStore, mockNodeId, mockRootId } from './test-helpers.ts';
 const createMessage = (
   role: 'user' | 'assistant',
   content: string
-): Message => ({
-  role,
-  content
-});
+): Message => {
+  const blocks = [{ type: 'text', text: content }] as NonEmptyArray<TextBlock>;
+  if (role === 'assistant') {
+    return {
+      role,
+      content: blocks as unknown as NonEmptyArray<ContentBlock>
+    };
+  }
+  return { role, content: blocks };
+};
 
 describe('Forest', () => {
   let mockStoreWrapper: ReturnType<typeof createMockStore>;

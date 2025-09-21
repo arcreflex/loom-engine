@@ -2,8 +2,8 @@ import type { Logger } from '../log.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
 import { extractTextContent } from './provider-utils.ts';
 import type {
-  ToolUseBlock,
-  AssistantMessageV2,
+  AssistantMessage,
+  Message,
   NonEmptyArray,
   ContentBlock
 } from '../types.ts';
@@ -13,8 +13,33 @@ import {
   MissingMessageContentError,
   GoogleDuplicateFunctionError
 } from './errors.ts';
-import { GoogleGenAI, type Content } from '@google/genai';
+import type { Content } from '@google/genai';
 import { randomUUID } from 'node:crypto';
+import {
+  createAbortError,
+  isAbortError,
+  toError,
+  throwIfAborted
+} from '../errors.ts';
+
+function findToolFunctionName(
+  messages: Message[],
+  startIndex: number,
+  toolCallId: string
+): string | undefined {
+  for (let i = startIndex - 1; i >= 0; i--) {
+    const candidate = messages[i];
+    if (candidate.role !== 'assistant') {
+      continue;
+    }
+    for (const block of candidate.content) {
+      if (block.type === 'tool-use' && block.id === toolCallId) {
+        return block.name;
+      }
+    }
+  }
+  return undefined;
+}
 
 /**
  * Implements IProvider for Google's Gemini API.
@@ -23,8 +48,6 @@ import { randomUUID } from 'node:crypto';
 export class GoogleProvider implements IProvider {
   private apiKey: string | undefined;
   private logger: Logger;
-
-  private ai: GoogleGenAI;
 
   /**
    * Creates a new Google provider.
@@ -35,7 +58,6 @@ export class GoogleProvider implements IProvider {
     // Use provided API key or fall back to environment variable
     this.apiKey = apiKey || process.env.GOOGLE_API_KEY;
     this.logger = logger;
-    this.ai = new GoogleGenAI({ apiKey: this.apiKey });
   }
 
   /**
@@ -44,12 +66,10 @@ export class GoogleProvider implements IProvider {
    * @param request - The request parameters
    * @returns A Promise resolving to the provider's response
    */
-  async generate(request: ProviderRequest): Promise<ProviderResponse> {
-    // Map to track tool-use ID to function name for tool results
-    const toolIdToName = new Map<string, string>();
-    // Track function names to detect collisions
-    const functionNameCounts = new Map<string, number>();
-
+  async generate(
+    request: ProviderRequest,
+    signal?: AbortSignal
+  ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Google API key is required. Provide it explicitly or set GOOGLE_API_KEY environment variable.'
@@ -57,6 +77,7 @@ export class GoogleProvider implements IProvider {
     }
 
     try {
+      throwIfAborted(signal);
       // Prepare messages, including system message if provided
       const messages: Content[] = [];
 
@@ -82,8 +103,11 @@ export class GoogleProvider implements IProvider {
             );
           }
           if (textContent != null && msg.tool_call_id) {
-            // Look up the original function name from the tool call ID
-            const functionName = toolIdToName.get(msg.tool_call_id);
+            const functionName = findToolFunctionName(
+              request.messages,
+              i,
+              msg.tool_call_id
+            );
             if (!functionName) {
               throw new MalformedToolMessageError(
                 `No function name found for tool_call_id. Ensure the assistant's tool-use block with this ID appeared earlier in the conversation.`,
@@ -118,25 +142,17 @@ export class GoogleProvider implements IProvider {
         if (msg.role === 'assistant') {
           // Handle assistant messages with ContentBlocks
           const parts: Content['parts'] = [];
-
-          // Reset function name counts for this message
-          functionNameCounts.clear();
+          const seenFunctionNames = new Set<string>();
 
           // Process each content block
           for (const block of msg.content) {
             if (block.type === 'text') {
               parts.push({ text: block.text });
             } else if (block.type === 'tool-use') {
-              // Track the mapping from tool ID to function name
-              toolIdToName.set(block.id, block.name);
-
-              // Detect function name collisions - Google's API doesn't preserve tool call IDs
-              // so we can't disambiguate multiple calls to the same function
-              const count = functionNameCounts.get(block.name) || 0;
-              functionNameCounts.set(block.name, count + 1);
-              if (count > 0) {
+              if (seenFunctionNames.has(block.name)) {
                 throw new GoogleDuplicateFunctionError(block.name);
               }
+              seenFunctionNames.add(block.name);
 
               parts.push({
                 functionCall: {
@@ -185,17 +201,14 @@ export class GoogleProvider implements IProvider {
         throw new Error('top_k must be a number');
       }
 
-      const req = {
-        model: request.model,
+      const requestBody: Record<string, unknown> = {
         contents: messages,
-        config: {
+        generationConfig: {
           temperature,
           maxOutputTokens: max_tokens,
           topP: top_p,
-          topK: top_k,
-          systemInstruction: request.systemMessage
+          topK: top_k
         },
-        // Google uses 'tools' and 'toolConfig' for tool configuration
         tools: tools?.map(tool => ({
           functionDeclarations: [tool.function]
         })),
@@ -207,14 +220,74 @@ export class GoogleProvider implements IProvider {
                     ? 'AUTO'
                     : tool_choice === 'none'
                       ? 'NONE'
-                      : 'ANY' // For specific tool selection
+                      : 'ANY'
               }
             }
           : undefined
       };
-      this.logger.log('Google request:\n' + JSON.stringify(req, null, 2));
-      const response = await this.ai.models.generateContent(req);
-      this.logger.log('Google response:\n' + JSON.stringify(response, null, 2));
+
+      if (request.systemMessage) {
+        const systemInstruction: Content = {
+          role: 'user',
+          parts: [{ text: request.systemMessage }]
+        };
+        requestBody.systemInstruction = systemInstruction;
+      }
+
+      const url = new URL(
+        `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(
+          request.model
+        )}:generateContent`
+      );
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+
+      if (this.apiKey) {
+        headers['x-goog-api-key'] = this.apiKey;
+      }
+
+      this.logger.log(
+        'Google request:\n' +
+          JSON.stringify({ url: url.toString(), body: requestBody }, null, 2)
+      );
+
+      const response = await globalThis.fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(requestBody),
+        signal
+      });
+
+      if (!response.ok) {
+        let message = `Google provider error: HTTP ${response.status}`;
+        try {
+          const errorPayload = (await response.json()) as {
+            error?: { message?: string };
+          };
+          if (errorPayload?.error?.message) {
+            message = `Google provider error: ${errorPayload.error.message}`;
+          }
+        } catch {
+          // Ignore JSON parse errors and fall back to generic message.
+        }
+        throw new Error(message);
+      }
+
+      const json = (await response.json()) as {
+        candidates?: Array<{
+          content?: { parts?: Array<Record<string, unknown>>; role?: string };
+          finishReason?: string | null;
+        }>;
+        usageMetadata?: {
+          promptTokenCount?: number;
+          candidatesTokenCount?: number;
+          totalTokenCount?: number;
+        };
+      };
+
+      this.logger.log('Google response:\n' + JSON.stringify(json, null, 2));
 
       // Convert Google response to V2 message format.
       // ORDERING LIMITATION: Google's SDK returns text and functionCalls as separate fields,
@@ -222,26 +295,33 @@ export class GoogleProvider implements IProvider {
       // This means we cannot preserve the exact interleaving if the model intended
       // text/tool/text ordering. This is a known limitation of the Google SDK structure.
       // See specs/providers-and-models.md for details.
-      const toolUseBlocks: ToolUseBlock[] | undefined =
-        response.functionCalls?.map(fc => ({
-          type: 'tool-use' as const,
-          // Generate deterministic ID if not provided using crypto.randomUUID
-          id: fc.id || `google-tool-${randomUUID()}`,
-          name: fc.name || '',
-          parameters: fc.args as Record<string, unknown>
-        }));
+      throwIfAborted(signal);
 
-      // Build content blocks with available ordering information
+      const firstCandidate = json.candidates?.[0];
+      const parts = Array.isArray(firstCandidate?.content?.parts)
+        ? (firstCandidate?.content?.parts as Array<Record<string, unknown>>)
+        : [];
+
       const contentBlocks: ContentBlock[] = [];
 
-      // Add text content if present
-      if (response.text && response.text.trim().length > 0) {
-        contentBlocks.push({ type: 'text', text: response.text });
-      }
+      for (const part of parts) {
+        const text = typeof part.text === 'string' ? part.text : undefined;
+        if (text && text.trim().length > 0) {
+          contentBlocks.push({ type: 'text', text });
+          continue;
+        }
 
-      // Add tool-use blocks if present
-      if (toolUseBlocks && toolUseBlocks.length > 0) {
-        contentBlocks.push(...toolUseBlocks);
+        const functionCall = part.functionCall as
+          | { id?: string; name?: string; args?: Record<string, unknown> }
+          | undefined;
+        if (functionCall) {
+          contentBlocks.push({
+            type: 'tool-use',
+            id: functionCall.id || `google-tool-${randomUUID()}`,
+            name: functionCall.name ?? '',
+            parameters: (functionCall.args ?? {}) as Record<string, unknown>
+          });
+        }
       }
 
       // Ensure we have at least one block
@@ -249,7 +329,7 @@ export class GoogleProvider implements IProvider {
         throw new EmptyProviderResponseError('Google');
       }
 
-      const v2Message: AssistantMessageV2 = {
+      const v2Message: AssistantMessage = {
         role: 'assistant',
         content: contentBlocks as NonEmptyArray<ContentBlock>
       };
@@ -257,21 +337,21 @@ export class GoogleProvider implements IProvider {
       return {
         message: v2Message,
         usage: {
-          input_tokens: response.usageMetadata?.promptTokenCount,
-          output_tokens: response.usageMetadata?.candidatesTokenCount,
-          raw: response.usageMetadata
+          input_tokens: json.usageMetadata?.promptTokenCount,
+          output_tokens: json.usageMetadata?.candidatesTokenCount,
+          raw: json.usageMetadata
         },
-        rawResponse: response
+        finish_reason: firstCandidate?.finishReason ?? null,
+        rawResponse: json
       };
     } catch (error) {
-      // Handle API errors
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : 'Unknown error occurred when calling Google API';
+      if (isAbortError(error) || signal?.aborted) {
+        throw createAbortError(signal?.reason ?? error);
+      }
 
-      console.error('Google API error:', error);
-      throw new Error(`Google provider error: ${errorMessage}`);
+      const err = toError(error);
+      console.error('Google API error:', err);
+      throw new Error(`Google provider error: ${err.message}`);
     }
   }
 }

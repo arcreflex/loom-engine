@@ -4,7 +4,7 @@ import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
 import { extractTextContent } from './provider-utils.ts';
 import type {
   ContentBlock,
-  AssistantMessageV2,
+  AssistantMessage,
   NonEmptyArray
 } from '../types.ts';
 import {
@@ -13,6 +13,12 @@ import {
   MissingMessageContentError
 } from './errors.ts';
 import Anthropic from '@anthropic-ai/sdk';
+import {
+  createAbortError,
+  isAbortError,
+  toError,
+  throwIfAborted
+} from '../errors.ts';
 
 /**
  * Implements IProvider for Anthropic's Claude API.
@@ -42,7 +48,10 @@ export class AnthropicProvider implements IProvider {
    * @param request - The request parameters
    * @returns A Promise resolving to the provider's response
    */
-  async generate(request: ProviderRequest): Promise<ProviderResponse> {
+  async generate(
+    request: ProviderRequest,
+    signal?: AbortSignal
+  ): Promise<ProviderResponse> {
     if (!this.apiKey) {
       throw new Error(
         'Anthropic API key is required. Provide it explicitly or set ANTHROPIC_API_KEY environment variable.'
@@ -50,6 +59,7 @@ export class AnthropicProvider implements IProvider {
     }
 
     try {
+      throwIfAborted(signal);
       const anthropic = new Anthropic({
         apiKey: this.apiKey,
         baseURL: this.baseURL,
@@ -207,7 +217,10 @@ export class AnthropicProvider implements IProvider {
 
       this.logger.log('Anthropic request:\n' + JSON.stringify(req, null, 2));
 
-      const response = await anthropic.messages.create(req);
+      const response = await anthropic.messages.create(
+        req,
+        signal ? { signal } : undefined
+      );
 
       this.logger.log(
         'Anthropic response:\n' + JSON.stringify(response, null, 2)
@@ -236,7 +249,7 @@ export class AnthropicProvider implements IProvider {
       }
 
       // Return V2 message with content blocks in original order
-      const v2Message: AssistantMessageV2 = {
+      const v2Message: AssistantMessage = {
         role: 'assistant',
         content: contentBlocks as NonEmptyArray<ContentBlock>
       };
@@ -253,14 +266,13 @@ export class AnthropicProvider implements IProvider {
         rawResponse: response
       };
     } catch (error) {
-      // Handle API errors
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : 'Unknown error occurred when calling Anthropic API';
+      if (isAbortError(error) || signal?.aborted) {
+        throw createAbortError(signal?.reason ?? error);
+      }
 
-      console.error('Anthropic API error:', error);
-      throw new Error(`Anthropic provider error: ${errorMessage}`);
+      const err = toError(error);
+      console.error('Anthropic API error:', err);
+      throw new Error(`Anthropic provider error: ${err.message}`);
     }
   }
 }

@@ -7,11 +7,15 @@ import type {
   RootConfig,
   ProviderName,
   Message,
-  MessageV2,
+  LegacyMessage,
   NodeData,
   Node
 } from './types.ts'; // Adjust path as needed
 import { normalizeMessage } from './content-blocks.ts';
+import {
+  MaxToolIterationsExceededError,
+  ToolsOnlySupportNSingletonError
+} from './errors.ts';
 
 describe('LoomEngine', () => {
   let engine: LoomEngine;
@@ -143,7 +147,7 @@ describe('LoomEngine', () => {
       }: {
         result: GenerateResult;
         expectedRootConfig: RootConfig;
-        expectedMessages: Array<Array<Message | MessageV2>>;
+        expectedMessages: Array<Array<LegacyMessage | Message>>;
       }
     ) {
       assert.ok(Array.isArray(result.childNodes), 'Result is array');
@@ -163,7 +167,7 @@ describe('LoomEngine', () => {
       }
 
       const expectedNormalized = expectedMessages.map(arr =>
-        arr.map(m => normalizeMessage(m as Message | MessageV2))
+        arr.map(m => normalizeMessage(m as LegacyMessage | Message))
       );
 
       assert.deepEqual(actualMessages, expectedNormalized, 'Messages match');
@@ -177,7 +181,7 @@ describe('LoomEngine', () => {
       const root = createTestRoot('r1', { systemPrompt });
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const userMessages: Message[] = [
+      const userMessages: LegacyMessage[] = [
         { role: 'user', content: 'Write a poem' }
       ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
@@ -220,7 +224,7 @@ describe('LoomEngine', () => {
       const root = createTestRoot('r2', { systemPrompt });
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const userMessages: Message[] = [
+      const userMessages: LegacyMessage[] = [
         { role: 'user', content: 'Write a poem' }
       ];
       const optionsN2 = { n: 2, max_tokens: 100, temperature: 0.7 };
@@ -247,7 +251,7 @@ describe('LoomEngine', () => {
     it('should append correctly if user message prefix already exists', async () => {
       const systemPrompt = 'You are a poet';
       const rootConfig: RootConfig = { systemPrompt };
-      const existingMessages: Message[] = [
+      const existingMessages: LegacyMessage[] = [
         { role: 'user', content: 'Write a poem' },
         { role: 'assistant', content: 'A short poem.' }
       ];
@@ -300,7 +304,7 @@ describe('LoomEngine', () => {
       const rootConfig: RootConfig = { systemPrompt };
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const existingMessages: Message[] = [
+      const existingMessages: LegacyMessage[] = [
         { role: 'user', content: 'Write a poem' },
         { role: 'assistant', content: 'The first line is' },
         { role: 'assistant', content: ' finished later.' }
@@ -342,32 +346,34 @@ describe('LoomEngine', () => {
         .arguments[0] as any;
       assert.strictEqual(firstCall.messages.length, 2);
 
+      const [providerArgs, signalArg] = mockProviderInstance.generate.mock
+        .calls[0].arguments as [unknown, unknown];
+      assert.strictEqual(signalArg, undefined);
       assert.deepEqual(
-        mockProviderInstance.generate.mock.calls[0].arguments,
-        [
-          {
-            systemMessage: 'system message',
-            messages: [
-              {
-                role: 'user',
-                content: [{ type: 'text', text: 'Write a poem' }]
-              },
-              {
-                role: 'assistant',
-                content: [
-                  { type: 'text', text: 'The first line is finished later.' }
-                ]
-              }
-            ],
-            model: 'gpt-4',
-            parameters: {
-              max_tokens: 100,
-              temperature: 0.7,
-              model: 'gpt-4'
+        providerArgs,
+        {
+          systemMessage: 'system message',
+          messages: [
+            {
+              role: 'user',
+              content: [{ type: 'text', text: 'Write a poem' }]
             },
-            tools: undefined
-          }
-        ],
+            {
+              role: 'assistant',
+              content: [
+                { type: 'text', text: 'The first line is finished later.' }
+              ]
+            }
+          ],
+          model: 'gpt-4',
+          parameters: {
+            max_tokens: 100,
+            temperature: 0.7,
+            model: 'gpt-4'
+          },
+          tools: undefined,
+          tool_choice: undefined
+        },
         'Provider called with coalesced adjacent assistant V2 messages'
       );
 
@@ -390,7 +396,12 @@ describe('LoomEngine', () => {
       const rootConfig: RootConfig = { systemPrompt };
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4o-2024-08-06'; // known caps: out=16384
-      const existingMessages: Message[] = [{ role: 'user', content: 'Short' }];
+      const existingMessages: LegacyMessage[] = [
+        {
+          role: 'user',
+          content: 'Short'
+        }
+      ];
 
       const rootId = mockRootId('rootClamp');
       const root = createTestRoot(rootId.toString(), rootConfig);
@@ -435,7 +446,7 @@ describe('LoomEngine', () => {
 
     it('should throw an error for unsupported provider types', async () => {
       const root = createTestRoot('r5', { systemPrompt: 'test' });
-      const userMessages: Message[] = [
+      const userMessages: LegacyMessage[] = [
         { role: 'user', content: 'Write a poem' }
       ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
@@ -471,7 +482,7 @@ describe('LoomEngine', () => {
       const root = createTestRoot('r6', { systemPrompt: 'test' });
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const userMessages: Message[] = [
+      const userMessages: LegacyMessage[] = [
         { role: 'user', content: 'Write a poem' }
       ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
@@ -508,7 +519,7 @@ describe('LoomEngine', () => {
       });
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const userMessages: Message[] = [
+      const userMessages: LegacyMessage[] = [
         { role: 'user', content: 'Echo "Hello World"' }
       ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
@@ -552,7 +563,7 @@ describe('LoomEngine', () => {
         }
       });
 
-      let result = await engine.generate(
+      const firstChunk = await engine.generate(
         root.id,
         providerName,
         modelName,
@@ -560,9 +571,23 @@ describe('LoomEngine', () => {
         options,
         activeTools
       );
-      while (result.next) {
-        result = await result.next;
-      }
+
+      assert.strictEqual(firstChunk.childNodes.length, 1);
+      const assistantWithToolCall = firstChunk.childNodes[0];
+      assert.strictEqual(assistantWithToolCall.message.role, 'assistant');
+
+      const toolChunk = await firstChunk.next;
+      assert(toolChunk, 'Expected tool chunk');
+      assert.strictEqual(toolChunk.childNodes.length, 1);
+      const toolNode = toolChunk.childNodes[0];
+      assert.strictEqual(toolNode.message.role, 'tool');
+
+      const finalChunk = await toolChunk.next;
+      assert(finalChunk, 'Expected final assistant chunk');
+      assert.strictEqual(finalChunk.childNodes.length, 1);
+      const finalAssistantNode = finalChunk.childNodes[0];
+      assert.strictEqual(finalAssistantNode.message.role, 'assistant');
+      assert.strictEqual(finalChunk.next, undefined);
 
       // Verify the sequence of calls
       assert.strictEqual(
@@ -573,18 +598,18 @@ describe('LoomEngine', () => {
 
       // Check that we get exactly one final assistant node
       assert.strictEqual(
-        result.childNodes.length,
+        finalChunk.childNodes.length,
         1,
         'One final assistant node returned'
       );
       assert.strictEqual(
-        result.childNodes[0].message.role,
+        finalAssistantNode.message.role,
         'assistant',
         'Final node is assistant'
       );
       // V2: extract text content
       const finalText0 =
-        (result.childNodes[0].message.content[0] as any)?.text ?? null;
+        (finalAssistantNode.message.content[0] as any)?.text ?? null;
       assert.strictEqual(finalText0, 'I echoed your message successfully!');
 
       // Verify that 4 nodes were created: user, assistant (tool call), tool (result), assistant (final)
@@ -646,7 +671,9 @@ describe('LoomEngine', () => {
       });
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const userMessages: Message[] = [{ role: 'user', content: 'Echo twice' }];
+      const userMessages: LegacyMessage[] = [
+        { role: 'user', content: 'Echo twice' }
+      ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
       const activeTools = ['echo'];
 
@@ -690,7 +717,7 @@ describe('LoomEngine', () => {
         }
       });
 
-      let result = await engine.generate(
+      const firstChunk = await engine.generate(
         root.id,
         providerName,
         modelName,
@@ -698,16 +725,35 @@ describe('LoomEngine', () => {
         options,
         activeTools
       );
-      while (result.next) result = await result.next;
+      assert.strictEqual(firstChunk.childNodes[0].message.role, 'assistant');
+
+      const firstToolChunk = await firstChunk.next;
+      assert(firstToolChunk, 'Expected first tool chunk');
+      assert.strictEqual(firstToolChunk.childNodes[0].message.role, 'tool');
+      assert.strictEqual(
+        firstToolChunk.childNodes[0].message.tool_call_id,
+        'c1'
+      );
+
+      const secondToolChunk = await firstToolChunk.next;
+      assert(secondToolChunk, 'Expected second tool chunk');
+      assert.strictEqual(secondToolChunk.childNodes[0].message.role, 'tool');
+      assert.strictEqual(
+        secondToolChunk.childNodes[0].message.tool_call_id,
+        'c2'
+      );
+
+      const finalChunk = await secondToolChunk.next;
+      assert(finalChunk, 'Expected final assistant chunk');
+      assert.strictEqual(finalChunk.childNodes.length, 1);
+      assert.strictEqual(finalChunk.childNodes[0].message.role, 'assistant');
+      const finalBoth = (finalChunk.childNodes[0].message.content[0] as any)
+        ?.text;
+      assert.strictEqual(finalBoth, 'Both tools executed.');
+      assert.strictEqual(finalChunk.next, undefined);
 
       // Provider called twice (tool turn + final)
       assert.strictEqual(mockProviderInstance.generate.mock.callCount(), 2);
-
-      // Expect 1 final node returned
-      assert.strictEqual(result.childNodes.length, 1);
-      assert.strictEqual(result.childNodes[0].message.role, 'assistant');
-      const finalBoth = (result.childNodes[0].message.content[0] as any)?.text;
-      assert.strictEqual(finalBoth, 'Both tools executed.');
 
       // Verify two tool result nodes were created with matching IDs
       const created = Array.from(mockStoreWrapper.nodes.values());
@@ -729,7 +775,7 @@ describe('LoomEngine', () => {
       });
       const providerName: ProviderName = 'openai';
       const modelName = 'gpt-4';
-      const userMessages: Message[] = [
+      const userMessages: LegacyMessage[] = [
         { role: 'user', content: 'Echo "Hello Progress"' }
       ];
       const options = { n: 1, max_tokens: 100, temperature: 0.7 };
@@ -773,7 +819,7 @@ describe('LoomEngine', () => {
         }
       });
 
-      let result = await engine.generate(
+      const firstChunk = await engine.generate(
         root.id,
         providerName,
         modelName,
@@ -781,39 +827,37 @@ describe('LoomEngine', () => {
         options,
         activeTools
       );
-      progressNodes.push(result.childNodes[0]);
-      while (result.next) {
-        result = await result.next;
-        progressNodes.push(result.childNodes[0]);
+      progressNodes.push(firstChunk.childNodes[0]);
+
+      const secondChunk = await firstChunk.next;
+      assert(secondChunk, 'Expected tool chunk');
+      progressNodes.push(secondChunk.childNodes[0]);
+
+      const thirdChunk = await secondChunk.next;
+      assert(thirdChunk, 'Expected final assistant chunk');
+      progressNodes.push(thirdChunk.childNodes[0]);
+      assert.strictEqual(thirdChunk.next, undefined);
+
+      assert.deepStrictEqual(
+        progressNodes.map(n => n.message.role),
+        ['assistant', 'tool', 'assistant']
+      );
+
+      const toolNode = progressNodes[1];
+      assert.strictEqual(toolNode.message.role, 'tool');
+      if (toolNode.message.role !== 'tool') {
+        assert.fail('Expected tool node');
       }
-
-      assert.strictEqual(
-        progressNodes.length,
-        2,
-        'Two progress nodes captured'
-      );
-
-      assert.strictEqual(
-        progressNodes[0].message.role,
-        'tool',
-        'First progress node is tool result'
-      );
-      assert.strictEqual(
-        progressNodes[0].message.tool_call_id,
-        'call_456',
-        'Tool result has correct call ID'
-      );
-      const toolRes0 = (progressNodes[0].message.content[0] as any)?.text;
+      assert.strictEqual(toolNode.message.tool_call_id, 'call_456');
+      const toolRes0 = (toolNode.message.content[0] as any)?.text;
       assert.strictEqual(toolRes0, '{"echo":"Hello Progress"}');
 
-      const toolResultParent = mockStoreWrapper.nodes.get(
-        progressNodes[0].parent_id
-      );
+      const toolResultParent = mockStoreWrapper.nodes.get(toolNode.parent_id);
 
       assert.strictEqual(
         toolResultParent?.message.role,
         'assistant',
-        'First progress node is tool call'
+        'Tool node parent is assistant turn'
       );
       const assistantBlocks = (toolResultParent as any)?.message?.content;
       assert(Array.isArray(assistantBlocks), 'Assistant content is blocks');
@@ -822,20 +866,102 @@ describe('LoomEngine', () => {
       );
       assert.strictEqual(toolCalls.length, 1, 'Tool call exists');
 
-      assert.strictEqual(
-        progressNodes[1].message.role,
-        'assistant',
-        'Second progress node is final assistant'
-      );
-      const finalProgText = (progressNodes[1].message.content[0] as any)?.text;
+      const finalProgText = (progressNodes[2].message.content[0] as any)?.text;
       assert.strictEqual(finalProgText, 'Progress tracking works!');
 
       // Verify final result matches the last progress node
-      assert.strictEqual(result.childNodes.length, 1, 'One final result');
+      assert.strictEqual(thirdChunk.childNodes.length, 1, 'One final result');
       assert.deepEqual(
-        result.childNodes[0],
-        progressNodes[1],
+        thirdChunk.childNodes[0],
+        progressNodes[2],
         'Final result matches last progress node'
+      );
+    });
+
+    it('throws when tools are used with n > 1', async () => {
+      const root = createTestRoot('r_tools_n', {
+        systemPrompt: 'You are a helpful assistant'
+      });
+      const providerName: ProviderName = 'openai';
+      const modelName = 'gpt-4';
+      const userMessages: LegacyMessage[] = [
+        { role: 'user', content: 'Echo this' }
+      ];
+      const options = { n: 2, max_tokens: 100, temperature: 0.7 };
+
+      await assert.rejects(
+        () =>
+          engine.generate(
+            root.id,
+            providerName,
+            modelName,
+            userMessages.map(m => normalizeMessage(m)),
+            options,
+            ['echo']
+          ),
+        ToolsOnlySupportNSingletonError
+      );
+    });
+
+    it('enforces max tool iterations', async () => {
+      const root = createTestRoot('r_max_iter', {
+        systemPrompt: 'Loop test'
+      });
+      const providerName: ProviderName = 'openai';
+      const modelName = 'gpt-4';
+      const userMessages: LegacyMessage[] = [
+        { role: 'user', content: 'Loop the tool' }
+      ];
+      const options = {
+        n: 1,
+        max_tokens: 100,
+        temperature: 0.7,
+        maxToolIterations: 1
+      };
+      mockProviderInstance.generate.mock.resetCalls();
+      let callCount = 0;
+      mockProviderInstance.generate.mock.mockImplementation(async () => {
+        callCount++;
+        return {
+          message: {
+            role: 'assistant',
+            content: [
+              {
+                type: 'tool-use',
+                id: `loop_${callCount}`,
+                name: 'echo',
+                parameters: { message: 'loop' }
+              }
+            ]
+          },
+          finish_reason: 'tool_calls',
+          usage: { input_tokens: 1, output_tokens: 1 }
+        };
+      });
+
+      const firstChunk = await engine.generate(
+        root.id,
+        providerName,
+        modelName,
+        userMessages.map(m => normalizeMessage(m)),
+        options,
+        ['echo']
+      );
+
+      assert(firstChunk.next, 'Expected a continuation for tool recursion');
+      const toolChunk = await firstChunk.next;
+      assert(toolChunk?.next, 'Expected tool chunk to continue');
+      const assistantChunk = await toolChunk.next;
+      assert(
+        assistantChunk?.next,
+        'Expected assistant chunk to expose limit rejection'
+      );
+      await assert.rejects(assistantChunk.next, MaxToolIterationsExceededError);
+
+      assert.strictEqual(
+        mockProviderInstance.generate.mock.callCount(),
+        2,
+        'Provider called twice before enforcing iteration cap'
       );
     });
 
@@ -897,7 +1023,7 @@ describe('LoomEngine', () => {
         async (args: any) => `Echo: ${args.message}`
       );
 
-      const userMessages: Message[] = [
+      const userMessages: LegacyMessage[] = [
         { role: 'user', content: 'Use the echo tool' }
       ];
 
@@ -946,6 +1072,19 @@ describe('LoomEngine', () => {
       assert.deepStrictEqual(onlyToolUse[0].parameters, {
         message: 'Tool-only message test'
       });
+
+      if (result.next) {
+        const toolChunk = await result.next;
+        if (toolChunk?.next) {
+          const finalChunk = await toolChunk.next;
+          if (finalChunk) {
+            assert.strictEqual(
+              finalChunk.childNodes[0].message.role,
+              'assistant'
+            );
+          }
+        }
+      }
     });
   });
 
