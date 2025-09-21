@@ -106,7 +106,8 @@ export class LoomEngine {
     modelName: string,
     contextMessages: Message[],
     options: GenerateOptions,
-    activeTools?: string[]
+    activeTools?: string[],
+    signal?: AbortSignal
   ): Promise<GenerateResult> {
     const session = this.generateStream(
       rootId,
@@ -114,7 +115,8 @@ export class LoomEngine {
       modelName,
       contextMessages,
       options,
-      activeTools
+      activeTools,
+      signal
     );
     const iterator = session[Symbol.asyncIterator]();
     return this.consumeGenerateResults(iterator);
