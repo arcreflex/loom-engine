@@ -18,13 +18,15 @@ function assertExcludedFiles(result: string) {
 
   // Check that node_modules is excluded
   assert.ok(!tree.includes('node_modules'), 'Does not include node_modules');
-  const containingDotGit = tree
+  assert.ok(tree.includes('.gitignore'), 'Includes .gitignore baseline');
+
+  const containingDotGitDir = tree
     .split('\n')
-    .filter(line => /\.git/.test(line))
-    .map(line => line.trim());
+    .map(line => line.trim())
+    .filter(line => /(^|\/)\.git(\/.|$)/.test(line));
   assert.deepEqual(
-    [...new Set(containingDotGit)],
-    ['.gitignore'],
+    [...new Set(containingDotGitDir)],
+    [],
     'Does not include .git dir contents'
   );
 }
