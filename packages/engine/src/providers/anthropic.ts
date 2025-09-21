@@ -13,6 +13,11 @@ import {
   MissingMessageContentError
 } from './errors.ts';
 import Anthropic from '@anthropic-ai/sdk';
+import {
+  createAbortError,
+  isAbortError,
+  throwIfAborted
+} from './provider-utils.ts';
 
 /**
  * Implements IProvider for Anthropic's Claude API.
@@ -52,15 +57,9 @@ export class AnthropicProvider implements IProvider {
       );
     }
 
-    try {
-      if (signal?.aborted) {
-        const reason =
-          signal.reason instanceof Error
-            ? signal.reason
-            : new Error('Anthropic request aborted');
-        throw reason;
-      }
+    throwIfAborted(signal);
 
+    try {
       const anthropic = new Anthropic({
         apiKey: this.apiKey,
         baseURL: this.baseURL,
@@ -267,11 +266,10 @@ export class AnthropicProvider implements IProvider {
       };
     } catch (error) {
       if (signal?.aborted) {
-        const reason =
-          signal.reason instanceof Error
-            ? signal.reason
-            : new Error('Anthropic request aborted');
-        throw reason;
+        throw createAbortError(signal.reason);
+      }
+      if (isAbortError(error)) {
+        throw error;
       }
       // Handle API errors
       const errorMessage =

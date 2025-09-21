@@ -14,6 +14,71 @@ import { extractTextContent, extractToolUseBlocks } from '../content-blocks.ts';
  */
 export { extractTextContent, extractToolUseBlocks };
 
+export function createAbortError(reason?: unknown): Error {
+  if (reason instanceof Error) {
+    return reason;
+  }
+  const description =
+    typeof reason === 'string' && reason.length > 0
+      ? reason
+      : 'The request was aborted.';
+  const error = new Error(description);
+  error.name = 'AbortError';
+  return error;
+}
+
+export function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw createAbortError(signal.reason);
+  }
+}
+
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
+}
+
+export function raceAgainstAbort<T>(
+  operation: () => Promise<T>,
+  signal?: AbortSignal
+): Promise<T> {
+  if (!signal) {
+    return operation();
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(createAbortError(signal.reason));
+      return;
+    }
+
+    const onAbort = () => {
+      signal.removeEventListener('abort', onAbort);
+      reject(createAbortError(signal.reason));
+    };
+
+    signal.addEventListener('abort', onAbort, { once: true });
+
+    let operationPromise: Promise<T>;
+    try {
+      operationPromise = Promise.resolve(operation());
+    } catch (error) {
+      signal.removeEventListener('abort', onAbort);
+      reject(error);
+      return;
+    }
+
+    operationPromise
+      .then(result => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(result);
+      })
+      .catch(error => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      });
+  });
+}
+
 /**
  * Converts tool calls from OpenAI format to ToolUseBlock format.
  * @throws {ToolArgumentParseError} if tool arguments cannot be parsed as JSON

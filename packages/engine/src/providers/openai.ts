@@ -1,7 +1,12 @@
 import type { Logger } from '../log.ts';
 import { KNOWN_MODELS } from './known-models.ts';
 import type { IProvider, ProviderRequest, ProviderResponse } from './types.ts';
-import { toolCallsToToolUseBlocks } from './provider-utils.ts';
+import {
+  toolCallsToToolUseBlocks,
+  createAbortError,
+  isAbortError,
+  throwIfAborted
+} from './provider-utils.ts';
 import {
   extractTextContent,
   extractToolUseBlocks,
@@ -55,15 +60,9 @@ export class OpenAIProvider implements IProvider {
       );
     }
 
-    try {
-      if (signal?.aborted) {
-        const reason =
-          signal.reason instanceof Error
-            ? signal.reason
-            : new Error('OpenAI request aborted');
-        throw reason;
-      }
+    throwIfAborted(signal);
 
+    try {
       const openai = new OpenAI({
         apiKey: this.apiKey,
         baseURL: this.baseURL
@@ -262,11 +261,10 @@ export class OpenAIProvider implements IProvider {
       };
     } catch (error) {
       if (signal?.aborted) {
-        const reason =
-          signal.reason instanceof Error
-            ? signal.reason
-            : new Error('OpenAI request aborted');
-        throw reason;
+        throw createAbortError(signal.reason);
+      }
+      if (isAbortError(error)) {
+        throw error;
       }
       // Handle API errors
       const errorMessage =
