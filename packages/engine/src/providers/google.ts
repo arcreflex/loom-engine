@@ -15,6 +15,12 @@ import {
 } from './errors.ts';
 import { GoogleGenAI, type Content } from '@google/genai';
 import { randomUUID } from 'node:crypto';
+import {
+  createAbortError,
+  isAbortError,
+  raceAgainstAbort,
+  throwIfAborted
+} from './provider-utils.ts';
 
 /**
  * Implements IProvider for Google's Gemini API.
@@ -59,15 +65,9 @@ export class GoogleProvider implements IProvider {
       );
     }
 
-    try {
-      if (signal?.aborted) {
-        const reason =
-          signal.reason instanceof Error
-            ? signal.reason
-            : new Error('Google request aborted');
-        throw reason;
-      }
+    throwIfAborted(signal);
 
+    try {
       // Prepare messages, including system message if provided
       const messages: Content[] = [];
 
@@ -226,7 +226,10 @@ export class GoogleProvider implements IProvider {
           : undefined
       };
       this.logger.log('Google request:\n' + JSON.stringify(req, null, 2));
-      const response = await this.ai.models.generateContent(req);
+      const response = await raceAgainstAbort(
+        () => this.ai.models.generateContent(req),
+        signal
+      );
       this.logger.log('Google response:\n' + JSON.stringify(response, null, 2));
 
       // Convert Google response to block message format.
@@ -278,11 +281,10 @@ export class GoogleProvider implements IProvider {
       };
     } catch (error) {
       if (signal?.aborted) {
-        const reason =
-          signal.reason instanceof Error
-            ? signal.reason
-            : new Error('Google request aborted');
-        throw reason;
+        throw createAbortError(signal.reason);
+      }
+      if (isAbortError(error)) {
+        throw error;
       }
       // Handle API errors
       const errorMessage =

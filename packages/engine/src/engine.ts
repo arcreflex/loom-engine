@@ -116,32 +116,43 @@ export class LoomEngine {
       options,
       activeTools
     );
-    const assistantNodes: NodeData[] = [];
-    let lastToolNode: NodeData | undefined;
-    let finalNodes: NodeData[] | undefined;
+    const iterator = session[Symbol.asyncIterator]();
+    return this.consumeGenerateResults(iterator);
+  }
 
-    for await (const event of session) {
+  private async consumeGenerateResults(
+    iterator: AsyncIterator<GenerateEvent>
+  ): Promise<GenerateResult> {
+    const assistantNodes: NodeData[] = [];
+
+    while (true) {
+      const { value, done } = await iterator.next();
+      if (done) {
+        return { childNodes: assistantNodes };
+      }
+
+      const event = value as GenerateEvent;
       if (event.type === 'assistant_node') {
         assistantNodes.push(event.node);
-      } else if (event.type === 'tool_result_node') {
-        lastToolNode = event.node;
-      } else if (event.type === 'done') {
-        finalNodes = event.final;
-      } else if (event.type === 'error') {
+        continue;
+      }
+
+      if (event.type === 'tool_result_node') {
+        return {
+          childNodes: [event.node],
+          next: this.consumeGenerateResults(iterator)
+        };
+      }
+
+      if (event.type === 'done') {
+        const resolved = event.final.length > 0 ? event.final : assistantNodes;
+        return { childNodes: resolved };
+      }
+
+      if (event.type === 'error') {
         throw event.error;
       }
     }
-
-    if (lastToolNode) {
-      const resolvedFinal = finalNodes ?? assistantNodes;
-      return {
-        childNodes: [lastToolNode],
-        next: Promise.resolve({ childNodes: resolvedFinal })
-      };
-    }
-
-    const resolvedFinal = finalNodes ?? assistantNodes;
-    return { childNodes: resolvedFinal };
   }
 
   generateStream(
@@ -356,7 +367,12 @@ export class LoomEngine {
       }
 
       const toolParameters = this.getToolParameters(activeTools);
-      const maxToolIterations = options.maxToolIterations ?? 5;
+      const maxToolIterations =
+        typeof options.maxToolIterations === 'number' &&
+        Number.isFinite(options.maxToolIterations) &&
+        options.maxToolIterations > 0
+          ? Math.floor(options.maxToolIterations)
+          : 8;
       const messages: Message[] = [...contextMessages];
       let iterations = 0;
 
