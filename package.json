@@ -49,5 +49,6 @@
     "*.css": [
       "prettier --write"
     ]
-  }
+  },
+  "packageManager": "pnpm@10.13.1"
 }
