@@ -62,6 +62,8 @@ On write, FileSystemStore persists only the canonical `content: ContentBlock[]` 
 Optional structured data attached to nodes:
 
 - **source_info**: Provider, model, generation parameters
+- **title**: Optional user-authored title for this node (stable once set)
+- **auto_title**: Optional machine-generated title (ignored once the node has children or a manual `title`)
 - **tags**: User-defined labels for organization
 - **custom_data**: Arbitrary JSON for extensibility
 

@@ -14,9 +14,10 @@ The GUI aims for a calm, fast, and legible terminal‑inspired feel. Visuals are
 
 ## Views
 
-- HomeView: Bookmarks, recent leaves (`listRecentLeaves`), roots list, and multi‑root graph with hover previews
-- NodeView: Conversation context, child navigator, graph, tools, input
-- GraphView: React Flow + Dagre layout for conversation trees
+- HomeView: Bookmarks, recent leaves (`listRecentLeaves`), roots list
+- NodeView: Conversation context, child navigator, tools, input
+- TreeView (Outline): Left sidebar outline of the current root showing the path, ancestors, siblings, and direct children. Optimized for snappy keyboard navigation and hover preview.
+- Compact Graph (optional/flagged): Minimal, read-only graph that shows “current node + path + immediate neighbors” for quick spatial orientation (no global layout or multi-root view).
 
 ## Keyboard & Commands
 
@@ -35,16 +36,26 @@ The GUI aims for a calm, fast, and legible terminal‑inspired feel. Visuals are
   - Copy: Copy current context (Markdown), Copy all children
   - Presets: Activate default or specific named preset (✓ for active)
   - Models: Switch to any model from KNOWN_MODELS (✓ for current)
-  - Graph modes: single-root, multi-root, compact
+  - (Graph commands removed) // Compact Graph is either off or on behind a feature flag; no runtime mode switching
+  - Navigate: Jump to parent/child/prev/next sibling; jump to any outline node via palette
   - Rendering: Toggle between Markdown and Raw
   - Metadata: Show current node metadata modal
 
 ## Input & Submission
 
-- Generate on Submit indicator: Inline LED shows ON/OFF
-- Large paste handling: If input is empty and pasted text >500 chars, the paste is appended as a user message and the UI navigates to the new node
-- Focus: Input focuses on node change and when enabled
-- Inline params: Effective generation params (n, temperature, max_tokens) and estimated context token count are displayed above the input
+- Generate on Submit indicator: Inline LED shows ON/OFF (affects only keyboard/submit, not paste)
+- Large paste handling:
+  - If input is **empty** and pasted text > 500 chars, append as a **user message** and navigate to the new node — **no confirmation**. **Never** auto-generate in response to paste (regardless of Generate-on-Submit).
+  - If input is **not empty**, paste goes **into the input** (no append side-effect).
+- Submit semantics:
+  - **Cmd+Enter** (“send & generate”):
+    - If input has text ⇒ append user message and start generation.
+    - If input is **empty** ⇒ **generate next assistant message** on the current node (no user message is created).
+  - **Ctrl+Enter** (“send only”):
+    - If input has text ⇒ append user message only (no generation).
+    - If input is **empty** ⇒ **no-op** (toast: “Nothing to send”).
+- Focus: Input focuses on node change and when enabled.
+- Inline params: Effective generation params (n, temperature, max_tokens) and estimated context token count display above the input.
 
 ## Context & Messages
 
@@ -57,17 +68,21 @@ The GUI aims for a calm, fast, and legible terminal‑inspired feel. Visuals are
 - Inline editing: Messages can be edited inline; saving creates a new node via edit endpoint and auto‑navigates to it
 - Scroll behavior: Auto‑scrolls to newest content; floating “Scroll to Latest” button appears when scrolled away
 - Child preview polish: ContextView intentionally reserves space below the last message and renders the child preview in a fixed area at the bottom, so hovering in/out of a child does not cause the main context to reflow or scroll
+  (Outline previews reuse the same reserved area.)
 
-## Graph View
+## Navigation Views
 
-- Modes: single-root, multi-root, compact (current node, its path/ancestors, immediate neighbors)
-- Layout: Dagre top‑to‑bottom (TB) via React Flow; fitView with min/max zoom and dotted background
-- Styling semantics:
-  - Current node and ancestors: higher opacity
-  - Bookmark nodes: thicker focus border and larger node size
-  - Edges colored by role; current‑path edges are thicker and animated
-- Hover preview: Debounced tooltip near cursor showing bookmark title, system prompt, and a subset of recent messages (first + last), pointer‑events disabled
-- Click navigation: Clicking a node triggers pending navigation
+### TreeView (Outline)
+
+- Shows: current path (root→current), ancestors, siblings, and direct children.
+- Interactions: arrow keys and Enter to navigate; hover/focus previews use stable reserved space in the ContextView (no reflow).
+- Performance: topology (structure-only) API; lazy-load content on demand.
+
+### Compact Graph (optional)
+
+- Feature-flagged preview; hides by default.
+- Renders current node + ancestors + immediate neighbors; no single-root/multi-root global layout.
+- Click to navigate; hover shows the same previews as the outline.
 
 ## Navigation & Child Selection
 
@@ -95,8 +110,15 @@ The GUI aims for a calm, fast, and legible terminal‑inspired feel. Visuals are
 
 - Engine session API: The backend invokes `generateStream()` and fans its events out over SSE/websocket. Respect the event order (`provider_request` → `provider_response` → `assistant_node` → optional `tool_result_node` → `done`/`error`).
 - Cancellation: The UI should expose a cancel affordance that either calls `session.abort(reason)` or aborts the associated `AbortController`, surfacing a `GenerationAbortedError` event to subscribers.
-- Auto‑navigation: On completion, if exactly one child was added, auto‑navigate to it; otherwise reload current node state
+- Auto-navigation: On completion, if exactly one child was added, auto-navigate to it; otherwise reload current node state
 - Pending placeholder: When generating, ContextView shows an animated “…” placeholder at the end
+
+## Generation Streaming (SSE)
+
+- The GUI consumes **event-level** updates only—no token-level streams. Events correspond to complete, meaningful units:
+  - `provider_request`, `provider_response`, `assistant_node`, `tool_result_node`, terminal `done` or `error`.
+- Multiple clients may observe the same session; UI renders only **complete nodes/events** and updates the outline/topology incrementally.
+- The “Generate on Submit” toggle does not affect paste and does not alter server event semantics.
 
 ## Server contracts surfaced in UI
 

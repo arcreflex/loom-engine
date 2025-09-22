@@ -68,15 +68,15 @@ Filesystem (~/.loom/)
 3. Update bookmarks if affected nodes deleted
 4. Rebuild affected cache entries
 
-### Topology/Graph Read
+### Topology/Outline Read
 
-1. NodeStructure cache provides content-free tree view
-2. Lazy loading of node content on demand
-3. Graph traversal respects parent/child relationships
+1. NodeStructure cache provides a **content-free** view of the tree
+2. The GUI’s Outline uses topology APIs; node content is lazy-loaded on demand
+3. Navigation respects parent/child relationships; global graph layout is not required
 
 ## Server Role
 
-The Express server is intentionally thin:
+The Express server is intentionally thin (local-first):
 
 - **Request validation**: Basic parameter checking
 - **SSE streaming**: Fan-out of generation events to multiple clients

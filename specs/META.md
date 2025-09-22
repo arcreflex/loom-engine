@@ -4,10 +4,8 @@ Centralized notes on known gaps, mismatches, and pending design decisions across
 
 ## Known Gaps
 
-- GUI performance claims vs implementation
-  - Spec mentions lazy loading and virtualized rendering for large trees. Current GUI fetches full graph topology and renders without virtualization; hover previews are debounced but not virtualized.
-  - Spec mentions broader caching and offline persistence. Current GUI maintains in‑memory state only; no persistent client cache.
-  - Spec hints at robust SSE reconnection/buffering. Current implementation wires a single EventSource per pending generation without reconnection/backoff logic or buffering.
-  - Action: Keep the performance items in `specs/gui.md` as future goals. Track this gap here until implemented.
+- **SSE resiliency**: reconnection/backoff/buffering still future work.
+- **Client caching**: Outline is topology-first and lazy-loads content; no persistent client cache yet.
+- (Removed) Global/multi-root Graph performance — spec now scopes UI to Outline plus optional Compact Graph, so this gap no longer applies.
 
 If other discrepancies are found, resolve specs to match code unless explicitly noted here as an intentional future goal.

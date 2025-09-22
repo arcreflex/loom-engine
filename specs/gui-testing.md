@@ -59,9 +59,9 @@ Recommended flows to cover:
 
 1. App boot: loads state, roots, bookmarks, and topology; clears loading; no console errors.
 2. Command palette: opens via shortcut, filters, executes a simple command (e.g., toggle “generate on submit”).
-3. Graph navigation: click node to navigate; hover shows a path preview; basic topology rendering.
+3. Outline navigation: arrow/Enter to navigate; hover shows reserved-space preview; topology renders without global graph layout.
 4. Context & editing: expand/collapse content; edit the system prompt; save/cancel semantics.
-5. Input area: type; submit (e.g., Cmd+Enter); large paste behavior; optional generate‑on‑submit toggle.
+5. Input area: type; submit (Cmd+Enter and Ctrl+Enter); **large paste behavior** (no confirm, no auto-generate); **empty-input submit** (generate) and **empty-input send-only** (no-op).
 6. Node view happy path: siblings pager; copy/edit actions; child/sibling lists load and render.
 
 ### E2E (fewest)
@@ -93,7 +93,7 @@ Selector policy
 ## Network & SSE
 
 - Use MSW to mock HTTP endpoints used by the GUI.
-- For generation/SSE flows, model discrete status events (complete nodes) rather than token streams.
+- For generation/SSE flows, **model discrete status events** (complete nodes) rather than token streams; assert UI state after each event.
 - In integration tests, drive UI via mocked events and assert resulting state/UI changes.
 
 MSW notes

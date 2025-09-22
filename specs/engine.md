@@ -38,12 +38,14 @@ The LoomEngine orchestrates providers, parameters, and generation flows.
 - **Token estimation**: Character-based heuristic with model capability clamping
 - **Tool recursion**: Streaming iterator emits tool results and final assistant responses; `generate()` resolves via the same session
 - **Bookmark integration**: editNode moves bookmarks when creating new nodes
-- **Append filtering**: Drop messages that contain only empty text content; allow assistant messages with `tool-use` blocks even with no text
+- **Append filtering**: Drop messages with empty text content; allow assistant messages with `tool-use` blocks even with no text.
+- **Empty-input generation**: If the client requests generation with **no user text**, the engine generates the next assistant message using the current path/context; no empty user node is created.
 
 ### Streaming & Cancellation
 
 - **GenerateSession**: `generateStream()` returns `{ id, abort, [Symbol.asyncIterator]() }`. Only a single iterator is supported per session.
-- **Event order**: Each provider call emits `provider_request` → `provider_response` → `assistant_node`. Tool execution emits a `tool_result_node` per appended tool result. Terminal states are either `done` (with final node list) or `error` (with an Error instance).
+- **Event granularity**: **Event-level only**. The engine never emits token-level fragments; it emits complete, meaningful events.
+- **Event order**: Each provider call emits `provider_request` → `provider_response` → `assistant_node`. Tool execution emits one `tool_result_node` per appended tool result. Sessions end in `done` (with final node list) or `error` (with an Error instance).
 - **Cancellation**: An optional `AbortSignal` can be provided to `generateStream()` and adapters. Calling `session.abort(reason)` or aborting the signal resolves the in-flight provider call (where supported) and results in a single `error` event carrying a `GenerationAbortedError` (or adapter-specific Abort error).
 - **Legacy API**: `generate()` consumes the streaming session internally to maintain backwards compatibility.
 - **Tool loop guard**: `GenerateOptions.maxToolIterations` (default 5) bounds recursive tool-calling. Exceeding the limit yields an `error` event with `ToolIterationLimitExceededError`.
